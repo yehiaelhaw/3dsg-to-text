@@ -17,6 +17,7 @@ from evaluation.core import (
 )
 from evaluation.llm.base import LLMProvider
 from evaluation.llm.factory import create_provider
+from evaluation.extraction import extract_answer
 from evaluation.metrics import context_based, reference_based
 
 _RESPONDER_PROMPT = """\
@@ -89,8 +90,9 @@ def _eval_one(question, representation, repetition, context, responder, judge, r
         )
 
         question_type = question.question_type or QuestionType.DESCRIPTIVE
+        extracted_text = extract_answer(question_type, question.text, gen.text, judge)
         extracted = ExtractedAnswer(
-            answer_text=gen.text,
+            answer_text=extracted_text,
             question_type=question_type,
             type_is_inferred=question.question_type is None,
         )
