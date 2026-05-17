@@ -1,6 +1,6 @@
 __pycache__/
-*.pyc
-
 dataset/
-*.npz
 .env
+.vscode
+experiments/results/
+experiments/results_smoke/
