@@ -10,7 +10,7 @@ from typing import Optional
 @dataclass
 class EvalConfig:   
     dataset_path:       Path    = Path("evaluation/experiment/Brinnon_QA.jsonl")
-    scene_contexts_dir: Path    = Path("scene_contexts/Brinnon")
+    scene_contexts_dir: Path    = Path("scene_contexts")
     output_dir:         Path    = Path("evaluation/experiment/results")
 
     responder_backend:  str     = "ollama"
