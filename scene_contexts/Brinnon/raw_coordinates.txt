@@ -1,0 +1,346 @@
+Building: Brinnon
+Size (x/y/z metres): 27.49 x 21.36 x 9.81
+Total rooms: 35
+Total objects: 165
+
+Room 1.0 [bathroom] (Floor A)
+  Location (x/y/z): (-7.04, 1.21, -1.53)
+  Size (x/y/z metres): 2.62 x 1.59 x 2.45
+  Objects (3):
+    - bowl (id=16)  location: (-6.51, 1.82, -1.91)  size: 0.19 x 0.23 x 0.07 m  affordances: [grab, eat from, clean, hold, set on]
+    - toilet (id=116)  location: (-7.05, 1.59, -2.31)  size: 0.76 x 0.78 x 0.86 m  affordances: [sit on, clean, flush, close, open]
+    - sink (id=130)  location: (-6.15, 1.70, -1.94)  size: 0.82 x 0.57 x 0.20 m  affordances: [wash, clean]
+
+Room 2.0 [bathroom] (Floor B)
+  Location (x/y/z): (-7.23, 1.13, 1.45)
+  Size (x/y/z metres): 2.60 x 1.86 x 3.00
+  Objects (6):
+    - bowl (id=15)  location: (-8.07, 1.91, 1.26)  size: 0.83 x 0.29 x 0.34 m  affordances: [grab, eat from, clean, hold, set on]
+    - toilet (id=115)  location: (-8.11, 0.61, 0.37)  size: 0.77 x 0.81 x 0.77 m  affordances: [sit on, clean, flush, close, open]
+    - sink (id=127)  location: (-6.78, 0.27, 0.26)  size: 0.38 x 0.70 x 0.60 m  affordances: [wash, clean]
+    - sink (id=128)  location: (-6.74, 0.51, 0.59)  size: 0.65 x 0.55 x 0.60 m  affordances: [wash, clean]
+    - clock (id=147)  location: (-8.51, 1.01, 1.95)  size: 0.03 x 0.66 x 0.95 m  affordances: [look at, set, hang, place]
+    - vase (id=157)  location: (-7.41, 0.40, 0.90)  size: 0.39 x 0.34 x 0.64 m  affordances: [fill, pick up, break, clean]
+
+Room 3.0 [bathroom] (Floor B)
+  Location (x/y/z): (-2.70, 11.19, 1.47)
+  Size (x/y/z metres): 3.12 x 2.57 x 2.98
+  Objects (4):
+    - bottle (id=7)  location: (-1.23, 12.07, 1.28)  size: 0.09 x 0.20 x 0.24 m  affordances: [grab, open, hold, drink from]
+    - bottle (id=8)  location: (-1.23, 11.93, 1.29)  size: 0.08 x 0.10 x 0.22 m  affordances: [grab, open, hold, drink from]
+    - sink (id=133)  location: (-3.94, 11.27, 0.67)  size: 0.53 x 0.73 x 0.52 m  affordances: [wash, clean]
+    - refrigerator (id=137)  location: (-1.93, 10.45, 1.01)  size: 0.17 x 0.77 x 1.95 m  affordances: [open, close, clean, move]
+
+Room 4.0 [bathroom] (Floor C)
+  Location (x/y/z): (-2.91, 11.70, 4.57)
+  Size (x/y/z metres): 4.69 x 5.93 x 2.79
+  Objects (10):
+    - bottle (id=2)  location: (-4.64, 9.46, 4.91)  size: 0.10 x 0.22 x 0.26 m  affordances: [grab, open, hold, drink from]
+    - bottle (id=3)  location: (-4.63, 9.61, 4.92)  size: 0.10 x 0.11 x 0.25 m  affordances: [grab, open, hold, drink from]
+    - potted plant (id=87)  location: (-3.66, 11.92, 4.14)  size: 0.25 x 0.30 x 0.27 m  affordances: [water, pick up, move]
+    - toilet (id=117)  location: (-3.93, 11.94, 3.66)  size: 0.77 x 0.57 x 0.72 m  affordances: [sit on, clean, flush, close, open]
+    - sink (id=129)  location: (-2.25, 13.62, 3.95)  size: 2.08 x 2.07 x 1.14 m  affordances: [wash, clean]
+    - clock (id=143)  location: (-3.29, 8.77, 4.36)  size: 0.16 x 0.05 x 0.10 m  affordances: [look at, set, hang, place]
+    - clock (id=148)  location: (-4.51, 10.41, 5.14)  size: 0.32 x 0.08 x 0.50 m  affordances: [look at, set, hang, place]
+    - vase (id=158)  location: (-3.25, 11.87, 4.18)  size: 0.19 x 0.17 x 0.15 m  affordances: [fill, pick up, break, clean]
+    - vase (id=160)  location: (-3.74, 11.92, 4.07)  size: 0.09 x 0.11 x 0.14 m  affordances: [fill, pick up, break, clean]
+    - vase (id=164)  location: (-1.12, 13.71, 4.10)  size: 0.74 x 1.89 x 0.49 m  affordances: [fill, pick up, break, clean]
+
+Room 5.0 [bathroom] (Floor C)
+  Location (x/y/z): (0.17, -2.24, 4.49)
+  Size (x/y/z metres): 1.94 x 3.26 x 2.46
+  Objects (3):
+    - toilet (id=118)  location: (-0.24, -3.41, 3.66)  size: 0.63 x 0.74 x 0.75 m  affordances: [sit on, clean, flush, close, open]
+    - sink (id=126)  location: (0.75, -0.94, 4.10)  size: 0.63 x 0.52 x 0.14 m  affordances: [wash, clean]
+    - vase (id=163)  location: (-0.62, -0.82, 4.06)  size: 0.19 x 0.32 x 0.42 m  affordances: [fill, pick up, break, clean]
+
+Room 6.0 [bedroom] (Floor B)
+  Location (x/y/z): (-6.66, 11.78, 1.53)
+  Size (x/y/z metres): 5.00 x 6.40 x 3.09
+  Objects (4):
+    - couch (id=62)  location: (-8.64, 10.59, 0.44)  size: 0.98 x 1.92 x 0.86 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - couch (id=63)  location: (-7.83, 10.60, 0.25)  size: 0.88 x 0.94 x 0.50 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - bed (id=91)  location: (-5.80, 13.54, 0.69)  size: 2.77 x 2.70 x 1.36 m  affordances: [make, sit on, step on, lay on, move]
+    - vase (id=150)  location: (-7.25, 14.65, 0.71)  size: 0.31 x 0.26 x 0.44 m  affordances: [fill, pick up, break, clean]
+
+Room 7.0 [bedroom] (Floor C)
+  Location (x/y/z): (2.17, 9.96, 5.00)
+  Size (x/y/z metres): 6.62 x 5.02 x 3.45
+  Objects (7):
+    - chair (id=24)  location: (3.14, 11.53, 3.89)  size: 0.94 x 1.15 x 1.11 m  affordances: [sit on, step on, clean, break, move]
+    - couch (id=74)  location: (0.68, 11.43, 3.86)  size: 0.98 x 0.91 x 1.09 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - potted plant (id=78)  location: (0.94, 7.71, 4.02)  size: 0.42 x 0.45 x 0.50 m  affordances: [water, pick up, move]
+    - potted plant (id=86)  location: (3.74, 7.78, 4.17)  size: 0.45 x 0.42 x 0.51 m  affordances: [water, pick up, move]
+    - bed (id=92)  location: (2.31, 8.67, 3.94)  size: 2.45 x 2.40 x 1.28 m  affordances: [make, sit on, step on, lay on, move]
+    - book (id=139)  location: (1.90, 11.49, 3.71)  size: 0.69 x 0.59 x 0.23 m  affordances: [open, close, read, borrow, lend]
+    - book (id=141)  location: (4.04, 7.73, 3.61)  size: 0.53 x 0.52 x 0.57 m  affordances: [open, close, read, borrow, lend]
+
+Room 8.0 [bedroom] (Floor C)
+  Location (x/y/z): (-2.69, -3.54, 4.50)
+  Size (x/y/z metres): 3.96 x 5.03 x 2.48
+  Objects (3):
+    - bench (id=1)  location: (-0.99, -3.29, 3.52)  size: 0.26 x 1.20 x 0.47 m  affordances: [sit on, step on, lay on, pick up, clean]
+    - bed (id=98)  location: (-3.51, -3.21, 3.80)  size: 2.19 x 2.21 x 1.06 m  affordances: [make, sit on, step on, lay on, move]
+    - clock (id=149)  location: (-0.88, -3.85, 4.84)  size: 0.03 x 0.60 x 0.63 m  affordances: [look at, set, hang, place]
+
+Room 9.0 [bedroom] (Floor C)
+  Location (x/y/z): (2.15, -1.32, 4.98)
+  Size (x/y/z metres): 6.58 x 4.98 x 3.45
+  Objects (7):
+    - wine glass (id=10)  location: (4.94, 1.08, 4.46)  size: 0.05 x 0.14 x 0.36 m  affordances: [grab, drink from, hold, clean, pour in, set on]
+    - chair (id=60)  location: (4.22, -3.43, 3.74)  size: 0.64 x 0.74 x 0.86 m  affordances: [sit on, step on, clean, break, move]
+    - bed (id=93)  location: (4.76, -3.20, 3.87)  size: 1.33 x 1.20 x 0.70 m  affordances: [make, sit on, step on, lay on, move]
+    - bed (id=94)  location: (3.04, -2.62, 4.00)  size: 2.04 x 2.35 x 1.39 m  affordances: [make, sit on, step on, lay on, move]
+    - bed (id=95)  location: (3.22, 0.83, 3.83)  size: 3.02 x 0.67 x 1.11 m  affordances: [make, sit on, step on, lay on, move]
+    - book (id=140)  location: (4.72, 0.86, 4.10)  size: 0.50 x 0.59 x 0.22 m  affordances: [open, close, read, borrow, lend]
+    - teddy bear (id=165)  location: (1.86, -3.44, 4.00)  size: 0.54 x 0.38 x 0.23 m  affordances: [hug, pick up, set]
+
+Room 10.0 [bedroom] (Floor C)
+  Location (x/y/z): (-8.76, -3.70, 4.48)
+  Size (x/y/z metres): 3.89 x 4.79 x 2.43
+  Objects (6):
+    - chair (id=57)  location: (-7.61, -3.31, 3.70)  size: 0.30 x 0.82 x 0.81 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=58)  location: (-10.43, -5.22, 3.64)  size: 0.51 x 0.44 x 0.67 m  affordances: [sit on, step on, clean, break, move]
+    - bed (id=96)  location: (-10.18, -3.74, 4.49)  size: 2.02 x 3.33 x 2.38 m  affordances: [make, sit on, step on, lay on, move]
+    - bed (id=97)  location: (-8.80, -5.74, 3.86)  size: 2.26 x 0.69 x 1.11 m  affordances: [make, sit on, step on, lay on, move]
+    - dining table (id=112)  location: (-7.36, -3.34, 3.78)  size: 0.81 x 0.94 x 0.83 m  affordances: [sit at, lay on, pick up, move, clean, set, decorate]
+    - clock (id=146)  location: (-7.81, -5.77, 4.95)  size: 0.05 x 0.23 x 0.29 m  affordances: [look at, set, hang, place]
+
+Room 11.0 [closet] (Floor B)
+  Location (x/y/z): (-2.01, 8.91, 1.47)
+  Size (x/y/z metres): 1.80 x 2.22 x 2.97
+  Objects (2):
+    - bed (id=103)  location: (-2.34, 8.55, 0.24)  size: 1.09 x 1.44 x 0.49 m  affordances: [make, sit on, step on, lay on, move]
+    - bed (id=105)  location: (-1.35, 9.63, 0.65)  size: 0.46 x 0.70 x 1.32 m  affordances: [make, sit on, step on, lay on, move]
+
+Room 12.0 [closet] (Floor C)
+  Location (x/y/z): (-6.66, 10.56, 5.00)
+  Size (x/y/z metres): 3.79 x 3.63 x 3.43
+  Objects (3):
+    - bed (id=100)  location: (-6.70, 11.97, 3.68)  size: 0.63 x 0.32 x 0.71 m  affordances: [make, sit on, step on, lay on, move]
+    - bed (id=101)  location: (-5.83, 9.02, 4.36)  size: 0.99 x 0.40 x 0.69 m  affordances: [make, sit on, step on, lay on, move]
+    - bed (id=102)  location: (-5.57, 9.08, 4.20)  size: 1.61 x 0.65 x 1.23 m  affordances: [make, sit on, step on, lay on, move]
+
+Room 13.0 [corridor] (Floor A)
+  Location (x/y/z): (-4.17, -0.22, -1.51)
+  Size (x/y/z metres): 5.68 x 1.32 x 2.50
+  Objects: none
+
+Room 14.0 [corridor] (Floor B)
+  Location (x/y/z): (-6.52, -0.63, 1.45)
+  Size (x/y/z metres): 4.91 x 5.11 x 3.00
+  Objects (4):
+    - bottle (id=5)  location: (-8.91, -0.01, 0.64)  size: 0.10 x 0.09 x 0.19 m  affordances: [grab, open, hold, drink from]
+    - chair (id=19)  location: (-7.09, -0.27, 0.30)  size: 0.53 x 0.43 x 0.31 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=20)  location: (-7.18, -0.17, 0.46)  size: 0.64 x 0.47 x 0.97 m  affordances: [sit on, step on, clean, break, move]
+    - potted plant (id=83)  location: (-8.28, -0.13, 0.77)  size: 0.43 x 0.38 x 0.42 m  affordances: [water, pick up, move]
+
+Room 15.0 [corridor] (Floor C)
+  Location (x/y/z): (-5.65, 4.35, 5.05)
+  Size (x/y/z metres): 10.59 x 11.52 x 3.91
+  Objects (2):
+    - potted plant (id=77)  location: (-1.93, 9.82, 4.11)  size: 0.23 x 0.36 x 0.57 m  affordances: [water, pick up, move]
+    - vase (id=152)  location: (-2.08, 9.83, 4.14)  size: 0.22 x 0.33 x 0.59 m  affordances: [fill, pick up, break, clean]
+
+Room 16.0 [dining_room] (Floor A)
+  Location (x/y/z): (-0.87, -1.07, -1.50)
+  Size (x/y/z metres): 2.97 x 6.15 x 2.52
+  Objects (10):
+    - chair (id=45)  location: (-1.67, -1.60, -2.20)  size: 0.66 x 0.65 x 0.85 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=46)  location: (-1.09, -2.47, -2.26)  size: 0.59 x 0.65 x 0.98 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=47)  location: (-1.12, -2.03, -2.00)  size: 0.44 x 0.73 x 0.19 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=48)  location: (-1.00, -1.76, -2.27)  size: 0.53 x 0.60 x 0.40 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=49)  location: (-1.80, -2.31, -2.21)  size: 0.65 x 0.63 x 0.94 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=50)  location: (-1.42, -2.21, -2.64)  size: 1.31 x 0.98 x 0.24 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=51)  location: (-1.30, -1.75, -2.67)  size: 0.17 x 0.45 x 0.18 m  affordances: [sit on, step on, clean, break, move]
+    - book (id=138)  location: (-1.14, -1.88, -1.95)  size: 0.36 x 0.30 x 0.10 m  affordances: [open, close, read, borrow, lend]
+    - clock (id=145)  location: (-0.85, -4.01, -1.37)  size: 0.62 x 0.26 x 0.82 m  affordances: [look at, set, hang, place]
+    - vase (id=159)  location: (-1.37, -2.03, -1.81)  size: 0.29 x 0.25 x 0.38 m  affordances: [fill, pick up, break, clean]
+
+Room 17.0 [dining_room] (Floor B)
+  Location (x/y/z): (1.83, 9.96, 1.48)
+  Size (x/y/z metres): 5.78 x 5.18 x 2.99
+  Objects (8):
+    - chair (id=28)  location: (1.66, 10.64, 0.50)  size: 1.68 x 1.18 x 1.00 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=29)  location: (0.90, 10.32, 0.49)  size: 1.22 x 1.13 x 0.98 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=30)  location: (2.47, 10.44, 0.51)  size: 1.54 x 0.99 x 0.99 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=31)  location: (1.98, 10.85, 0.51)  size: 1.06 x 0.73 x 0.99 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=32)  location: (2.15, 9.69, 0.51)  size: 0.52 x 0.68 x 1.00 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=33)  location: (1.50, 10.30, 0.88)  size: 0.26 x 0.28 x 0.41 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=34)  location: (1.55, 9.75, 0.51)  size: 0.51 x 0.61 x 1.00 m  affordances: [sit on, step on, clean, break, move]
+    - dining table (id=106)  location: (1.86, 10.32, 0.80)  size: 2.14 x 1.20 x 0.27 m  affordances: [sit at, lay on, pick up, move, clean, set, decorate]
+
+Room 18.0 [dining_room] (Floor B)
+  Location (x/y/z): (2.05, -1.80, 1.47)
+  Size (x/y/z metres): 3.82 x 4.90 x 3.00
+  Objects (9):
+    - bowl (id=17)  location: (1.98, -1.72, 1.05)  size: 0.15 x 0.19 x 0.14 m  affordances: [grab, eat from, clean, hold, set on]
+    - chair (id=35)  location: (1.44, -1.34, 0.46)  size: 0.82 x 1.14 x 0.47 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=38)  location: (1.46, -0.83, 0.70)  size: 0.53 x 0.26 x 0.49 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=39)  location: (1.75, -2.27, 0.53)  size: 0.59 x 0.66 x 0.83 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=40)  location: (1.77, -1.53, 0.16)  size: 0.45 x 0.63 x 0.37 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=41)  location: (2.50, -1.14, 0.46)  size: 0.64 x 0.64 x 0.95 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=42)  location: (2.52, -1.85, 0.24)  size: 0.55 x 0.81 x 0.52 m  affordances: [sit on, step on, clean, break, move]
+    - dining table (id=107)  location: (1.96, -1.61, 0.80)  size: 1.39 x 1.40 x 0.39 m  affordances: [sit at, lay on, pick up, move, clean, set, decorate]
+    - dining table (id=108)  location: (1.97, -1.66, 0.28)  size: 0.81 x 0.86 x 0.61 m  affordances: [sit at, lay on, pick up, move, clean, set, decorate]
+
+Room 19.0 [dining_room] (Floor C)
+  Location (x/y/z): (-18.97, -3.07, 4.56)
+  Size (x/y/z metres): 3.71 x 3.35 x 2.45
+  Objects (6):
+    - chair (id=53)  location: (-18.43, -2.71, 3.87)  size: 0.62 x 0.94 x 1.05 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=54)  location: (-19.31, -3.52, 3.87)  size: 1.58 x 0.90 x 1.05 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=56)  location: (-18.59, -3.64, 3.87)  size: 0.61 x 0.74 x 1.06 m  affordances: [sit on, step on, clean, break, move]
+    - dining table (id=109)  location: (-20.24, -3.05, 3.78)  size: 1.01 x 1.26 x 0.77 m  affordances: [sit at, lay on, pick up, move, clean, set, decorate]
+    - dining table (id=110)  location: (-18.60, -3.07, 4.08)  size: 0.60 x 1.14 x 0.21 m  affordances: [sit at, lay on, pick up, move, clean, set, decorate]
+    - vase (id=162)  location: (-20.30, -1.51, 3.98)  size: 0.96 x 0.16 x 1.20 m  affordances: [fill, pick up, break, clean]
+
+Room 20.0 [home_office] (Floor C)
+  Location (x/y/z): (-5.74, -5.19, 4.80)
+  Size (x/y/z metres): 2.33 x 1.72 x 3.07
+  Objects (1):
+    - wine glass (id=9)  location: (-5.23, -5.85, 4.22)  size: 0.30 x 0.31 x 0.29 m  affordances: [grab, drink from, hold, clean, pour in, set on]
+
+Room 21.0 [kitchen] (Floor A)
+  Location (x/y/z): (-2.85, -2.11, -1.48)
+  Size (x/y/z metres): 3.55 x 4.13 x 2.57
+  Objects (4):
+    - bowl (id=14)  location: (-2.24, -3.87, -1.73)  size: 0.26 x 0.28 x 0.25 m  affordances: [grab, eat from, clean, hold, set on]
+    - microwave (id=121)  location: (-4.40, -2.11, -1.24)  size: 0.39 x 0.64 x 0.40 m  affordances: [open, close, cook, heat, defrost, clean]
+    - sink (id=131)  location: (-3.38, -3.85, -1.85)  size: 1.26 x 0.58 x 0.14 m  affordances: [wash, clean]
+    - refrigerator (id=135)  location: (-4.14, -1.31, -1.65)  size: 0.79 x 1.02 x 2.20 m  affordances: [open, close, clean, move]
+
+Room 22.0 [kitchen] (Floor B)
+  Location (x/y/z): (-3.65, 9.73, 1.46)
+  Size (x/y/z metres): 1.28 x 2.05 x 2.97
+  Objects (2):
+    - cup (id=11)  location: (-3.78, 8.96, 1.11)  size: 0.67 x 0.27 x 0.46 m  affordances: [grab, drink from, hold, clean, pour in, set on]
+    - refrigerator (id=136)  location: (-3.34, 9.12, 0.43)  size: 0.63 x 0.48 x 0.89 m  affordances: [open, close, clean, move]
+
+Room 23.0 [kitchen] (Floor B)
+  Location (x/y/z): (-1.54, -1.81, 1.45)
+  Size (x/y/z metres): 6.18 x 5.06 x 3.00
+  Objects (11):
+    - cup (id=12)  location: (-2.14, 0.67, 0.87)  size: 0.32 x 0.28 x 0.14 m  affordances: [grab, drink from, hold, clean, pour in, set on]
+    - bowl (id=13)  location: (-1.69, -1.82, 0.92)  size: 0.44 x 0.47 x 0.29 m  affordances: [grab, eat from, clean, hold, set on]
+    - banana (id=18)  location: (-1.76, -1.84, 1.05)  size: 0.28 x 0.38 x 0.11 m  affordances: [eat, grab, peel, hold, through away, pick up, bite]
+    - chair (id=36)  location: (-3.95, -2.01, 0.42)  size: 0.79 x 0.87 x 0.90 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=37)  location: (-0.69, -1.84, 0.46)  size: 1.23 x 1.96 x 1.01 m  affordances: [sit on, step on, clean, break, move]
+    - potted plant (id=79)  location: (-4.43, -1.74, 0.85)  size: 0.33 x 0.33 x 0.23 m  affordances: [water, pick up, move]
+    - potted plant (id=84)  location: (-2.55, 0.61, 0.96)  size: 0.27 x 0.23 x 0.22 m  affordances: [water, pick up, move]
+    - oven (id=122)  location: (-3.06, 0.14, 0.76)  size: 0.87 x 0.27 x 1.38 m  affordances: [open, close, heat, turn on, turn off, clean]
+    - oven (id=123)  location: (-2.61, -1.92, 0.78)  size: 0.75 x 1.47 x 0.26 m  affordances: [open, close, heat, turn on, turn off, clean]
+    - sink (id=132)  location: (-2.10, -3.97, 0.82)  size: 0.99 x 0.55 x 0.25 m  affordances: [wash, clean]
+    - refrigerator (id=134)  location: (-3.91, -2.99, 0.91)  size: 0.56 x 1.34 x 1.87 m  affordances: [open, close, clean, move]
+
+Room 24.0 [living_room] (Floor A)
+  Location (x/y/z): (1.87, -1.00, -1.49)
+  Size (x/y/z metres): 4.18 x 6.09 x 2.52
+  Objects (14):
+    - chair (id=43)  location: (0.84, -1.92, -2.32)  size: 1.02 x 0.90 x 0.82 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=44)  location: (2.60, -2.43, -2.32)  size: 0.68 x 0.69 x 0.78 m  affordances: [sit on, step on, clean, break, move]
+    - couch (id=70)  location: (1.60, 0.58, -2.30)  size: 2.67 x 1.52 x 0.90 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - couch (id=75)  location: (0.84, -2.20, -2.32)  size: 0.96 x 0.57 x 0.82 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - couch (id=76)  location: (2.77, -2.28, -2.31)  size: 0.97 x 0.98 x 0.82 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - potted plant (id=85)  location: (0.39, 0.84, -2.08)  size: 0.26 x 0.27 x 0.36 m  affordances: [water, pick up, move]
+    - potted plant (id=89)  location: (1.90, -0.64, -1.91)  size: 0.30 x 0.33 x 0.58 m  affordances: [water, pick up, move]
+    - potted plant (id=90)  location: (3.11, 0.87, -1.95)  size: 0.18 x 0.31 x 0.30 m  affordances: [water, pick up, move]
+    - dining table (id=113)  location: (1.72, -0.63, -2.31)  size: 1.32 x 0.83 x 0.26 m  affordances: [sit at, lay on, pick up, move, clean, set, decorate]
+    - tv (id=119)  location: (2.05, -3.50, -0.99)  size: 1.12 x 0.12 x 0.75 m  affordances: [turn on, turn off, look at, move, plug]
+    - tv (id=120)  location: (2.03, -3.78, -2.28)  size: 0.96 x 0.51 x 0.86 m  affordances: [turn on, turn off, look at, move, plug]
+    - book (id=142)  location: (1.50, -0.55, -2.28)  size: 0.34 x 0.40 x 0.18 m  affordances: [open, close, read, borrow, lend]
+    - vase (id=153)  location: (1.74, -0.60, -2.05)  size: 0.60 x 0.41 x 0.64 m  affordances: [fill, pick up, break, clean]
+    - vase (id=161)  location: (3.06, 1.01, -2.22)  size: 0.26 x 0.61 x 0.40 m  affordances: [fill, pick up, break, clean]
+
+Room 25.0 [living_room] (Floor B)
+  Location (x/y/z): (5.38, 10.09, 1.49)
+  Size (x/y/z metres): 2.58 x 4.70 x 3.00
+  Objects (4):
+    - couch (id=64)  location: (5.13, 11.40, 0.45)  size: 2.03 x 1.24 x 0.87 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - couch (id=65)  location: (5.23, 9.11, 0.45)  size: 2.11 x 1.30 x 0.89 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - couch (id=66)  location: (5.06, 10.26, 0.35)  size: 1.41 x 0.72 x 0.45 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - bed (id=99)  location: (5.07, 10.32, 0.33)  size: 1.43 x 0.71 x 0.43 m  affordances: [make, sit on, step on, lay on, move]
+
+Room 26.0 [living_room] (Floor B)
+  Location (x/y/z): (1.26, 3.98, 3.48)
+  Size (x/y/z metres): 8.28 x 8.50 x 7.14
+  Objects (12):
+    - chair (id=25)  location: (4.78, 4.98, 0.46)  size: 1.10 x 1.18 x 0.92 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=26)  location: (4.70, 3.52, 0.46)  size: 1.09 x 0.97 x 0.88 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=27)  location: (5.00, 4.70, 0.40)  size: 0.68 x 1.25 x 0.79 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=59)  location: (-1.78, 1.44, 0.42)  size: 1.11 x 1.27 x 0.92 m  affordances: [sit on, step on, clean, break, move]
+    - couch (id=67)  location: (1.47, 5.74, 0.45)  size: 2.29 x 1.05 x 0.93 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - couch (id=68)  location: (1.50, 2.58, 0.45)  size: 2.29 x 1.02 x 0.93 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - couch (id=69)  location: (4.73, 3.26, 0.46)  size: 1.18 x 0.59 x 0.90 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - potted plant (id=81)  location: (1.44, 4.11, 0.67)  size: 0.73 x 0.63 x 0.65 m  affordances: [water, pick up, move]
+    - potted plant (id=82)  location: (1.05, 4.18, 0.51)  size: 0.42 x 0.52 x 0.34 m  affordances: [water, pick up, move]
+    - vase (id=154)  location: (-0.31, 0.72, 1.46)  size: 0.42 x 0.37 x 0.79 m  affordances: [fill, pick up, break, clean]
+    - vase (id=155)  location: (1.71, 3.95, 0.67)  size: 0.38 x 0.38 x 0.64 m  affordances: [fill, pick up, break, clean]
+    - vase (id=156)  location: (4.44, 0.75, 1.52)  size: 0.59 x 0.38 x 0.84 m  affordances: [fill, pick up, break, clean]
+
+Room 27.0 [living_room] (Floor C)
+  Location (x/y/z): (-14.87, -2.55, 4.51)
+  Size (x/y/z metres): 8.27 x 6.96 x 2.45
+  Objects (7):
+    - bottle (id=6)  location: (-13.61, -3.44, 3.88)  size: 0.12 x 0.30 x 0.16 m  affordances: [grab, open, hold, drink from]
+    - chair (id=52)  location: (-17.96, -0.01, 3.83)  size: 0.81 x 0.83 x 0.96 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=55)  location: (-16.63, 0.14, 3.81)  size: 0.92 x 0.89 x 0.95 m  affordances: [sit on, step on, clean, break, move]
+    - couch (id=71)  location: (-12.59, -4.41, 3.77)  size: 1.38 x 1.28 x 0.93 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - couch (id=72)  location: (-15.54, -3.31, 3.76)  size: 1.04 x 2.95 x 0.89 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - couch (id=73)  location: (-12.62, -1.90, 3.76)  size: 1.34 x 1.29 x 0.92 m  affordances: [sit on, lay on, step on, tidy, clean, move]
+    - dining table (id=111)  location: (-13.73, -3.35, 3.66)  size: 0.92 x 1.40 x 0.68 m  affordances: [sit at, lay on, pick up, move, clean, set, decorate]
+
+Room 28.0 [lobby] (Floor B)
+  Location (x/y/z): (-5.48, 5.22, 3.47)
+  Size (x/y/z metres): 6.26 x 6.91 x 7.02
+  Objects (5):
+    - chair (id=21)  location: (-3.64, 6.56, 0.56)  size: 0.75 x 0.85 x 0.57 m  affordances: [sit on, step on, clean, break, move]
+    - chair (id=23)  location: (-4.80, 6.40, 0.58)  size: 0.83 x 0.82 x 0.57 m  affordances: [sit on, step on, clean, break, move]
+    - potted plant (id=80)  location: (-4.87, 4.44, 1.01)  size: 0.61 x 0.64 x 0.64 m  affordances: [water, pick up, move]
+    - clock (id=144)  location: (-8.55, 7.56, 1.99)  size: 0.04 x 0.68 x 1.05 m  affordances: [look at, set, hang, place]
+    - vase (id=151)  location: (-4.86, 4.18, 0.86)  size: 0.36 x 0.39 x 0.46 m  affordances: [fill, pick up, break, clean]
+
+Room 29.0 [shower] (Floor B)
+  Location (x/y/z): (-6.28, -5.37, 1.49)
+  Size (x/y/z metres): 1.54 x 2.04 x 3.00
+  Objects: none
+
+Room 30.0 [staircase] (Floor A)
+  Location (x/y/z): (-5.78, -2.53, -0.10)
+  Size (x/y/z metres): 2.16 x 3.45 x 5.29
+  Objects: none
+
+Room 31.0 [staircase] (Floor B)
+  Location (x/y/z): (-4.87, 7.16, 1.62)
+  Size (x/y/z metres): 4.96 x 2.90 x 3.33
+  Objects (2):
+    - chair (id=22)  location: (-4.50, 6.86, 0.40)  size: 1.48 x 0.60 x 0.88 m  affordances: [sit on, step on, clean, break, move]
+    - bed (id=104)  location: (-3.48, 7.86, 2.65)  size: 1.09 x 1.49 x 0.56 m  affordances: [make, sit on, step on, lay on, move]
+
+Room 32.0 [staircase] (Floor B)
+  Location (x/y/z): (-5.62, -2.66, 2.83)
+  Size (x/y/z metres): 2.48 x 3.33 x 5.72
+  Objects: none
+
+Room 33.0 [storage] (Floor A)
+  Location (x/y/z): (-7.21, -5.11, -1.65)
+  Size (x/y/z metres): 3.23 x 2.23 x 2.19
+  Objects (1):
+    - chair (id=61)  location: (-5.84, -4.94, -2.08)  size: 0.47 x 0.70 x 1.32 m  affordances: [sit on, step on, clean, break, move]
+
+Room 34.0 [utility_room] (Floor A)
+  Location (x/y/z): (-7.88, -2.13, -1.67)
+  Size (x/y/z metres): 1.88 x 5.01 x 2.20
+  Objects (1):
+    - oven (id=124)  location: (-8.42, -1.08, -2.10)  size: 0.81 x 1.98 x 1.28 m  affordances: [open, close, heat, turn on, turn off, clean]
+
+Room 35.0 [utility_room] (Floor B)
+  Location (x/y/z): (-7.86, -4.72, 1.48)
+  Size (x/y/z metres): 2.24 x 3.27 x 2.99
+  Objects (2):
+    - potted plant (id=88)  location: (-8.23, -6.16, 1.29)  size: 0.37 x 0.39 x 0.51 m  affordances: [water, pick up, move]
+    - oven (id=125)  location: (-8.59, -4.82, 0.65)  size: 0.78 x 1.91 x 1.21 m  affordances: [open, close, heat, turn on, turn off, clean]
+
+Objects with no assigned room:
+  - bottle (id=4)  location: (-4.04, 2.00, 4.46)  size: 0.28 x 0.10 x 0.55 m  affordances: [grab, open, hold, drink from]
+  - toilet (id=114)  location: (-3.27, 0.59, 4.06)  size: 0.54 x 0.69 x 1.60 m  affordances: [sit on, clean, flush, close, open]

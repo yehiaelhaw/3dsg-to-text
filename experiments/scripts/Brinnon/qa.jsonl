@@ -1,0 +1,25 @@
+{"id": "1", "scene_id": "Brinnon", "text": "How many rooms and objects are in the Brinnon building?", "ground_truth": "35 rooms and 165 objects", "question_type": "descriptive"}
+{"id": "2", "scene_id": "Brinnon", "text": "What type of room is Room 1.0, and what are its coordinates?", "ground_truth": "Room 1.0 is a bathroom at (-7.04, 1.21, -1.53).", "question_type": "descriptive"}
+{"id": "3", "scene_id": "Brinnon", "text": "Which room contains microwave id=121, and what are the microwave coordinates?", "ground_truth": "Room 21.0, a kitchen on Floor A, contains microwave id=121 at (-4.40, -2.11, -1.24).", "question_type": "descriptive"}
+{"id": "4", "scene_id": "Brinnon", "text": "Which room contains banana id=18, and what type of room is it?", "ground_truth": "Room 23.0 contains banana id=18. It is a kitchen on Floor B.", "question_type": "descriptive"}
+{"id": "5", "scene_id": "Brinnon", "text": "How many chairs are in Room 16.0?", "ground_truth": "7", "question_type": "count"}
+{"id": "6", "scene_id": "Brinnon", "text": "Which room contains exactly three couches and one bed?", "ground_truth": "Room 25.0 contains three couches and one bed.", "question_type": "factual"}
+{"id": "7", "scene_id": "Brinnon", "text": "Which bedroom on Floor B contains two couches and one bed?", "ground_truth": "Room 6.0", "question_type": "factual"}
+{"id": "8", "scene_id": "Brinnon", "text": "How many TVs are in the Floor A living room?", "ground_truth": "2", "question_type": "count"}
+{"id": "9", "scene_id": "Brinnon", "text": "Is there a kitchen that contains a cup and a refrigerator but no sink?", "ground_truth": "yes, Room 22.0", "question_type": "yes_no"}
+{"id": "10", "scene_id": "Brinnon", "text": "Which Floor C bedroom contains both a teddy bear and a wine glass?", "ground_truth": "Room 9.0", "question_type": "factual"}
+{"id": "11", "scene_id": "Brinnon", "text": "Which Floor B bathroom contains two bottles and a refrigerator?", "ground_truth": "Room 3.0", "question_type": "factual"}
+{"id": "12", "scene_id": "Brinnon", "text": "Which bathrooms are on Floor C and contain both a toilet and a sink?", "ground_truth": "Rooms 4.0 and 5.0", "question_type": "factual"}
+{"id": "13", "scene_id": "Brinnon", "text": "Which dining room on Floor B contains two dining tables?", "ground_truth": "Room 18.0", "question_type": "factual"}
+{"id": "14", "scene_id": "Brinnon", "text": "Which Floor C bedroom contains both a couch and books?", "ground_truth": "Room 7.0", "question_type": "factual"}
+{"id": "15", "scene_id": "Brinnon", "text": "Which kitchen has the largest number of objects, and how many objects does it contain?", "ground_truth": "Room 23.0 has the most kitchen objects, with 11 objects.", "question_type": "descriptive"}
+{"id": "16", "scene_id": "Brinnon", "text": "Which living room contains the largest number of objects?", "ground_truth": "Room 24.0, with 14 objects.", "question_type": "descriptive"}
+{"id": "17", "scene_id": "Brinnon", "text": "Which rooms have no assigned objects?", "ground_truth": "Rooms 13.0, 29.0, 30.0, and 32.0", "question_type": "factual"}
+{"id": "18", "scene_id": "Brinnon", "text": "Which Floor B rooms contain refrigerators?", "ground_truth": "Rooms 3.0, 22.0, and 23.0", "question_type": "factual"}
+{"id": "19", "scene_id": "Brinnon", "text": "Across all bathrooms, which floor has the most bathrooms?", "ground_truth": "Floors B and C are tied, with 2 bathrooms each.", "question_type": "factual"}
+{"id": "20", "scene_id": "Brinnon", "text": "Which room is labeled as a bedroom but contains a dining table?", "ground_truth": "Room 10.0", "question_type": "factual"}
+{"id": "21", "scene_id": "Brinnon", "text": "In Room 23.0, which object is closest to banana id=18?", "ground_truth": "Bowl id=13 is closest to banana id=18.", "question_type": "comparative"}
+{"id": "22", "scene_id": "Brinnon", "text": "In Room 24.0, which object is closest to couch id=70?", "ground_truth": "Book id=142 is closest to couch id=70.", "question_type": "comparative"}
+{"id": "23", "scene_id": "Brinnon", "text": "In Room 17.0, which chair is closest to dining table id=106?", "ground_truth": "Chair id=33 is closest to dining table id=106.", "question_type": "comparative"}
+{"id": "24", "scene_id": "Brinnon", "text": "In Room 18.0, which object is closest to dining table id=107?", "ground_truth": "Bowl id=17 is closest to dining table id=107.", "question_type": "comparative"}
+{"id": "25", "scene_id": "Brinnon", "text": "Which objects are listed as having no assigned room?", "ground_truth": "Bottle id=4 and toilet id=114", "question_type": "factual"}
