@@ -8,26 +8,28 @@ from typing import Optional
 
 
 @dataclass
-class EvalConfig:   
-    dataset_path:       Path    = Path("evaluation/experiment/Brinnon_QA.jsonl")
-    scene_contexts_dir: Path    = Path("scene_contexts")
-    output_dir:         Path    = Path("evaluation/experiment/results")
+class EvalConfig:
+    # --- required ---
+    dataset_path:       Path
+    scene_contexts_dir: Path
+    output_dir:         Path
 
-    responder_backend:  str     = "ollama"
-    responder_model:    str     = "qwen2.5:7b"
-    responder_options:  dict    = field(default_factory=dict)
+    responder_backend:  str
+    responder_model:    str
 
-    judge_backend:      str     = "gemini"
-    judge_model:        str     = "gemini-2.5-flash"
-    judge_options:      dict    = field(default_factory=dict)
+    judge_backend:      str
+    judge_model:        str
 
-    repetitions:        int     = 1
-    representations:    Optional[list[str]] = None
-    question_ids:       Optional[list[str]] = None
+    # --- optional ---
+    responder_options:  dict                = field(default_factory=dict)
+    judge_options:      dict                = field(default_factory=dict)
 
-    embedding_model:    str     = "all-MiniLM-L6-v2"
+    repetitions:        int                 = 1
+    representations:    Optional[list[str]] = None   # None → auto-discover
+    question_ids:       Optional[list[str]] = None   # None → all questions
 
-    resume:             bool    = False
+    embedding_model:    str                 = "all-MiniLM-L6-v2"
+    resume:             bool                = False
 
     def __post_init__(self):
         self.dataset_path       = Path(self.dataset_path)

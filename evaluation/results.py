@@ -51,16 +51,44 @@ class ResultsWriter:
         self.close()
 
 
-def save(records: Iterable[EvalRecord], config: EvalConfig) -> tuple[Path, Path]:
+def save(
+    records: Iterable[EvalRecord],
+    config: EvalConfig,
+    verbose: bool = True,
+) -> tuple[Path, Path]:
     """Write all records to per-question and aggregate CSVs. Returns both paths."""
+    import time
     config.output_dir.mkdir(parents=True, exist_ok=True)
-    detail_path = config.output_dir / "results.csv"
+    detail_path    = config.output_dir / "results.csv"
     aggregate_path = config.output_dir / "aggregate.csv"
+
+    t_start = time.perf_counter()
+    n_ok = n_err = 0
 
     with ResultsWriter(detail_path) as writer:
         for record in records:
             writer.add(record)
+
+            if verbose:
+                tag = f"{record.question.id} | {record.response.representation} | rep{record.response.repetition}"
+                if record.error:
+                    n_err += 1
+                    print(f"  ERROR  {tag}")
+                    print(f"         {record.error.splitlines()[-1]}")
+                else:
+                    n_ok += 1
+                    score_str = "  ".join(
+                        f"{k}={v:.2f}" for k, v in record.scores.to_dict().items() if v is not None
+                    )
+                    print(f"  OK     {tag} | {score_str} | {record.response.latency_ms:.0f}ms")
+
         writer.write_aggregate(aggregate_path)
+
+    if verbose:
+        elapsed = time.perf_counter() - t_start
+        print(f"\ndone in {elapsed:.1f}s — {n_ok} ok, {n_err} errors")
+        print(f"detail    -> {detail_path}")
+        print(f"aggregate -> {aggregate_path}")
 
     return detail_path, aggregate_path
 
