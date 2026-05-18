@@ -32,9 +32,6 @@ QUESTION:
 Answer concisely and directly."""
 
 
-def run(config: EvalConfig) -> list[EvalRecord]:
-    return list(iter_records(config))
-
 
 def iter_records(config: EvalConfig) -> Iterator[EvalRecord]:
     responder = create_provider(

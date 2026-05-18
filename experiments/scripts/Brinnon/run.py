@@ -4,7 +4,7 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 from evaluation.config import EvalConfig
 from evaluation.results import save
-from evaluation.runner import run
+from evaluation.runner import iter_records
 
 config = EvalConfig(
     dataset_path="experiments/scripts/Brinnon/qa.jsonl",
@@ -22,4 +22,4 @@ config = EvalConfig(
     repetitions=1,
 )
 
-save(run(config), config)
+save(iter_records(config), config)
