@@ -8,19 +8,47 @@ from typing import Optional
 
 
 class QuestionType(str, Enum):
-    FACTUAL     = "factual"      # "What color is the sofa?"      → extract noun/value
-    YES_NO      = "yes_no"       # "Is there a window?"           → extract yes | no
-    COUNT       = "count"        # "How many chairs are there?"   → extract integer
-    DESCRIPTIVE = "descriptive"  # "Describe the room layout."    → score whole response
-    COMPARATIVE = "comparative"  # "Which is larger, A or B?"     → extract entity name
+    FACTUAL                    = "factual"                    # "What color is the sofa?"      → extract noun/value
+    YES_NO                     = "yes_no"                     # "Is there a window?"           → extract yes | no
+    COUNT                      = "count"                      # "How many chairs are there?"   → extract integer
+    DESCRIPTIVE                = "descriptive"                # "Describe the room layout."    → score whole response
+    COMPARATIVE                = "comparative"                # "Which is larger, A or B?"     → extract entity name
+    # reasoning-heavy types
+    SPATIAL_REASONING          = "spatial_reasoning"          # Euclidean distance / proximity queries
+    FUNCTIONAL_COMPATIBILITY   = "functional_compatibility"   # affordance-based room suitability
+    CAPACITY_RESOURCE_PLANNING = "capacity_resource_planning" # counting/summing resources across rooms
+    COMPARATIVE_SUPERLATIVE    = "comparative_superlative"    # largest/smallest/most-similar across geometry
+    SEMANTIC_CATEGORICAL       = "semantic_categorical"       # category membership / set difference
+    ANOMALY_PATTERN_DETECTION  = "anomaly_pattern_detection"  # outliers and structural patterns
+    DEPENDENCY_RELATIONSHIP_MAPPING = "dependency_relationship_mapping"  # object→room dependency traversal
+    MULTI_STEP_INFERENCE       = "multi_step_inference"       # multi-condition filtering
+    CONDITIONAL_CONSTRAINT     = "conditional_constraint"     # constraint satisfaction queries
+    MULTI_STEP_SPATIAL_REASONING = "multi_step_spatial_reasoning"  # spatial + multi-step combined
+    CONDITIONAL_REASONING      = "conditional_reasoning"      # counterfactual / hypothetical
+    EXPLICIT_OPTIMIZATION      = "explicit_optimization"      # single-criterion optimisation
 
+
+_EXTRACTABLE = {"exact_match", "semantic_similarity", "faithfulness"}
 
 APPLICABLE_METRICS: dict[QuestionType, set[str]] = {
-    QuestionType.FACTUAL:     {"exact_match", "semantic_similarity", "faithfulness"},
-    QuestionType.YES_NO:      {"exact_match", "faithfulness"},
-    QuestionType.COUNT:       {"exact_match", "faithfulness"},
-    QuestionType.COMPARATIVE: {"exact_match", "semantic_similarity", "faithfulness"},
-    QuestionType.DESCRIPTIVE: {"semantic_similarity", "faithfulness"},
+    QuestionType.FACTUAL:                       _EXTRACTABLE,
+    QuestionType.YES_NO:                        {"exact_match", "faithfulness"},           # "yes"/"no" embeddings are near-identical; semantic_similarity adds noise
+    QuestionType.COUNT:                         {"exact_match", "faithfulness"},           # numeric tokens have poor embedding separation
+    QuestionType.COMPARATIVE:                   _EXTRACTABLE,
+    QuestionType.DESCRIPTIVE:                   {"semantic_similarity", "faithfulness"},   # no canonical short answer to extract
+    # reasoning-heavy types all have specific extractable ground truths
+    QuestionType.SPATIAL_REASONING:             _EXTRACTABLE,
+    QuestionType.FUNCTIONAL_COMPATIBILITY:      _EXTRACTABLE,
+    QuestionType.CAPACITY_RESOURCE_PLANNING:    _EXTRACTABLE,
+    QuestionType.COMPARATIVE_SUPERLATIVE:       _EXTRACTABLE,
+    QuestionType.SEMANTIC_CATEGORICAL:          _EXTRACTABLE,
+    QuestionType.ANOMALY_PATTERN_DETECTION:     _EXTRACTABLE,
+    QuestionType.DEPENDENCY_RELATIONSHIP_MAPPING: _EXTRACTABLE,
+    QuestionType.MULTI_STEP_INFERENCE:          _EXTRACTABLE,
+    QuestionType.CONDITIONAL_CONSTRAINT:        _EXTRACTABLE,
+    QuestionType.MULTI_STEP_SPATIAL_REASONING:  _EXTRACTABLE,
+    QuestionType.CONDITIONAL_REASONING:         _EXTRACTABLE,
+    QuestionType.EXPLICIT_OPTIMIZATION:         _EXTRACTABLE,
 }
 
 

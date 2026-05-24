@@ -7,7 +7,7 @@ from evaluation.results import save
 from evaluation.runner import iter_records
 
 config = EvalConfig(
-    dataset_path="experiments/scripts/Brinnon/qa.jsonl",
+    dataset_path="experiments/scripts/Brinnon/new-qa.jsonl",
     scene_contexts_dir="scene_contexts",
     output_dir="experiments/results/Brinnon",
 
@@ -15,8 +15,8 @@ config = EvalConfig(
     responder_model="qwen2.5:7b",
     responder_options={"num_ctx": 32768},
 
-    judge_backend="gemini",
-    judge_model="gemini-2.5-flash",
+    judge_backend="ollama",
+    judge_model="qwen2.5:7b",
 
     representations=None,
     repetitions=1,
