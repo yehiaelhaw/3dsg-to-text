@@ -54,8 +54,13 @@ MODEL ANSWER:
 {answer}
 
 Task: Score how correct the MODEL ANSWER is relative to the GROUND TRUTH on a scale from 0.0 to 1.0,
-where 0.0 means completely wrong and 1.0 means fully correct. Award partial credit proportional to
-the fraction of key facts answered correctly. Order of items does not matter unless the question explicitly asks for a ranking. Ignore stylistic differences.
+where 0.0 means completely wrong and 1.0 means fully correct.
+
+First identify what the QUESTION explicitly asks for. Then check whether the MODEL ANSWER correctly provides that.
+Award partial credit proportional to the fraction of explicitly-requested facts answered correctly.
+The GROUND TRUTH may contain supporting evidence beyond what the question requires — do not penalize for omitting details that the question did not ask for.
+Order of items does not matter unless the question explicitly asks for a ranking.
+Ignore stylistic differences.
 Respond with ONLY a single decimal number between 0.0 and 1.0. No explanation."""
 
 
