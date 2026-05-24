@@ -28,14 +28,14 @@ class QuestionType(str, Enum):
     EXPLICIT_OPTIMIZATION      = "explicit_optimization"      # single-criterion optimisation
 
 
-_EXTRACTABLE = {"exact_match", "semantic_similarity", "faithfulness"}
+_EXTRACTABLE = {"exact_match", "semantic_similarity", "faithfulness", "answer_correctness"}
 
 APPLICABLE_METRICS: dict[QuestionType, set[str]] = {
     QuestionType.FACTUAL:                       _EXTRACTABLE,
-    QuestionType.YES_NO:                        {"exact_match", "faithfulness"},           # "yes"/"no" embeddings are near-identical; semantic_similarity adds noise
-    QuestionType.COUNT:                         {"exact_match", "faithfulness"},           # numeric tokens have poor embedding separation
+    QuestionType.YES_NO:                        {"exact_match", "faithfulness", "answer_correctness"},           # "yes"/"no" embeddings are near-identical; semantic_similarity adds noise
+    QuestionType.COUNT:                         {"exact_match", "faithfulness", "answer_correctness"},           # numeric tokens have poor embedding separation
     QuestionType.COMPARATIVE:                   _EXTRACTABLE,
-    QuestionType.DESCRIPTIVE:                   {"semantic_similarity", "faithfulness"},   # no canonical short answer to extract
+    QuestionType.DESCRIPTIVE:                   {"semantic_similarity", "faithfulness", "answer_correctness"},   # open-ended by design; no short answer exists to extract
     # reasoning-heavy types all have specific extractable ground truths
     QuestionType.SPATIAL_REASONING:             _EXTRACTABLE,
     QuestionType.FUNCTIONAL_COMPATIBILITY:      _EXTRACTABLE,
@@ -85,11 +85,13 @@ class MetricScores:
     exact_match:         Optional[float] = None  # 0.0 or 1.0
     semantic_similarity: Optional[float] = None  # 0.0 – 1.0
     faithfulness:        Optional[float] = None  # 0.0 – 1.0
+    answer_correctness:  Optional[float] = None  # 0.0 – 1.0
     def to_dict(self) -> dict[str, Optional[float]]:
         return {
             "exact_match":         self.exact_match,
             "semantic_similarity": self.semantic_similarity,
             "faithfulness":        self.faithfulness,
+            "answer_correctness":  self.answer_correctness,
         }
 
 
@@ -132,6 +134,6 @@ CSV_COLUMNS = [
     "question_type", "type_is_inferred",
     "raw_answer", "extracted_answer",
     "latency_ms", "prompt_tokens", "completion_tokens",
-    "exact_match", "semantic_similarity", "faithfulness",
+    "exact_match", "semantic_similarity", "faithfulness", "answer_correctness",
     "error",
 ]

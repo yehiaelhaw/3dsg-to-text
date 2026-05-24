@@ -109,6 +109,10 @@ def _eval_one(question, representation, repetition, context, responder, judge, r
             scores.faithfulness = context_based.faithfulness(
                 question.text, context, extracted.answer_text, judge
             )
+        if "answer_correctness" in applicable:
+            scores.answer_correctness = context_based.answer_correctness(
+                question.text, response.raw_answer, question.ground_truth, judge
+            )
 
         return EvalRecord(
             question=question,

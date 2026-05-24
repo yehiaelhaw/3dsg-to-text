@@ -13,7 +13,7 @@ from evaluation.core import CSV_COLUMNS, EvalRecord
 _AGGREGATE_COLUMNS = [
     "representation", "question_type",
     "n", "error_count",
-    "exact_match_mean", "semantic_similarity_mean", "faithfulness_mean",
+    "exact_match_mean", "semantic_similarity_mean", "faithfulness_mean", "answer_correctness_mean",
 ]
 
 
@@ -81,6 +81,10 @@ def save(
                         f"{k}={v:.2f}" for k, v in record.scores.to_dict().items() if v is not None
                     )
                     print(f"  OK     {tag} | {score_str} | {record.response.latency_ms:.0f}ms")
+                    print(f"         Q:  {record.question.text}")
+                    print(f"         GT: {record.question.ground_truth}")
+                    print(f"         A:  {record.response.raw_answer}")
+                    print(70 * "=")
 
         writer.write_aggregate(aggregate_path)
 
@@ -125,7 +129,8 @@ def _group_row(representation: str, question_type: str, records: list[EvalRecord
         "question_type":           question_type,
         "n":                       len(records),
         "error_count":             error_count,
-        "exact_match_mean":        mean_of("exact_match"),
+        "exact_match_mean":         mean_of("exact_match"),
         "semantic_similarity_mean": mean_of("semantic_similarity"),
-        "faithfulness_mean":       mean_of("faithfulness"),
+        "faithfulness_mean":        mean_of("faithfulness"),
+        "answer_correctness_mean":  mean_of("answer_correctness"),
     }

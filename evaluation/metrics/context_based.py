@@ -41,6 +41,39 @@ def faithfulness(
     return _parse_score(result.text)
 
 
+_CORRECTNESS_PROMPT = """\
+You are a correctness judge for a 3D scene-graph QA system.
+
+QUESTION:
+{question}
+
+GROUND TRUTH ANSWER:
+{ground_truth}
+
+MODEL ANSWER:
+{answer}
+
+Task: Score how correct the MODEL ANSWER is relative to the GROUND TRUTH on a scale from 0.0 to 1.0,
+where 0.0 means completely wrong and 1.0 means fully correct. Award partial credit proportional to
+the fraction of key facts answered correctly. Order of items does not matter unless the question explicitly asks for a ranking. Ignore stylistic differences.
+Respond with ONLY a single decimal number between 0.0 and 1.0. No explanation."""
+
+
+def answer_correctness(
+    question: str,
+    answer: str,
+    ground_truth: str,
+    judge: LLMProvider,
+) -> float:
+    prompt = _CORRECTNESS_PROMPT.format(
+        question=question.strip(),
+        ground_truth=ground_truth.strip(),
+        answer=answer.strip(),
+    )
+    result = judge.generate(prompt)
+    return _parse_score(result.text)
+
+
 def _parse_score(text: str) -> float:
     match = re.search(r"\b([01](?:\.\d+)?|\.\d+)\b", text.strip())
     if match:
