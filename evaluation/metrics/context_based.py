@@ -18,10 +18,11 @@ QUESTION:
 ANSWER:
 {answer}
 
-Task: Score how well the ANSWER is supported by the CONTEXT on a scale from 0.0 to 1.0.
-- 1.0: every claim in the answer is directly supported by the context.
-- 0.5: the answer is partially supported; some claims are missing or uncertain.
-- 0.0: the answer contradicts the context or contains information not present in it.
+Task: Score how well the ANSWER is supported by the CONTEXT on a scale from 0.0 to 1.0,
+where 1.0 means every claim is directly supported and 0.0 means the answer contradicts or invents information not present.
+Award partial credit proportional to the fraction of claims that are supported.
+
+Pay special attention to room-object assignments: if the answer states that a specific object is in a specific room, verify that the context lists that object under that room — not just that the object exists somewhere in the scene.
 
 Respond with ONLY a single decimal number between 0.0 and 1.0. No explanation."""
 

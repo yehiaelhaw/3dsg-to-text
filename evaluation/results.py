@@ -13,7 +13,10 @@ from evaluation.core import CSV_COLUMNS, EvalRecord
 _AGGREGATE_COLUMNS = [
     "representation", "question_type",
     "n", "error_count",
-    "exact_match_mean", "semantic_similarity_mean", "faithfulness_mean", "answer_correctness_mean",
+    "exact_match_mean", "exact_match_std",
+    "semantic_similarity_mean", "semantic_similarity_std",
+    "faithfulness_mean", "faithfulness_std",
+    "answer_correctness_mean", "answer_correctness_std",
 ]
 
 
@@ -88,6 +91,10 @@ def save(
 
         writer.write_aggregate(aggregate_path)
 
+    from evaluation import plots
+    plots.plot_aggregate(aggregate_path)
+    plots.plot_per_question(detail_path)
+
     if verbose:
         elapsed = time.perf_counter() - t_start
         print(f"\ndone in {elapsed:.1f}s — {n_ok} ok, {n_err} errors")
@@ -116,21 +123,35 @@ def _compute_aggregate(records: list[EvalRecord]) -> list[dict]:
 def _group_row(representation: str, question_type: str, records: list[EvalRecord]) -> dict:
     error_count = sum(1 for r in records if r.error)
 
-    def mean_of(metric: str) -> str:
-        vals = [
+    def vals_of(metric: str) -> list[float]:
+        return [
             getattr(r.scores, metric)
             for r in records
             if getattr(r.scores, metric) is not None
         ]
+
+    def mean_of(vals: list[float]) -> str:
         return f"{statistics.mean(vals):.4f}" if vals else ""
 
+    def std_of(vals: list[float]) -> str:
+        return f"{statistics.stdev(vals):.4f}" if len(vals) >= 2 else ""
+
+    em  = vals_of("exact_match")
+    ss  = vals_of("semantic_similarity")
+    fth = vals_of("faithfulness")
+    ac  = vals_of("answer_correctness")
+
     return {
-        "representation":          representation,
-        "question_type":           question_type,
-        "n":                       len(records),
-        "error_count":             error_count,
-        "exact_match_mean":         mean_of("exact_match"),
-        "semantic_similarity_mean": mean_of("semantic_similarity"),
-        "faithfulness_mean":        mean_of("faithfulness"),
-        "answer_correctness_mean":  mean_of("answer_correctness"),
+        "representation":              representation,
+        "question_type":               question_type,
+        "n":                           len(records),
+        "error_count":                 error_count,
+        "exact_match_mean":            mean_of(em),
+        "exact_match_std":             std_of(em),
+        "semantic_similarity_mean":    mean_of(ss),
+        "semantic_similarity_std":     std_of(ss),
+        "faithfulness_mean":           mean_of(fth),
+        "faithfulness_std":            std_of(fth),
+        "answer_correctness_mean":     mean_of(ac),
+        "answer_correctness_std":      std_of(ac),
     }
