@@ -110,9 +110,14 @@ def _eval_one(question, representation, repetition, context, responder, judge, r
                 question.text, context, extracted.answer_text, judge
             )
         if "answer_correctness" in applicable:
-            scores.answer_correctness = context_based.answer_correctness(
-                question.text, response.raw_answer, question.ground_truth, judge
-            )
+            if question.key_facts:
+                scores.answer_correctness = context_based.rubric_correctness(
+                    question.text, response.raw_answer, question.key_facts, judge
+                )
+            else:
+                scores.answer_correctness = context_based.answer_correctness(
+                    question.text, response.raw_answer, question.ground_truth, judge
+                )
 
         return EvalRecord(
             question=question,

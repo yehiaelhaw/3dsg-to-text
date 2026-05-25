@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from evaluation.core import Question, QuestionType
+from evaluation.core import KeyFact, Question, QuestionType
 
 
 def load(
@@ -43,12 +43,18 @@ def load(
             question_type = QuestionType(qt_raw) if qt_raw else None
 
             try:
+                raw_facts = raw.get("key_facts", [])
+                key_facts = [
+                    KeyFact(fact=f["fact"], weight=float(f.get("weight", 1.0)))
+                    for f in raw_facts
+                ]
                 questions.append(Question(
                     id=qid,
                     scene_id=raw["scene_id"],
                     text=raw["text"],
                     ground_truth=raw["ground_truth"],
                     question_type=question_type,
+                    key_facts=key_facts,
                 ))
             except KeyError as exc:
                 raise ValueError(f"{path}:{lineno}: missing field {exc}") from exc

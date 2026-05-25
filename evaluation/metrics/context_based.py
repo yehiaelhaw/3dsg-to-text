@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from evaluation.core import KeyFact
 from evaluation.llm.base import LLMProvider
 
 _FAITHFULNESS_PROMPT = """\
@@ -85,3 +86,46 @@ def _parse_score(text: str) -> float:
     if match:
         return round(min(max(float(match.group(1)), 0.0), 1.0), 4)
     raise ValueError(f"Could not parse faithfulness score from judge output: {text!r}")
+
+
+_RUBRIC_PROMPT = """\
+You are a fact-checking judge.
+
+QUESTION: {question}
+MODEL ANSWER: {answer}
+
+For each numbered fact below, answer YES if the MODEL ANSWER contains or clearly implies it, or NO if it does not.
+Reply with ONLY a numbered list, one answer per line, in the same order. Example:
+1. YES
+2. NO
+
+Facts:
+{numbered_facts}"""
+
+
+def rubric_correctness(
+    question: str,
+    answer: str,
+    key_facts: list[KeyFact],
+    judge: LLMProvider,
+) -> float:
+    numbered = "\n".join(f"{i + 1}. {kf.fact}" for i, kf in enumerate(key_facts))
+    prompt = _RUBRIC_PROMPT.format(
+        question=question.strip(), answer=answer.strip(), numbered_facts=numbered
+    )
+    text = judge.generate(prompt).text
+    present = _parse_rubric(text, len(key_facts))
+    total_weight = sum(kf.weight for kf in key_facts)
+    score = sum(kf.weight for kf, p in zip(key_facts, present) if p) / total_weight
+    return round(score, 4)
+
+
+def _parse_rubric(text: str, n: int) -> list[bool]:
+    results = [False] * n
+    for line in text.splitlines():
+        m = re.match(r"^\s*(\d+)[.)]\s*(YES|NO)", line.strip(), re.IGNORECASE)
+        if m:
+            idx = int(m.group(1)) - 1
+            if 0 <= idx < n:
+                results[idx] = m.group(2).upper() == "YES"
+    return results

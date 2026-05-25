@@ -53,12 +53,19 @@ APPLICABLE_METRICS: dict[QuestionType, set[str]] = {
 
 
 @dataclass
+class KeyFact:
+    fact:   str
+    weight: float = 1.0
+
+
+@dataclass
 class Question:
     id:             str
     scene_id:       str
     text:           str
     ground_truth:   str
     question_type:  Optional[QuestionType] = None   # None → inferred by extractor at eval time
+    key_facts:      list[KeyFact] = field(default_factory=list)
 
 
 @dataclass
