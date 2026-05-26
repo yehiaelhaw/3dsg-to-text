@@ -13,8 +13,6 @@ from evaluation.core import CSV_COLUMNS, EvalRecord
 _AGGREGATE_COLUMNS = [
     "representation", "question_type",
     "n", "error_count",
-    "exact_match_mean", "exact_match_std",
-    "semantic_similarity_mean", "semantic_similarity_std",
     "faithfulness_mean", "faithfulness_std",
     "answer_correctness_mean", "answer_correctness_std",
 ]
@@ -85,8 +83,11 @@ def save(
                     )
                     print(f"  OK     {tag} | {score_str} | {record.response.latency_ms:.0f}ms")
                     print(f"         Q:  {record.question.text}")
-                    print(f"         GT: {record.question.ground_truth}")
                     print(f"         A:  {record.response.raw_answer}")
+                    if record.rubric_reasoning:
+                        print(f"         JUDGE:")
+                        for line in record.rubric_reasoning.strip().splitlines():
+                            print(f"           {line}")
                     print(70 * "=")
 
         writer.write_aggregate(aggregate_path)
@@ -108,7 +109,7 @@ def _compute_aggregate(records: list[EvalRecord]) -> list[dict]:
     groups: dict[tuple[str, str], list[EvalRecord]] = {}
     for r in records:
         rep = r.response.representation
-        qt = r.extracted.question_type.value if r.extracted else "unknown"
+        qt = r.question.question_type.value if r.question.question_type else "unknown"
         groups.setdefault((rep, qt), []).append(r)
 
     rows = []
@@ -136,22 +137,16 @@ def _group_row(representation: str, question_type: str, records: list[EvalRecord
     def std_of(vals: list[float]) -> str:
         return f"{statistics.stdev(vals):.4f}" if len(vals) >= 2 else ""
 
-    em  = vals_of("exact_match")
-    ss  = vals_of("semantic_similarity")
     fth = vals_of("faithfulness")
     ac  = vals_of("answer_correctness")
 
     return {
-        "representation":              representation,
-        "question_type":               question_type,
-        "n":                           len(records),
-        "error_count":                 error_count,
-        "exact_match_mean":            mean_of(em),
-        "exact_match_std":             std_of(em),
-        "semantic_similarity_mean":    mean_of(ss),
-        "semantic_similarity_std":     std_of(ss),
-        "faithfulness_mean":           mean_of(fth),
-        "faithfulness_std":            std_of(fth),
-        "answer_correctness_mean":     mean_of(ac),
-        "answer_correctness_std":      std_of(ac),
+        "representation":          representation,
+        "question_type":           question_type,
+        "n":                       len(records),
+        "error_count":             error_count,
+        "faithfulness_mean":       mean_of(fth),
+        "faithfulness_std":        std_of(fth),
+        "answer_correctness_mean": mean_of(ac),
+        "answer_correctness_std":  std_of(ac),
     }

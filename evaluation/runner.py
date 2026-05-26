@@ -8,17 +8,13 @@ from typing import Iterator
 from evaluation import dataset, scene_loader
 from evaluation.config import EvalConfig
 from evaluation.core import (
-    APPLICABLE_METRICS,
     EvalRecord,
-    ExtractedAnswer,
     MetricScores,
-    QuestionType,
     Response,
 )
 from evaluation.llm.base import LLMProvider
 from evaluation.llm.factory import create_provider
-from evaluation.extraction import extract_answer
-from evaluation.metrics import context_based, reference_based
+from evaluation.metrics import context_based
 
 _RESPONDER_PROMPT = """\
 You are a 3D scene understanding assistant. Use the scene graph context below to answer the question.
@@ -86,46 +82,25 @@ def _eval_one(question, representation, repetition, context, responder, judge, r
             latency_ms=gen.latency_ms,
         )
 
-        question_type = question.question_type or QuestionType.DESCRIPTIVE
-        extracted_text = extract_answer(question_type, question.text, gen.text, judge)
-        extracted = ExtractedAnswer(
-            answer_text=extracted_text,
-            question_type=question_type,
-            type_is_inferred=question.question_type is None,
-        )
-
-        applicable = APPLICABLE_METRICS[question_type]
         scores = MetricScores()
 
-        if "exact_match" in applicable:
-            scores.exact_match = reference_based.exact_match(
-                extracted.answer_text, question.ground_truth
+        scores.faithfulness = context_based.faithfulness(
+            question.text, context, response.raw_answer, judge
+        )
+
+        rubric_reasoning = ""
+        if question.key_facts:
+            scores.answer_correctness, rubric_reasoning = context_based.rubric_correctness(
+                question.text, response.raw_answer, question.key_facts, judge
             )
-        if "semantic_similarity" in applicable:
-            scores.semantic_similarity = reference_based.semantic_similarity(
-                extracted.answer_text, question.ground_truth, config.embedding_model
-            )
-        if "faithfulness" in applicable:
-            scores.faithfulness = context_based.faithfulness(
-                question.text, context, extracted.answer_text, judge
-            )
-        if "answer_correctness" in applicable:
-            if question.key_facts:
-                scores.answer_correctness = context_based.rubric_correctness(
-                    question.text, response.raw_answer, question.key_facts, judge
-                )
-            else:
-                scores.answer_correctness = context_based.answer_correctness(
-                    question.text, response.raw_answer, question.ground_truth, judge
-                )
 
         return EvalRecord(
             question=question,
             response=response,
             responder=responder_tag,
             judge=judge_tag,
-            extracted=extracted,
             scores=scores,
+            rubric_reasoning=rubric_reasoning,
         )
 
     except Exception:

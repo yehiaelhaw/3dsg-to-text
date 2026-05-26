@@ -82,6 +82,10 @@ def answer_correctness(
 
 
 def _parse_score(text: str) -> float:
+    # prefer explicit SCORE: tag to avoid grabbing numbers from mid-explanation
+    tagged = re.search(r"SCORE:\s*([01](?:\.\d+)?|\.\d+)", text, re.IGNORECASE)
+    if tagged:
+        return round(min(max(float(tagged.group(1)), 0.0), 1.0), 4)
     match = re.search(r"\b([01](?:\.\d+)?|\.\d+)\b", text.strip())
     if match:
         return round(min(max(float(match.group(1)), 0.0), 1.0), 4)
@@ -95,9 +99,9 @@ QUESTION: {question}
 MODEL ANSWER: {answer}
 
 For each numbered fact below, answer YES if the MODEL ANSWER contains or clearly implies it, or NO if it does not.
-Reply with ONLY a numbered list, one answer per line, in the same order. Example:
-1. YES
-2. NO
+Start each line with the number and YES or NO, then add a brief reason. Example:
+1. YES — the answer explicitly states Room 22.0
+2. NO — no distance value is mentioned
 
 Facts:
 {numbered_facts}"""
@@ -108,7 +112,7 @@ def rubric_correctness(
     answer: str,
     key_facts: list[KeyFact],
     judge: LLMProvider,
-) -> float:
+) -> tuple[float, str]:
     numbered = "\n".join(f"{i + 1}. {kf.fact}" for i, kf in enumerate(key_facts))
     prompt = _RUBRIC_PROMPT.format(
         question=question.strip(), answer=answer.strip(), numbered_facts=numbered
@@ -117,7 +121,7 @@ def rubric_correctness(
     present = _parse_rubric(text, len(key_facts))
     total_weight = sum(kf.weight for kf in key_facts)
     score = sum(kf.weight for kf, p in zip(key_facts, present) if p) / total_weight
-    return round(score, 4)
+    return round(score, 4), text
 
 
 def _parse_rubric(text: str, n: int) -> list[bool]:

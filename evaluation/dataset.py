@@ -52,7 +52,6 @@ def load(
                     id=qid,
                     scene_id=raw["scene_id"],
                     text=raw["text"],
-                    ground_truth=raw["ground_truth"],
                     question_type=question_type,
                     key_facts=key_facts,
                 ))
