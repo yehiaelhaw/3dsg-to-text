@@ -25,7 +25,7 @@ SCENE GRAPH:
 QUESTION:
 {question}
 
-Answer concisely and directly."""
+Answer the question and explain your reasoning. Include specific values (distances, counts, room IDs) that support your answer."""
 
 
 
