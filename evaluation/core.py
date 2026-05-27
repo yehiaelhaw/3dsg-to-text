@@ -3,29 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Optional
-
-
-class QuestionType(str, Enum):
-    FACTUAL                    = "factual"                    # "What color is the sofa?"      → extract noun/value
-    YES_NO                     = "yes_no"                     # "Is there a window?"           → extract yes | no
-    COUNT                      = "count"                      # "How many chairs are there?"   → extract integer
-    DESCRIPTIVE                = "descriptive"                # "Describe the room layout."    → score whole response
-    COMPARATIVE                = "comparative"                # "Which is larger, A or B?"     → extract entity name
-    # reasoning-heavy types
-    SPATIAL_REASONING          = "spatial_reasoning"          # Euclidean distance / proximity queries
-    FUNCTIONAL_COMPATIBILITY   = "functional_compatibility"   # affordance-based room suitability
-    CAPACITY_RESOURCE_PLANNING = "capacity_resource_planning" # counting/summing resources across rooms
-    COMPARATIVE_SUPERLATIVE    = "comparative_superlative"    # largest/smallest/most-similar across geometry
-    SEMANTIC_CATEGORICAL       = "semantic_categorical"       # category membership / set difference
-    ANOMALY_PATTERN_DETECTION  = "anomaly_pattern_detection"  # outliers and structural patterns
-    DEPENDENCY_RELATIONSHIP_MAPPING = "dependency_relationship_mapping"  # object→room dependency traversal
-    MULTI_STEP_INFERENCE       = "multi_step_inference"       # multi-condition filtering
-    CONDITIONAL_CONSTRAINT     = "conditional_constraint"     # constraint satisfaction queries
-    MULTI_STEP_SPATIAL_REASONING = "multi_step_spatial_reasoning"  # spatial + multi-step combined
-    CONDITIONAL_REASONING      = "conditional_reasoning"      # counterfactual / hypothetical
-    EXPLICIT_OPTIMIZATION      = "explicit_optimization"      # single-criterion optimisation
 
 
 
@@ -40,7 +18,7 @@ class Question:
     id:             str
     scene_id:       str
     text:           str
-    question_type:  Optional[QuestionType] = None   # None → inferred by extractor at eval time
+    question_type:  Optional[str] = None
     key_facts:      list[KeyFact] = field(default_factory=list)
 
 
@@ -86,7 +64,7 @@ class EvalRecord:
             "responder":        self.responder,
             "judge":            self.judge,
             "question_text":    self.question.text,
-            "question_type":    self.question.question_type.value if self.question.question_type else None,
+            "question_type":    self.question.question_type,
             "raw_answer":       self.response.raw_answer,
             "latency_ms":       self.response.latency_ms,
             "prompt_tokens":    self.response.prompt_tokens,

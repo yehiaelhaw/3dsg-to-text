@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from evaluation.core import KeyFact, Question, QuestionType
+from evaluation.core import KeyFact, Question
 
 
 def load(
@@ -40,7 +40,7 @@ def load(
                 continue
 
             qt_raw = raw.get("question_type")
-            question_type = QuestionType(qt_raw) if qt_raw else None
+            question_type = qt_raw or None
 
             try:
                 raw_facts = raw.get("key_facts")
