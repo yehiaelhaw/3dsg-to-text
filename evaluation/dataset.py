@@ -43,7 +43,9 @@ def load(
             question_type = QuestionType(qt_raw) if qt_raw else None
 
             try:
-                raw_facts = raw.get("key_facts", [])
+                raw_facts = raw.get("key_facts")
+                if not raw_facts:
+                    raise ValueError(f"{path}:{lineno}: missing or empty 'key_facts'")
                 key_facts = [
                     KeyFact(fact=f["fact"], weight=float(f.get("weight", 1.0)))
                     for f in raw_facts
