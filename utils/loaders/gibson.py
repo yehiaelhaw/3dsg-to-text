@@ -30,12 +30,12 @@ class GibsonLoader(DatasetLoader):
         bdata = data["building"]
 
         # Group objects by parent_room before building rooms
-        rooms_objects: dict[int, list[SceneObject]] = {}
+        rooms_objects: dict[str, list[SceneObject]] = {}
         for object_id in np.unique(bdata["object_inst_segmentation"]):
             if object_id == 0:
                 continue
             odata = data["object"][object_id]
-            parent_room = int(odata.get("parent_room") or 0)
+            parent_room = str(int(odata.get("parent_room") or 0))
             obj = SceneObject(
                 id=str(int(object_id)),
                 category=str(odata.get("class_") or "unknown"),
@@ -49,24 +49,24 @@ class GibsonLoader(DatasetLoader):
             rooms_objects.setdefault(parent_room, []).append(obj)
 
         # Build rooms
-        rooms: dict[int, Room] = {}
+        rooms: dict[str, Room] = {}
         for room_id in np.unique(bdata["room_inst_segmentation"]):
             if room_id == 0:
                 continue
-            rid = int(room_id)
+            rid = str(int(room_id))
             rdata = data["room"][room_id]
             rooms[rid] = Room(
                 id=rid,
                 category=str(rdata.get("scene_category") or "unknown"),
                 position=_tuple3(rdata.get("location")),
                 objects=rooms_objects.get(rid, []),
-                floor_number=str(rdata["floor_number"]) if rdata.get("floor_number") is not None else None,
+                floor=str(rdata["floor"]) if rdata.get("floor") is not None else None,
                 size=_tuple3(rdata.get("size")),
                 floor_area=float(rdata["floor_area"]) if rdata.get("floor_area") is not None else None,
                 volume=float(rdata["volume"]) if rdata.get("volume") is not None else None,
             )
 
-        unique_floors = {r.floor_number for r in rooms.values() if r.floor_number is not None}
+        unique_floors = {r.floor for r in rooms.values() if r.floor is not None}
         return Building(
             name=str(bdata["name"]),
             rooms=rooms,
