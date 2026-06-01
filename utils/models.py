@@ -15,11 +15,11 @@ class SceneObject:
 
 @dataclass
 class Room:
-    id: int
+    id: str
     category: str
     position: tuple[float, float, float]
     objects: list[SceneObject] = field(default_factory=list)
-    floor_number: str | None = None            # Gibson: 'A'/'B'/etc; ProcTHOR: '0' (always single-floor)
+    floor: str | None = None                   # Gibson: 'A'/'B'/etc; absent for ProcTHOR (single-floor)
     size: tuple[float, float, float] | None = None
     floor_area: float | None = None            # Gibson only
     volume: float | None = None                # Gibson only
@@ -28,7 +28,7 @@ class Room:
 @dataclass
 class Building:
     name: str
-    rooms: dict[int, Room]
+    rooms: dict[str, Room]
     size: tuple[float, float, float] | None = None
     floor_count: int | None = None
-    connectivity: dict[int, list[int]] | None = None   # ProcTHOR: door graph; Gibson: None
+    connectivity: dict[str, list[str]] | None = None   # ProcTHOR: door graph; Gibson: None
