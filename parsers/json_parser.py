@@ -1,7 +1,7 @@
 import argparse
 import json
-import os
 import sys
+import os
 from typing import Any
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -58,14 +58,21 @@ def parse(building: Building) -> dict[str, Any]:
             "objects": [_object_to_dict(o) for o in sorted(room.objects, key=lambda o: _sort_key(o.id))],
         }))
 
+    relations = None
+    if building.object_relations:
+        relations = [
+            {"subject": r.subject_id, "predicate": r.predicate, "object": r.object_id}
+            for r in building.object_relations
+        ]
+
     return _compact({
         "building": _compact({
             "name": building.name,
             "size": _round3(building.size),
-            "floor_count": building.floor_count,
             "connectivity": building.connectivity,
         }),
         "rooms": rooms,
+        "relations": relations,
     })
 
 
