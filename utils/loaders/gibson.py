@@ -38,7 +38,7 @@ class GibsonLoader(DatasetLoader):
             parent_room = str(int(odata.get("parent_room") or 0))
             obj = SceneObject(
                 id=str(int(object_id)),
-                category=str(odata.get("class_") or "unknown"),
+                category=str(odata["class_"]) if odata.get("class_") is not None else None,
                 position=_tuple3(odata.get("location")),
                 size=_tuple3(odata.get("size")),
                 affordances=_str_list(odata.get("action_affordance")),
@@ -57,7 +57,7 @@ class GibsonLoader(DatasetLoader):
             rdata = data["room"][room_id]
             rooms[rid] = Room(
                 id=rid,
-                category=str(rdata.get("scene_category") or "unknown"),
+                category=str(rdata["scene_category"]) if rdata.get("scene_category") is not None else None,
                 position=_tuple3(rdata.get("location")),
                 objects=rooms_objects.get(rid, []),
                 floor=str(rdata["floor"]) if rdata.get("floor") is not None else None,
@@ -66,15 +66,8 @@ class GibsonLoader(DatasetLoader):
                 volume=float(rdata["volume"]) if rdata.get("volume") is not None else None,
             )
 
-        unique_floors = {r.floor for r in rooms.values() if r.floor is not None}
         return Building(
             name=str(bdata["name"]),
             rooms=rooms,
             size=_tuple3(bdata.get("size")),
-            floor_count=len(unique_floors) if unique_floors else None,
-            connectivity=None,
         )
-
-
-def load_gibson(scene_id: str, data_path: str) -> Building:
-    return GibsonLoader().load(scene_id, data_path)

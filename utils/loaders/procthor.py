@@ -58,7 +58,6 @@ class ProcTHORLoader(DatasetLoader):
                 id=rid,
                 category=rdata["roomType"],
                 position=_centroid(rdata["floorPolygon"]),
-
             )
 
         for obj in house["objects"]:
@@ -87,10 +86,5 @@ class ProcTHORLoader(DatasetLoader):
         return Building(
             name=name,
             rooms=rooms,
-            floor_count=1,
             connectivity=connectivity,
         )
-
-
-def load_procthor(scene_id: str, data_path: str) -> Building:
-    return ProcTHORLoader().load(scene_id, data_path)
