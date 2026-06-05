@@ -60,7 +60,7 @@ class GibsonLoader(DatasetLoader):
                 category=str(rdata["scene_category"]) if rdata.get("scene_category") is not None else None,
                 position=_tuple3(rdata.get("location")),
                 objects=rooms_objects.get(rid, []),
-                floor=str(rdata["floor"]) if rdata.get("floor") is not None else None,
+                floor=str(rdata["floor_number"]) if rdata.get("floor_number") is not None else None,
                 size=_tuple3(rdata.get("size")),
                 floor_area=float(rdata["floor_area"]) if rdata.get("floor_area") is not None else None,
                 volume=float(rdata["volume"]) if rdata.get("volume") is not None else None,
