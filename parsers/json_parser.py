@@ -1,4 +1,3 @@
-import argparse
 import json
 import sys
 import os
@@ -6,6 +5,7 @@ from typing import Any
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from _base import run_parser
 from utils.loaders import REGISTRY, load
 from utils.models import Building
 
@@ -81,20 +81,4 @@ def to_json_string(data: dict[str, Any], indent: int = 2) -> str:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Parse a 3D Scene Graph into raw-coordinates JSON")
-    ap.add_argument("--model", required=True)
-    ap.add_argument("--path", required=True)
-    ap.add_argument("--dataset", required=True, choices=list(REGISTRY))
-    ap.add_argument("--output", default=None)
-    args = ap.parse_args()
-
-    print(f"Loading {args.model} from {args.path} ...")
-    building = load(args.dataset, args.model, args.path)
-    json_text = to_json_string(parse(building))
-
-    if args.output:
-        with open(args.output, "w", encoding="utf-8") as f:
-            f.write(json_text)
-        print(f"Saved to {args.output}")
-    else:
-        print(json_text)
+    run_parser(lambda b: to_json_string(parse(b)), "Serialize a 3D scene to structured JSON")
