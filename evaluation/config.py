@@ -28,7 +28,17 @@ class EvalConfig:
     representations:    Optional[list[str]] = None   # None → auto-discover
     question_ids:       Optional[list[str]] = None   # None → all questions
 
+    # Skip (rep × question) cells the rep cannot answer (scope.in_scope). On by
+    # default: it only removes structurally-meaningless cells that plots masked
+    # anyway. Set False to force the full cross product.
+    scope_filter:       bool                = True
+    # faithfulness is the secondary metric and costs an extra judge call per
+    # record. Turn off for screening passes to cut LLM calls by ~a third.
+    compute_faithfulness: bool              = True
+
     embedding_model:    str                 = "all-MiniLM-L6-v2"
+    # Resume an interrupted run: skip (question, rep, repetition) cells already
+    # present and non-errored in output_dir/results.csv, and append to it.
     resume:             bool                = False
 
     def __post_init__(self):

@@ -1,0 +1,62 @@
+"""scope.py — which representations can answer which question types.
+
+A representation only carries certain information channels (connectivity, metric,
+...); a question type needs certain channels to be answerable at all. A rep is
+*in scope* for a type when it covers what the type needs. This is the single source
+of truth shared by the runner (which skips out-of-scope cells so they are never
+computed) and plots.py (which would otherwise mask them after the fact).
+
+The model is fail-open: an unknown representation defaults to all channels, and an
+undeclared question type is never filtered — so new parsers/types are run and shown
+until their scope is declared here.
+"""
+
+from __future__ import annotations
+
+# Information channels each representation's text carries. Combinations ("a+b")
+# take the union of their parts. Unknown reps default to all channels (shown).
+REP_CAPS: dict[str, set[str]] = {
+    "inventory":        {"inventory"},
+    "topology":         {"inventory", "connectivity"},
+    "graph_digest":     {"connectivity"},
+    "prose":            {"inventory", "connectivity", "object_relations"},
+    "metric_relations": {"inventory", "metric"},
+    "navigation":       {"connectivity", "metric"},
+    "json":             {"inventory", "connectivity", "metric", "object_relations"},
+    "object_graph":     {"inventory", "object_relations"},
+    "proximity_graph":  {"inventory", "object_relations"},
+}
+ALL_CAPS = {"inventory", "connectivity", "metric", "object_relations"}
+
+# What each question type needs to be answerable at all. Spatial family needs a
+# spatial channel; the general-reasoning family only needs room/object content
+# (inventory), so the discriminating variable there is format/density, not encoding.
+TYPE_NEEDS: dict[str, set[str]] = {
+    # spatial family
+    "connectivity":    {"connectivity"},
+    "proximity":       {"metric"},
+    "direction":       {"metric"},
+    "route":           {"connectivity", "metric"},
+    "object_relation": {"object_relations"},
+    # general-reasoning family (content only)
+    "containment":     {"inventory"},
+    "aggregation":     {"inventory"},
+    "set_logic":       {"inventory"},
+    "planning":        {"inventory"},
+}
+
+
+def caps(rep: str) -> set[str]:
+    """Channels a representation carries; union across the parts of a "a+b" combo."""
+    out: set[str] = set()
+    for part in rep.split("+"):
+        out |= REP_CAPS.get(part, ALL_CAPS)
+    return out
+
+
+def in_scope(rep: str, qtype: str | None) -> bool:
+    """True if `rep` carries everything question type `qtype` needs (fail-open)."""
+    need = TYPE_NEEDS.get(qtype or "")
+    if not need:            # undeclared type -> never filter
+        return True
+    return need <= caps(rep)

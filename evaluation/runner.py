@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import csv
 import traceback
+from pathlib import Path
 from typing import Iterator
 
-from evaluation import dataset, scene_loader
+from evaluation import dataset, scene_loader, scope
 from evaluation.config import EvalConfig
 from evaluation.core import (
     EvalRecord,
@@ -42,12 +44,19 @@ def iter_records(config: EvalConfig) -> Iterator[EvalRecord]:
 
     questions = dataset.load(config.dataset_path, config.question_ids)
 
+    done = _load_done_keys(config) if config.resume else set()
+
     for question in questions:
         representations = config.representations or scene_loader.list_representations(
             config.scene_contexts_dir, question.scene_id
         )
 
         for representation in representations:
+            # Skip cells this rep structurally cannot answer (e.g. graph_digest on
+            # a containment question): never computed rather than computed-then-masked.
+            if config.scope_filter and not scope.in_scope(representation, question.question_type):
+                continue
+
             try:
                 context = scene_loader.load(
                     config.scene_contexts_dir, question.scene_id, representation
@@ -57,10 +66,25 @@ def iter_records(config: EvalConfig) -> Iterator[EvalRecord]:
                 continue
 
             for repetition in range(1, config.repetitions + 1):
+                if (question.id, representation, str(repetition)) in done:
+                    continue
                 yield _eval_one(
                     question, representation, repetition, context,
                     responder, judge, responder_tag, judge_tag, config,
                 )
+
+
+def _load_done_keys(config: EvalConfig) -> set[tuple[str, str, str]]:
+    """(question_id, representation, repetition) already completed without error."""
+    path = Path(config.output_dir) / "results.csv"
+    if not path.exists():
+        return set()
+    done: set[tuple[str, str, str]] = set()
+    with path.open(encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if not row.get("error"):   # let errored cells be retried
+                done.add((row["question_id"], row["representation"], row["repetition"]))
+    return done
 
 
 def _eval_one(question, representation, repetition, context, responder, judge, responder_tag, judge_tag, config) -> EvalRecord:
@@ -84,9 +108,10 @@ def _eval_one(question, representation, repetition, context, responder, judge, r
 
         scores = MetricScores()
 
-        scores.faithfulness = context_based.faithfulness(
-            question.text, context, response.raw_answer, judge
-        )
+        if config.compute_faithfulness:
+            scores.faithfulness = context_based.faithfulness(
+                question.text, context, response.raw_answer, judge
+            )
 
         rubric_reasoning = ""
         if question.key_facts:

@@ -21,26 +21,18 @@ _AGGREGATE_COLUMNS = [
 class ResultsWriter:
     """Streams EvalRecords to a per-question CSV row-by-row."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, resume: bool = False) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._path = path
-        self._fh = path.open("w", newline="", encoding="utf-8")
+        append = resume and path.exists()
+        self._fh = path.open("a" if append else "w", newline="", encoding="utf-8")
         self._writer = csv.DictWriter(self._fh, fieldnames=CSV_COLUMNS)
-        self._writer.writeheader()
-        self._records: list[EvalRecord] = []
+        if not append:
+            self._writer.writeheader()
 
     def add(self, record: EvalRecord) -> None:
         self._writer.writerow(record.to_flat_dict())
         self._fh.flush()
-        self._records.append(record)
-
-    def write_aggregate(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        rows = _compute_aggregate(self._records)
-        with path.open("w", newline="", encoding="utf-8") as fh:
-            writer = csv.DictWriter(fh, fieldnames=_AGGREGATE_COLUMNS)
-            writer.writeheader()
-            writer.writerows(rows)
 
     def close(self) -> None:
         self._fh.close()
@@ -66,7 +58,7 @@ def save(
     t_start = time.perf_counter()
     n_ok = n_err = 0
 
-    with ResultsWriter(detail_path) as writer:
+    with ResultsWriter(detail_path, resume=config.resume) as writer:
         for record in records:
             writer.add(record)
 
@@ -90,7 +82,9 @@ def save(
                             print(f"           {line}")
                     print(70 * "=")
 
-        writer.write_aggregate(aggregate_path)
+    # Aggregate from the written CSV (not in-memory records) so a resumed run
+    # summarises prior + new rows together.
+    _write_aggregate_from_csv(detail_path, aggregate_path)
 
     from evaluation import plots
     plots.plot_aggregate(aggregate_path)
@@ -105,31 +99,44 @@ def save(
     return detail_path, aggregate_path
 
 
-def _compute_aggregate(records: list[EvalRecord]) -> list[dict]:
-    groups: dict[tuple[str, str], list[EvalRecord]] = {}
-    for r in records:
-        rep = r.response.representation
-        qt = r.question.question_type.value if r.question.question_type else "unknown"
+def _write_aggregate_from_csv(detail_path: Path, aggregate_path: Path) -> None:
+    """Recompute the aggregate CSV from the per-question CSV on disk."""
+    aggregate_path.parent.mkdir(parents=True, exist_ok=True)
+    with detail_path.open(encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    out = _compute_aggregate(rows)
+    with aggregate_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=_AGGREGATE_COLUMNS)
+        writer.writeheader()
+        writer.writerows(out)
+
+
+def _compute_aggregate(rows: list[dict]) -> list[dict]:
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for r in rows:
+        rep = r["representation"]
+        qt = r["question_type"] or "unknown"
         groups.setdefault((rep, qt), []).append(r)
 
-    rows = []
+    out = []
     for (rep, qt), group in sorted(groups.items()):
-        rows.append(_group_row(rep, qt, group))
+        out.append(_group_row(rep, qt, group))
 
     # overall row across all groups
-    rows.append(_group_row("ALL", "ALL", records))
-    return rows
+    out.append(_group_row("ALL", "ALL", rows))
+    return out
 
 
-def _group_row(representation: str, question_type: str, records: list[EvalRecord]) -> dict:
-    error_count = sum(1 for r in records if r.error)
+def _group_row(representation: str, question_type: str, rows: list[dict]) -> dict:
+    error_count = sum(1 for r in rows if r["error"])
 
     def vals_of(metric: str) -> list[float]:
-        return [
-            getattr(r.scores, metric)
-            for r in records
-            if getattr(r.scores, metric) is not None
-        ]
+        out = []
+        for r in rows:
+            if r["error"] or r[metric] in ("", None):
+                continue
+            out.append(float(r[metric]))
+        return out
 
     def mean_of(vals: list[float]) -> str:
         return f"{statistics.mean(vals):.4f}" if vals else ""
@@ -143,7 +150,7 @@ def _group_row(representation: str, question_type: str, records: list[EvalRecord
     return {
         "representation":          representation,
         "question_type":           question_type,
-        "n":                       len(records),
+        "n":                       len(rows),
         "error_count":             error_count,
         "faithfulness_mean":       mean_of(fth),
         "faithfulness_std":        std_of(fth),

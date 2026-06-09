@@ -1,69 +1,163 @@
-"""plots.py — Generate comparison charts from evaluation results."""
+"""plots.py — Generate comparison charts from evaluation results.
+
+Charts are **scope-aware**: a representation is only drawn for a question type it
+can actually answer. Each question type requires certain information channels
+(connectivity, metric, ...); each representation carries some; a rep is in-scope
+when it covers what the type needs. Plotting an out-of-scope rep (e.g. navigation,
+which has no object inventory, on a containment question) would show a structural
+zero as if it were a result — so those cells are masked out.
+
+The model is fail-open: an unknown representation or question type is never
+masked, so new parsers/types are shown until their scope is declared here.
+"""
 
 from __future__ import annotations
 
 import csv
 import collections
+import statistics
 from pathlib import Path
 
+# --- scope model -----------------------------------------------------------
+# Single source of truth lives in evaluation/scope.py (shared with the runner,
+# which skips out-of-scope cells before they are ever computed).
+from evaluation.scope import in_scope as _in_scope
+
+
+# --- shared loading --------------------------------------------------------
+
+def _per_question_ac(results_path: Path):
+    """Return (points, types, reps).
+
+    points[(qtype, rep)] = list of one mean answer_correctness per question
+    (averaged over repetitions). This is the basis for means, error bars, dots.
+    """
+    rows = [r for r in csv.DictReader(results_path.open(encoding="utf-8")) if not r["error"]]
+
+    # (qid, rep) -> list of ac over repetitions; remember each question's type
+    by_qr: dict[tuple, list[float]] = collections.defaultdict(list)
+    qtype_of: dict[str, str] = {}
+    for r in rows:
+        if r["answer_correctness"] == "":
+            continue
+        by_qr[(r["question_id"], r["representation"])].append(float(r["answer_correctness"]))
+        qtype_of[r["question_id"]] = r["question_type"] or "unknown"
+
+    points: dict[tuple, list[float]] = collections.defaultdict(list)
+    for (qid, rep), vals in by_qr.items():
+        points[(qtype_of[qid], rep)].append(sum(vals) / len(vals))
+
+    types = sorted({qt for qt, _ in points})
+    reps = sorted({rep for _, rep in points})
+    return points, types, reps
+
+
+def _colors(reps: list[str]):
+    import matplotlib.pyplot as plt
+    cmap = plt.cm.get_cmap("tab10", max(len(reps), 1))
+    return {rep: cmap(i) for i, rep in enumerate(reps)}
+
+
+# --- aggregate-level charts (AC by axis, lift over floor) -------------------
 
 def plot_aggregate(aggregate_path: Path) -> None:
     import matplotlib.pyplot as plt
     import numpy as np
-
-    rows = [r for r in csv.DictReader(aggregate_path.open(encoding="utf-8"))
-            if r["representation"] != "ALL"]
-
-    representations = sorted({r["representation"] for r in rows})
-    question_types  = sorted({r["question_type"] for r in rows})
-    labels = [qt.replace("_", " ") for qt in question_types]
+    from matplotlib.patches import Patch
 
     out_dir = aggregate_path.parent
-    cmap = plt.cm.get_cmap("tab10", max(len(representations), 1))
-    colors = [cmap(i) for i in range(len(representations))]
+    results_path = out_dir / "results.csv"
+    if not results_path.exists():
+        return
+    points, types, reps = _per_question_ac(results_path)
+    if not types:
+        return
+    color = _colors(reps)
+    rng = np.random.default_rng(42)
 
-    def _vals(metric_mean: str, metric_std: str, rep: str) -> tuple[list[float], list[float | None]]:
-        means, stds = [], []
-        for qt in question_types:
-            row = next((r for r in rows if r["representation"] == rep and r["question_type"] == qt), None)
-            means.append(float(row[metric_mean]) if row else 0.0)
-            stds.append(float(row[metric_std]) if row and row[metric_std] else None)
-        return means, stds
+    # -- Chart 1: scope-masked AC by question type (bars + std + per-question dots) --
+    fig, ax = plt.subplots(figsize=(max(10, 2.2 * len(types)), 6))
+    used: set[str] = set()
+    for gi, qt in enumerate(types):
+        in_scope = [r for r in reps if _in_scope(r, qt) and points.get((qt, r))]
+        k = len(in_scope)
+        if k == 0:
+            continue
+        barw = 0.8 / k
+        for j, rep in enumerate(in_scope):
+            vals = points[(qt, rep)]
+            mean = statistics.mean(vals)
+            std = statistics.pstdev(vals) if len(vals) > 1 else 0.0
+            xpos = gi + (j - (k - 1) / 2) * barw
+            ax.bar(xpos, mean, barw * 0.9, color=color[rep], alpha=0.85,
+                   label=rep if rep not in used else None)
+            used.add(rep)
+            ax.errorbar(xpos, mean, yerr=std, fmt="none", color="black", capsize=2, linewidth=0.8)
+            jitter = rng.uniform(-barw * 0.25, barw * 0.25, len(vals))
+            ax.scatter(xpos + jitter, vals, s=14, color=color[rep],
+                       edgecolor="black", linewidth=0.4, zorder=3, alpha=0.9)
+            ax.text(xpos, -0.06, f"n={len(vals)}", ha="center", va="top", fontsize=6, color="gray")
 
-    def _plot(metric_mean: str, metric_std: str, ylabel: str, title: str, filename: str) -> None:
-        x = np.arange(len(question_types))
-        width = 0.35
+    ax.set_xticks(range(len(types)))
+    ax.set_xticklabels([t.replace("_", " ") for t in types], rotation=20, ha="right")
+    ax.set_ylabel("Answer correctness")
+    ax.set_title("Answer Correctness by Axis  (in-scope reps only; bar=mean, whisker=±1 std, dots=per question)")
+    ax.set_ylim(-0.1, 1.05)
+    ax.axhline(0, color="black", linewidth=0.6)
+    ax.grid(axis="y", linestyle="--", alpha=0.4)
+    handles = [Patch(color=color[r], label=r) for r in reps if r in used]
+    ax.legend(handles=handles, ncol=min(len(handles), 4), fontsize=8, loc="upper right")
+    fig.tight_layout()
+    fig.savefig(out_dir / "ac_by_axis.png", dpi=150)
+    plt.close(fig)
+    print(f"plot -> {out_dir / 'ac_by_axis.png'}")
 
-        fig, ax = plt.subplots(figsize=(14, 6))
-        for i, (rep, color) in enumerate(zip(representations, colors)):
-            means, stds = _vals(metric_mean, metric_std, rep)
-            errs = [s if s is not None else 0.0 for s in stds]
-            ax.bar(x + (i - 0.5) * width, means, width, label=rep, color=color, alpha=0.85)
-            ax.errorbar(x + (i - 0.5) * width, means, yerr=errs,
-                        fmt="none", color="black", capsize=3, linewidth=1)
-
-        ax.set_xlabel("Question type")
-        ax.set_ylabel(ylabel)
-        ax.set_title(title)
-        ax.set_xticks(x)
-        ax.set_xticklabels(labels, rotation=45, ha="right")
-        ax.set_ylim(0, 1.2)
-        ax.axhline(1.0, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
-        ax.legend()
+    # -- Chart 2: value of spatial structure (lift over the inventory floor) --
+    # Only meaningful where inventory is a genuine no-information control, i.e. a
+    # question type that needs something inventory lacks (the spatial axes). For
+    # content/general-reasoning types inventory is a legitimate format, not a
+    # floor, so they are excluded here and compared head-to-head in ac_by_axis.
+    ctrl_types = [qt for qt in types
+                  if not _in_scope("inventory", qt) and points.get((qt, "inventory"))]
+    if ctrl_types:
+        fig, ax = plt.subplots(figsize=(max(8, 2.2 * len(ctrl_types)), 6))
+        used = set()
+        for gi, qt in enumerate(ctrl_types):
+            floor = statistics.mean(points[(qt, "inventory")])
+            in_scope = [r for r in reps if r != "inventory" and _in_scope(r, qt) and points.get((qt, r))]
+            k = len(in_scope)
+            if k == 0:
+                continue
+            barw = 0.8 / k
+            for j, rep in enumerate(in_scope):
+                lift = statistics.mean(points[(qt, rep)]) - floor
+                xpos = gi + (j - (k - 1) / 2) * barw
+                ax.bar(xpos, lift, barw * 0.9, color=color[rep], alpha=0.85,
+                       label=rep if rep not in used else None)
+                used.add(rep)
+        ax.set_xticks(range(len(ctrl_types)))
+        ax.set_xticklabels([t.replace("_", " ") for t in ctrl_types], rotation=20, ha="right")
+        ax.set_ylabel("AC minus the inventory baseline")
+        ax.set_title("Value of spatial structure  (answer correctness vs the no-spatial inventory baseline; "
+                     ">0 = it helped, <0 = it hurt)")
+        ax.axhline(0, color="black", linewidth=0.8)
         ax.grid(axis="y", linestyle="--", alpha=0.4)
+        handles = [Patch(color=color[r], label=r) for r in reps if r in used]
+        ax.legend(handles=handles, ncol=min(len(handles), 4), fontsize=8)
         fig.tight_layout()
-        fig.savefig(out_dir / filename, dpi=150)
+        fig.savefig(out_dir / "value_of_spatial_structure.png", dpi=150)
         plt.close(fig)
-        print(f"plot -> {out_dir / filename}")
+        print(f"plot -> {out_dir / 'value_of_spatial_structure.png'}")
 
-    _plot("answer_correctness_mean", "answer_correctness_std",
-          "Answer correctness (mean ± 1 std)", "Answer Correctness by Question Type",
-          "ac_comparison.png")
+    # retire charts that the scope-aware set replaces / that mislead
+    for stale in ("ac_comparison.png", "faithfulness_comparison.png", "ac_delta.png",
+                  "ac_lift_over_floor.png"):
+        p = out_dir / stale
+        if p.exists():
+            p.unlink()
 
-    _plot("faithfulness_mean", "faithfulness_std",
-          "Faithfulness (mean ± 1 std)", "Faithfulness by Question Type",
-          "faithfulness_comparison.png")
 
+# --- per-observation charts (guess detector, latency) ----------------------
 
 def plot_per_question(results_path: Path) -> None:
     import matplotlib.pyplot as plt
@@ -72,73 +166,60 @@ def plot_per_question(results_path: Path) -> None:
     rows = [r for r in csv.DictReader(results_path.open(encoding="utf-8")) if not r["error"]]
     out_dir = results_path.parent
     representations = sorted({r["representation"] for r in rows})
-    cmap = plt.cm.get_cmap("tab10", max(len(representations), 1))
-    colors = {rep: cmap(i) for i, rep in enumerate(representations)}
-
-    # Group by (question_id, representation) → list of float values
-    ac_map:      dict[tuple, list[float]] = collections.defaultdict(list)
-    faith_map:   dict[tuple, list[float]] = collections.defaultdict(list)
-    latency_map: dict[tuple, list[float]] = collections.defaultdict(list)
-
-    for r in rows:
-        key = (r["question_id"], r["representation"])
-        if r["answer_correctness"]:
-            ac_map[key].append(float(r["answer_correctness"]))
-        if r["faithfulness"]:
-            faith_map[key].append(float(r["faithfulness"]))
-        if r["latency_ms"]:
-            latency_map[key].append(float(r["latency_ms"]) / 1000)
-
-    question_ids = sorted({r["question_id"] for r in rows}, key=lambda x: int(x))
-
-    # --- Plot 1: AC delta (rep_a - rep_b) per question ---
-    def mean_or_nan(vals: list[float]) -> float:
-        return sum(vals) / len(vals) if vals else float("nan")
-
-    if len(representations) >= 2:
-        rep_a, rep_b = representations[0], representations[1]
-        col_a, col_b = colors[rep_a], colors[rep_b]
-        deltas, bar_colors = [], []
-        for qid in question_ids:
-            a = mean_or_nan(ac_map[(qid, rep_a)])
-            b = mean_or_nan(ac_map[(qid, rep_b)])
-            delta = a - b if not (np.isnan(a) or np.isnan(b)) else 0.0
-            deltas.append(delta)
-            bar_colors.append(col_a if delta >= 0 else col_b)
-
-        fig, ax = plt.subplots(figsize=(14, 5))
-        x = np.arange(len(question_ids))
-        ax.bar(x, deltas, color=bar_colors, alpha=0.85)
-        ax.axhline(0, color="black", linewidth=0.8)
-        ax.set_xticks(x)
-        ax.set_xticklabels(question_ids, rotation=45, ha="right")
-        ax.set_xlabel("Question ID")
-        ax.set_ylabel(f"AC delta  ({rep_a} − {rep_b})")
-        ax.set_title(f"Answer Correctness Delta per Question  ({rep_a} better vs {rep_b} better)")
-        ax.grid(axis="y", linestyle="--", alpha=0.4)
-        from matplotlib.patches import Patch
-        ax.legend(handles=[Patch(color=col_a, label=f"{rep_a} better"),
-                            Patch(color=col_b, label=f"{rep_b} better")])
-        fig.tight_layout()
-        fig.savefig(out_dir / "ac_delta.png", dpi=150)
-        plt.close(fig)
-        print(f"plot -> {out_dir / 'ac_delta.png'}")
-
-    # --- Plot 2: Latency distribution per representation (box + strip) ---
+    colors = _colors(representations)
     rng = np.random.default_rng(42)
-    fig, ax = plt.subplots(figsize=(7, 5))
-    positions = list(range(len(representations)))
-    for pos, rep in zip(positions, representations):
-        per_q_means = [mean_or_nan(latency_map[(qid, rep)]) for qid in question_ids]
-        per_q_means = [v for v in per_q_means if not np.isnan(v)]
-        ax.boxplot(per_q_means, positions=[pos], widths=0.4,
-                   patch_artist=True,
+
+    # -- Faithfulness vs Answer Correctness: a guess / grounding diagnostic --
+    fig, ax = plt.subplots(figsize=(7.5, 6.5))
+    # quadrant shading: high AC + low faithfulness = credit without grounding (lucky guess)
+    ax.axhspan(0.5, 1.05, xmin=0, xmax=0.5 / 1.05, color="tab:red", alpha=0.06)
+    ax.axhline(0.5, color="gray", linestyle=":", linewidth=0.8)
+    ax.axvline(0.5, color="gray", linestyle=":", linewidth=0.8)
+    ax.text(0.02, 1.0, "lucky guess\n(high AC, low faithfulness)", fontsize=7, color="tab:red", va="top")
+    ax.text(0.52, 0.03, "grounded but wrong", fontsize=7, color="gray", va="bottom")
+
+    for rep in representations:
+        rr = [r for r in rows if r["representation"] == rep
+              and r["faithfulness"] != "" and r["answer_correctness"] != ""]
+        xs = np.array([float(r["faithfulness"]) for r in rr])
+        ys = np.array([float(r["answer_correctness"]) for r in rr])
+        if len(xs) == 0:
+            continue
+        xs = xs + rng.uniform(-0.018, 0.018, len(xs))
+        ys = ys + rng.uniform(-0.018, 0.018, len(ys))
+        ax.scatter(xs, ys, label=rep, color=colors.get(rep, "gray"), alpha=0.6, s=28)
+    ax.set_xlabel("Faithfulness (grounded in context)")
+    ax.set_ylabel("Answer correctness (matches key facts)")
+    ax.set_title("Faithfulness vs Answer Correctness  (per observation)")
+    ax.set_xlim(0, 1.05)
+    ax.set_ylim(0, 1.08)
+    ax.legend(fontsize=8, ncol=2)
+    ax.grid(linestyle="--", alpha=0.4)
+    fig.tight_layout()
+    fig.savefig(out_dir / "faith_vs_ac.png", dpi=150)
+    plt.close(fig)
+    print(f"plot -> {out_dir / 'faith_vs_ac.png'}")
+
+    # -- Latency per representation (operational trade-off) --
+    latency_map: dict[tuple, list[float]] = collections.defaultdict(list)
+    for r in rows:
+        if r["latency_ms"]:
+            latency_map[(r["question_id"], r["representation"])].append(float(r["latency_ms"]) / 1000)
+    question_ids = sorted({r["question_id"] for r in rows}, key=lambda x: int(x) if x.isdigit() else 0)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for pos, rep in enumerate(representations):
+        per_q = [statistics.mean(latency_map[(qid, rep)])
+                 for qid in question_ids if latency_map[(qid, rep)]]
+        if not per_q:
+            continue
+        ax.boxplot(per_q, positions=[pos], widths=0.4, patch_artist=True,
                    boxprops=dict(facecolor=colors.get(rep, "gray"), alpha=0.5),
                    medianprops=dict(color="black", linewidth=2))
-        jitter = rng.uniform(-0.08, 0.08, len(per_q_means))
-        ax.scatter([pos + j for j in jitter], per_q_means,
-                   color=colors.get(rep, "gray"), alpha=0.7, s=30, zorder=3)
-    ax.set_xticks(positions)
+        jitter = rng.uniform(-0.08, 0.08, len(per_q))
+        ax.scatter([pos + j for j in jitter], per_q, color=colors.get(rep, "gray"),
+                   alpha=0.7, s=30, zorder=3)
+    ax.set_xticks(range(len(representations)))
     ax.set_xticklabels(representations, rotation=15, ha="right")
     ax.set_ylabel("Mean response latency (s)")
     ax.set_title("Response Latency by Representation")
@@ -147,30 +228,3 @@ def plot_per_question(results_path: Path) -> None:
     fig.savefig(out_dir / "latency_comparison.png", dpi=150)
     plt.close(fig)
     print(f"plot -> {out_dir / 'latency_comparison.png'}")
-
-    # --- Plot 3: Faithfulness vs Answer Correctness scatter ---
-    fig, ax = plt.subplots(figsize=(7, 6))
-    for rep in representations:
-        rep_rows = [r for r in rows if r["representation"] == rep
-                    and r["faithfulness"] and r["answer_correctness"]]
-        xs = np.array([float(r["faithfulness"]) for r in rep_rows])
-        ys = np.array([float(r["answer_correctness"]) for r in rep_rows])
-        # jitter to reveal overlapping points at identical judge scores
-        xs = xs + rng.uniform(-0.018, 0.018, len(xs))
-        ys = ys + rng.uniform(-0.018, 0.018, len(ys))
-        ax.scatter(xs, ys, label=rep, color=colors.get(rep, "gray"), alpha=0.5, s=25)
-        if len(xs) >= 2:
-            m, b = np.polyfit(xs, ys, 1)
-            xline = np.linspace(min(xs), max(xs), 100)
-            ax.plot(xline, m * xline + b, color=colors.get(rep, "gray"), linewidth=1.5)
-    ax.set_xlabel("Faithfulness")
-    ax.set_ylabel("Answer correctness")
-    ax.set_title("Faithfulness vs Answer Correctness  (per observation)")
-    ax.set_xlim(0, 1.05)
-    ax.set_ylim(0, 1.05)
-    ax.legend()
-    ax.grid(linestyle="--", alpha=0.4)
-    fig.tight_layout()
-    fig.savefig(out_dir / "faith_vs_ac.png", dpi=150)
-    plt.close(fig)
-    print(f"plot -> {out_dir / 'faith_vs_ac.png'}")
