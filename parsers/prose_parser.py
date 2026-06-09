@@ -5,8 +5,20 @@ from collections import Counter
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from _base import run_parser
-from _format import room_label as _room_label, object_inventory as _object_inventory, relation_lines
+from _format import (
+    room_label as _room_label,
+    object_inventory as _object_inventory,
+    relation_lines,
+    sort_key as _id_key,
+)
 from utils.models import Building, Room
+
+
+def _degree(connectivity: dict | None, rooms: dict, rid: str) -> int:
+    """Distinct doorway-reachable neighbours — matches topology's degree."""
+    if not connectivity:
+        return 0
+    return len({n for n in connectivity.get(rid, []) if n in rooms})
 
 
 def _room_line(room: Room, connectivity: dict | None, rooms: dict) -> str:
@@ -15,9 +27,13 @@ def _room_line(room: Room, connectivity: dict | None, rooms: dict) -> str:
     parts = [label]
 
     if connectivity:
-        neighbors = [nid for nid in sorted(connectivity.get(room.id, [])) if nid in rooms]
-        if neighbors:
-            neighbor_labels = [_room_label(rooms[nid]) for nid in neighbors]
+        # Same neighbour ordering as topology: degree desc, ties by id.
+        neighbor_ids = sorted(
+            {n for n in connectivity.get(room.id, []) if n in rooms},
+            key=lambda nid: (-_degree(connectivity, rooms, nid), _id_key(nid)),
+        )
+        if neighbor_ids:
+            neighbor_labels = [_room_label(rooms[nid]) for nid in neighbor_ids]
             parts.append(f"connects to {', '.join(neighbor_labels)}")
 
     n = len(room.objects)
@@ -68,10 +84,10 @@ def parse(building: Building) -> str:
 
     lines.append("")
 
-    # -- Body: rooms --
+    # -- Body: rooms -- (same ordering as topology: degree desc, ties by id,
+    # then object count as a final tiebreaker for the no-connectivity case)
     def sort_key(r: Room) -> tuple:
-        degree = len(connectivity.get(r.id, [])) if connectivity else 0
-        return (-degree, -len(r.objects))
+        return (-_degree(connectivity, rooms, r.id), _id_key(r.id), -len(r.objects))
 
     if len(floors) > 1:
         for floor in floors:

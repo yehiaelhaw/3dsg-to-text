@@ -15,3 +15,9 @@ def has_floors(b: Building) -> bool:
 
 def has_object_relations(b: Building) -> bool:
     return bool(b.object_relations)
+
+
+def has_object_positions(b: Building) -> bool:
+    return sum(
+        1 for r in b.rooms.values() for o in r.objects if o.position is not None
+    ) >= 2
