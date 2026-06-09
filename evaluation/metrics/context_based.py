@@ -127,7 +127,10 @@ def rubric_correctness(
 def _parse_rubric(text: str, n: int) -> list[bool]:
     results = [False] * n
     for line in text.splitlines():
-        m = re.match(r"^\s*(\d+)[.)]\s*(YES|NO)", line.strip(), re.IGNORECASE)
+        # Tolerate markdown emphasis / bullets the judge sometimes adds, e.g.
+        # "1.  **YES** - ..." or "- 1) `NO`": strip emphasis chars before matching.
+        clean = line.replace("*", "").replace("`", "").replace("_", "").strip()
+        m = re.match(r"^[\-\s]*(\d+)[.)]\s*(YES|NO)\b", clean, re.IGNORECASE)
         if m:
             idx = int(m.group(1)) - 1
             if 0 <= idx < n:
