@@ -22,3 +22,11 @@ class LLMProvider(ABC):
     @abstractmethod
     def generate(self, prompt: str) -> GenerationResult:
         ...
+
+    def unload(self) -> None:
+        """Release any held resources (e.g. free GPU VRAM). Default no-op.
+
+        Local backends override this so the two-phase runner can evict the
+        responder before the judge loads, avoiding co-residence on small GPUs.
+        """
+        return None

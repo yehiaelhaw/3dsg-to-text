@@ -41,7 +41,20 @@ class EvalConfig:
     # present and non-errored in output_dir/results.csv, and append to it.
     resume:             bool                = False
 
+    # Two-phase execution (generate -> judge). Generation streams responses to
+    # a cache so the responder and judge never need to be co-resident in VRAM:
+    # the responder is unloaded before the judge loads.
+    #   score_only=True   -> skip generation; judge an existing responses cache
+    #                        (e.g. re-score the same answers with Gemini later).
+    #   responses_path    -> where the cache lives; defaults to
+    #                        output_dir/responses.jsonl. Point it at a prior
+    #                        run's cache to re-judge without regenerating.
+    score_only:         bool                = False
+    responses_path:     Optional[Path]      = None
+
     def __post_init__(self):
         self.dataset_path       = Path(self.dataset_path)
         self.scene_contexts_dir = Path(self.scene_contexts_dir)
         self.output_dir         = Path(self.output_dir)
+        if self.responses_path is not None:
+            self.responses_path = Path(self.responses_path)

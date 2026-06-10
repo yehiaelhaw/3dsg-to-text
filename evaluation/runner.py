@@ -1,8 +1,24 @@
-"""runner.py — Main evaluation loop: questions × representations × repetitions."""
+"""runner.py — Two-phase evaluation: generate all responses, then judge them.
+
+The two phases are split so the responder and judge never need to be co-resident
+in GPU VRAM (a hard limit on small cards):
+
+  Phase 1  generate_responses() — only the responder is loaded; every
+           (question x representation x repetition) answer is streamed to a
+           cache file (responses.jsonl). The responder is then unloaded.
+  Phase 2  score_responses()    — only the judge is loaded; it reads the cache,
+           reloads each context (for faithfulness), and yields scored records.
+
+iter_records() runs both back-to-back so callers (and run scripts) are unchanged
+(`save(iter_records(config), config)`). Because the cache persists, the same
+answers can be re-judged later with a different judge (e.g. Gemini for the final
+numbers) via config.score_only — no regeneration, no responder VRAM.
+"""
 
 from __future__ import annotations
 
 import csv
+import json
 import traceback
 from pathlib import Path
 from typing import Iterator
@@ -11,10 +27,11 @@ from evaluation import dataset, scene_loader, scope
 from evaluation.config import EvalConfig
 from evaluation.core import (
     EvalRecord,
+    KeyFact,
     MetricScores,
+    Question,
     Response,
 )
-from evaluation.llm.base import LLMProvider
 from evaluation.llm.factory import create_provider
 from evaluation.metrics import context_based
 
@@ -30,85 +47,224 @@ QUESTION:
 Answer the question and explain your reasoning. Include specific values (distances, counts, room IDs) that support your answer."""
 
 
-
 def iter_records(config: EvalConfig) -> Iterator[EvalRecord]:
+    """Generate responses (unless score_only), then yield judged records."""
+    if not config.score_only:
+        generate_responses(config)
+    yield from score_responses(config)
+
+
+# --------------------------------------------------------------------------- #
+# Phase 1: generation (responder only)
+# --------------------------------------------------------------------------- #
+
+def generate_responses(config: EvalConfig) -> Path:
+    """Run the responder over every in-scope cell, streaming to responses.jsonl.
+
+    Idempotent: cells already cached without error are skipped, so an interrupted
+    generation resumes where it left off. Returns the cache path.
+    """
     responder = create_provider(
         config.responder_backend, config.responder_model, dict(config.responder_options)
     )
-    judge = create_provider(
-        config.judge_backend, config.judge_model, dict(config.judge_options)
-    )
-
     responder_tag = f"{config.responder_backend}/{config.responder_model}"
-    judge_tag = f"{config.judge_backend}/{config.judge_model}"
 
     questions = dataset.load(config.dataset_path, config.question_ids)
+    path = _responses_path(config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    done = _cached_keys(path)
 
-    done = _load_done_keys(config) if config.resume else set()
+    print(f"PHASE 1/2  generate -> {path}  (responder: {responder_tag})")
+    n_new = n_skip = 0
 
-    for question in questions:
-        representations = config.representations or scene_loader.list_representations(
-            config.scene_contexts_dir, question.scene_id
-        )
-
-        for representation in representations:
-            # Skip cells this rep structurally cannot answer (e.g. graph_digest on
-            # a containment question): never computed rather than computed-then-masked.
-            if config.scope_filter and not scope.in_scope(representation, question.question_type):
-                continue
-
-            try:
-                context = scene_loader.load(
-                    config.scene_contexts_dir, question.scene_id, representation
-                )
-            except (FileNotFoundError, ValueError) as exc:
-                yield _make_record(question, representation, 0, responder_tag, judge_tag, error=str(exc))
-                continue
-
-            for repetition in range(1, config.repetitions + 1):
-                if (question.id, representation, str(repetition)) in done:
+    with path.open("a", encoding="utf-8") as fh:
+        for question in questions:
+            representations = config.representations or scene_loader.list_representations(
+                config.scene_contexts_dir, question.scene_id
+            )
+            for representation in representations:
+                # Skip cells this rep structurally cannot answer.
+                if config.scope_filter and not scope.in_scope(representation, question.question_type):
                     continue
-                yield _eval_one(
-                    question, representation, repetition, context,
-                    responder, judge, responder_tag, judge_tag, config,
-                )
+
+                try:
+                    context = scene_loader.load(
+                        config.scene_contexts_dir, question.scene_id, representation
+                    )
+                except (FileNotFoundError, ValueError) as exc:
+                    rec = _gen_dict(question, representation, 0, responder_tag,
+                                    raw_answer="", error=str(exc))
+                    _write(fh, rec)
+                    print(f"  ERR   {question.id} | {representation} | {exc}")
+                    continue
+
+                for repetition in range(1, config.repetitions + 1):
+                    if (question.id, representation, str(repetition)) in done:
+                        n_skip += 1
+                        continue
+                    rec = _generate_one(
+                        question, representation, repetition, context, responder, responder_tag
+                    )
+                    _write(fh, rec)
+                    if rec["error"]:
+                        print(f"  ERR   {question.id} | {representation} | rep{repetition}")
+                    else:
+                        n_new += 1
+                        print(f"  GEN   {question.id} | {representation} | rep{repetition} | {rec['latency_ms']:.0f}ms")
+
+    # Free the responder's VRAM before the judge loads (Phase 2).
+    responder.unload()
+    print(f"PHASE 1/2  done — {n_new} generated, {n_skip} already cached\n")
+    return path
 
 
-def _load_done_keys(config: EvalConfig) -> set[tuple[str, str, str]]:
-    """(question_id, representation, repetition) already completed without error."""
-    path = Path(config.output_dir) / "results.csv"
-    if not path.exists():
-        return set()
-    done: set[tuple[str, str, str]] = set()
-    with path.open(encoding="utf-8") as fh:
-        for row in csv.DictReader(fh):
-            if not row.get("error"):   # let errored cells be retried
-                done.add((row["question_id"], row["representation"], row["repetition"]))
-    return done
-
-
-def _eval_one(question, representation, repetition, context, responder, judge, responder_tag, judge_tag, config) -> EvalRecord:
+def _generate_one(question, representation, repetition, context, responder, responder_tag) -> dict:
     try:
         prompt = _RESPONDER_PROMPT.format(
             context=context.strip(),
             question=question.text.strip(),
         )
         gen = responder.generate(prompt)
-
-        response = Response(
-            question_id=question.id,
-            scene_id=question.scene_id,
-            representation=representation,
-            repetition=repetition,
+        return _gen_dict(
+            question, representation, repetition, responder_tag,
             raw_answer=gen.text,
             prompt_tokens=gen.prompt_tokens,
             completion_tokens=gen.completion_tokens,
             latency_ms=gen.latency_ms,
         )
+    except Exception:
+        return _gen_dict(question, representation, repetition, responder_tag,
+                         raw_answer="", error=traceback.format_exc())
 
+
+def _gen_dict(question, representation, repetition, responder_tag, *,
+              raw_answer, prompt_tokens=0, completion_tokens=0, latency_ms=0.0,
+              error=None) -> dict:
+    return {
+        "question_id":       question.id,
+        "scene_id":          question.scene_id,
+        "question_text":     question.text,
+        "question_type":     question.question_type,
+        "key_facts":         [{"fact": kf.fact, "weight": kf.weight} for kf in question.key_facts],
+        "representation":    representation,
+        "repetition":        repetition,
+        "responder":         responder_tag,
+        "raw_answer":        raw_answer,
+        "prompt_tokens":     prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "latency_ms":        latency_ms,
+        "error":             error,
+    }
+
+
+def _write(fh, rec: dict) -> None:
+    fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    fh.flush()
+
+
+def _cached_keys(path: Path) -> set[tuple[str, str, str]]:
+    """(question_id, representation, repetition) already generated without error."""
+    done: set[tuple[str, str, str]] = set()
+    if not path.exists():
+        return done
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not rec.get("error"):
+                done.add((rec["question_id"], rec["representation"], str(rec["repetition"])))
+    return done
+
+
+# --------------------------------------------------------------------------- #
+# Phase 2: scoring (judge only)
+# --------------------------------------------------------------------------- #
+
+def score_responses(config: EvalConfig) -> Iterator[EvalRecord]:
+    """Judge every cached response, yielding one EvalRecord each.
+
+    De-duplicates the cache by (question, representation, repetition), keeping the
+    last line written — so retried/duplicated generations score once, on the most
+    recent attempt.
+    """
+    judge = create_provider(
+        config.judge_backend, config.judge_model, dict(config.judge_options)
+    )
+    judge_tag = f"{config.judge_backend}/{config.judge_model}"
+
+    path = _responses_path(config)
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No responses cache to score: {path}. Run generation first "
+            f"(score_only is on but the cache is missing)."
+        )
+
+    records = _load_cache(path)
+    done = _load_done_keys(config) if config.resume else set()
+    ctx_cache: dict[tuple[str, str], str] = {}
+
+    print(f"PHASE 2/2  score {len(records)} responses (judge: {judge_tag})")
+
+    for rec in records:
+        key = (rec["question_id"], rec["representation"], str(rec["repetition"]))
+        if key in done:
+            continue
+        yield _score_one(rec, config, judge, judge_tag, ctx_cache)
+
+
+def _load_cache(path: Path) -> list[dict]:
+    """All cache rows, de-duplicated by key (last write wins), order preserved."""
+    by_key: dict[tuple[str, str, str], dict] = {}
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            key = (rec["question_id"], rec["representation"], str(rec["repetition"]))
+            by_key[key] = rec
+    return list(by_key.values())
+
+
+def _score_one(rec: dict, config, judge, judge_tag, ctx_cache) -> EvalRecord:
+    question = Question(
+        id=rec["question_id"],
+        scene_id=rec["scene_id"],
+        text=rec["question_text"],
+        question_type=rec["question_type"],
+        key_facts=[KeyFact(fact=f["fact"], weight=f["weight"]) for f in rec.get("key_facts", [])],
+    )
+    response = Response(
+        question_id=rec["question_id"],
+        scene_id=rec["scene_id"],
+        representation=rec["representation"],
+        repetition=rec["repetition"],
+        raw_answer=rec["raw_answer"],
+        prompt_tokens=rec["prompt_tokens"],
+        completion_tokens=rec["completion_tokens"],
+        latency_ms=rec["latency_ms"],
+    )
+
+    # Pass generation errors straight through — nothing to judge.
+    if rec.get("error"):
+        return EvalRecord(
+            question=question, response=response,
+            responder=rec["responder"], judge=judge_tag, error=rec["error"],
+        )
+
+    try:
         scores = MetricScores()
 
         if config.compute_faithfulness:
+            context = _get_context(config, question.scene_id, response.representation, ctx_cache)
             scores.faithfulness = context_based.faithfulness(
                 question.text, context, response.raw_answer, judge
             )
@@ -120,35 +276,43 @@ def _eval_one(question, representation, repetition, context, responder, judge, r
             )
 
         return EvalRecord(
-            question=question,
-            response=response,
-            responder=responder_tag,
-            judge=judge_tag,
-            scores=scores,
-            rubric_reasoning=rubric_reasoning,
+            question=question, response=response,
+            responder=rec["responder"], judge=judge_tag,
+            scores=scores, rubric_reasoning=rubric_reasoning,
         )
-
     except Exception:
-        return _make_record(
-            question, representation, repetition, responder_tag, judge_tag,
+        return EvalRecord(
+            question=question, response=response,
+            responder=rec["responder"], judge=judge_tag,
             error=traceback.format_exc(),
         )
 
 
-def _make_record(question, representation, repetition, responder_tag, judge_tag, error: str) -> EvalRecord:
-    return EvalRecord(
-        question=question,
-        response=Response(
-            question_id=question.id,
-            scene_id=question.scene_id,
-            representation=representation,
-            repetition=repetition,
-            raw_answer="",
-            prompt_tokens=0,
-            completion_tokens=0,
-            latency_ms=0.0,
-        ),
-        responder=responder_tag,
-        judge=judge_tag,
-        error=error,
-    )
+def _get_context(config, scene_id, representation, cache) -> str:
+    key = (scene_id, representation)
+    if key not in cache:
+        cache[key] = scene_loader.load(config.scene_contexts_dir, scene_id, representation)
+    return cache[key]
+
+
+def _load_done_keys(config: EvalConfig) -> set[tuple[str, str, str]]:
+    """(question_id, representation, repetition) already scored without error."""
+    path = Path(config.output_dir) / "results.csv"
+    if not path.exists():
+        return set()
+    done: set[tuple[str, str, str]] = set()
+    with path.open(encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if not row.get("error"):   # let errored cells be re-judged
+                done.add((row["question_id"], row["representation"], row["repetition"]))
+    return done
+
+
+# --------------------------------------------------------------------------- #
+# Shared
+# --------------------------------------------------------------------------- #
+
+def _responses_path(config: EvalConfig) -> Path:
+    if config.responses_path is not None:
+        return Path(config.responses_path)
+    return Path(config.output_dir) / "responses.jsonl"
