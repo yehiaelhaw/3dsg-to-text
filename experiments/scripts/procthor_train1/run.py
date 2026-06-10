@@ -9,17 +9,22 @@ from evaluation.runner import iter_records
 config = EvalConfig(
     dataset_path="experiments/scripts/procthor_train1/keyfact-qa.jsonl",
     scene_contexts_dir="scene_contexts",
-    output_dir="experiments/results/procthor_train1_keyfacts_3repeations",
+    output_dir="experiments/results/procthor_train1_qwen14b_gemma2_3rep",
 
     responder_backend="ollama",
     responder_model="qwen2.5:14b",
-    responder_options={"num_ctx": 32768},
+    responder_options={"num_ctx": 12288, "temperature": 0.7},  # 12k window holds the ~9.9k-tok json prompt + answer
 
     judge_backend="ollama",
-    judge_model="qwen2.5:14b",
+    judge_model="gemma2:9b",
+    judge_options={"temperature": 0.0},
 
-    # Explicit so the multi-view combination is included (auto-discovery only
-    # finds single files). This is the full ProcTHOR experiment matrix.
+    # faithfulness feeds the judge the full context, but the ~9.9k-tok json
+    # overflows gemma2's 8k window -> unreliable. answer_correctness needs only
+    # the short answer, so it's fine here. (Re-enable faithfulness with Gemini.)
+    compute_faithfulness=False,
+
+    # Explicit list to include the a+b combos (auto-discovery finds singles only).
     representations=[
         "inventory",
         "topology",
@@ -28,8 +33,8 @@ config = EvalConfig(
         "metric_relations",
         "navigation",
         "json",
-        "topology+metric_relations",        # headline combo: raw doors + distances
-        "graph_digest+metric_relations",    # axis F twin: derived doors + distances
+        "topology+metric_relations",
+        "graph_digest+metric_relations",
     ],
     repetitions=3,
 )
