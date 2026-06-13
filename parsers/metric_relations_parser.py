@@ -123,7 +123,11 @@ def parse(building: Building) -> str:
 
         if len(rooms) >= 2:
             lines.append("")
-            lines.append("Spatial relations (nearest first):")
+            lines.append(
+                f"Spatial relations (each room's {NEAREST_K} nearest neighbours, nearest "
+                "first; an unlisted pair is farther apart than the listed neighbours of "
+                "both its rooms):"
+            )
             lines.extend(_relation_lines(rooms))
 
     return "\n".join(lines).rstrip() + "\n"
