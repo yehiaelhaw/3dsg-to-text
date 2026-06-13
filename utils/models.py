@@ -6,6 +6,7 @@ class SceneObject:
     id: str
     category: str | None
     position: tuple[float, float, float]
+    short_id: str | None = None                # compact per-scene label id; minted by the loader where raw ids are noisy (ProcTHOR pipe strings)
     size: tuple[float, float, float] | None = None
     affordances: list[str] | None = None       # Gibson: action_affordance; ProcTHOR: primary+secondary properties
     material: list[str] | None = None          # Gibson only
@@ -38,5 +39,5 @@ class Building:
     rooms: dict[str, Room]
     size: tuple[float, float, float] | None = None
 
-    connectivity: dict[str, list[str]] | None = None   # ProcTHOR: door graph; Gibson: None
-    object_relations: list[ObjectRelation] | None = None  # 3DSSG only
+    connectivity: dict[str, list[str]] | None = None   # ProcTHOR: doors + open-plan passages; Gibson: None
+    object_relations: list[ObjectRelation] | None = None  # 3DSSG annotations; ProcTHOR: generator structure (on / arranged with)
