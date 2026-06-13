@@ -15,7 +15,7 @@ a single real-world scan do not robustly provide — attempting them yields
 nonsensical edges (a wall "on" a towel). The gap between this proximity-only view
 and `object_graph`'s rich typed edges is precisely what the comparison measures.
 
-Gated on having object positions; in practice this is the object-level 3RScan scene.
+Gated on having object positions; runs on 3RScan and ProcTHOR.
 """
 
 import sys
