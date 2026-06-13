@@ -126,6 +126,7 @@ def rubric_correctness(
 
 def _parse_rubric(text: str, n: int) -> list[bool]:
     results = [False] * n
+    matched = 0
     for line in text.splitlines():
         # Tolerate markdown emphasis / bullets the judge sometimes adds, e.g.
         # "1.  **YES** - ..." or "- 1) `NO`": strip emphasis chars before matching.
@@ -135,4 +136,10 @@ def _parse_rubric(text: str, n: int) -> list[bool]:
             idx = int(m.group(1)) - 1
             if 0 <= idx < n:
                 results[idx] = m.group(2).upper() == "YES"
+                matched += 1
+    if n > 0 and matched == 0:
+        # No verdict line parsed at all: that is a judge-format failure, not an
+        # all-NO answer. Raise so the record errors (and is re-judged on resume)
+        # instead of silently scoring 0.0.
+        raise ValueError(f"Could not parse any YES/NO verdict from judge output: {text!r}")
     return results
