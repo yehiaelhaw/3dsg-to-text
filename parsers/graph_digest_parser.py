@@ -3,21 +3,21 @@
 Every other connectivity parser (`topology`, `prose`, `navigation`) states *local*
 adjacency: "Bedroom [6] connects to ...". The reader must then traverse that list to
 answer global questions — which rooms are mutually reachable, which room is a
-bottleneck, how many doors separate two rooms — exactly the transitive-closure
+bottleneck, how many connections separate two rooms — exactly the transitive-closure
 reasoning LLMs are weakest at. This parser pre-computes those facts instead:
 
   * reachability groups (connected components),
-  * hub rooms (highest door degree),
+  * hub rooms (highest connection degree),
   * bottleneck rooms (articulation points) and what they cut off,
-  * multi-step distances (shortest-path door counts, with the route).
+  * multi-step distances (shortest-path connection counts, with the route).
 
 It opens a new evaluation axis — *raw adjacency* (`topology`) vs *derived structure*
 (here) — orthogonal to the format axis (`topology` vs `prose`). It is deliberately
-metric-free (door counts, not metres; keeps it on the connectivity rung, not the
-metric one) and carries no per-room object inventory (that is `topology`'s job;
+metric-free (connection counts, not metres; keeps it on the connectivity rung, not
+the metric one) and carries no per-room object inventory (that is `topology`'s job;
 omitting it is what stops this from being a sixth restatement of the same primitives).
 
-Runs only where a door graph exists (ProcTHOR); refuses elsewhere.
+Runs only where a room connection graph exists (ProcTHOR); refuses elsewhere.
 """
 
 import sys
@@ -121,7 +121,7 @@ def parse(building: Building) -> str:
 
     rooms = building.rooms
     adj = _adjacency(building.connectivity, rooms)
-    door_count = sum(len(v) for v in adj.values()) // 2
+    connection_count = sum(len(v) for v in adj.values()) // 2
 
     def label(rid: str) -> str:
         return room_label(rooms[rid])
@@ -129,8 +129,9 @@ def parse(building: Building) -> str:
     def by_degree(ids):
         return sorted(ids, key=lambda r: (-_degree(adj, r), sort_key(r)))
 
-    head = f"{building.name} — {len(rooms)} rooms, {door_count} doors. " \
-           "Connectivity digest (derived from the door graph; no metric data)."
+    head = f"{building.name} — {len(rooms)} rooms, {connection_count} room connections " \
+           "(doorways or open passages). Connectivity digest (derived from the room " \
+           "connection graph; no metric data)."
     lines = [head, ""]
 
     # -- Reachability groups (connected components) --
@@ -146,7 +147,7 @@ def parse(building: Building) -> str:
     for i, comp in enumerate(comps, 1):
         members = ", ".join(label(r) for r in by_degree(comp))
         if len(comp) == 1:
-            lines.append(f"Group {i} (1 room): {members} — isolated, no doors.")
+            lines.append(f"Group {i} (1 room): {members} — isolated, no connections.")
         else:
             lines.append(f"Group {i} ({len(comp)} rooms): {members}")
     lines.append("")
@@ -156,8 +157,8 @@ def parse(building: Building) -> str:
     if ranked:
         top = _degree(adj, ranked[0])
         hubs = [r for r in ranked if _degree(adj, r) == top]
-        hub_str = ", ".join(f"{label(r)} ({_degree(adj, r)} doors)" for r in hubs)
-        lines.append(f"Hub rooms (most doors): {hub_str}.")
+        hub_str = ", ".join(f"{label(r)} ({_degree(adj, r)} connections)" for r in hubs)
+        lines.append(f"Hub rooms (most connections): {hub_str}.")
 
     # -- Bottlenecks (articulation points) --
     cuts = _articulation_points(adj)
@@ -189,9 +190,9 @@ def parse(building: Building) -> str:
     if pair_lines:
         # Farthest pairs first: the diameter is the least obvious fact.
         pair_lines.sort(key=lambda t: (-t[0], sort_key(t[1]), sort_key(t[2])))
-        lines.append("Distance between rooms in steps (doors to cross; only multi-step pairs):")
+        lines.append("Distance between rooms in steps (connections to cross; only multi-step pairs):")
         for d, src, dst, via in pair_lines:
-            lines.append(f"  {label(src)} -> {label(dst)}: {d} doors (via {via})")
+            lines.append(f"  {label(src)} -> {label(dst)}: {d} steps (via {via})")
 
     return "\n".join(lines).rstrip() + "\n"
 

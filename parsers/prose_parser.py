@@ -78,9 +78,12 @@ def parse(building: Building) -> str:
         lines.append(f"Room types: {type_str}.")
 
     if connectivity:
-        door_count = sum(len(v) for v in connectivity.values()) // 2
-        if door_count:
-            lines.append(f"Rooms are connected by {door_count} door{'s' if door_count != 1 else ''}.")
+        connection_count = sum(len(v) for v in connectivity.values()) // 2
+        if connection_count:
+            lines.append(
+                f"Rooms are connected by {connection_count} room "
+                f"connection{'s' if connection_count != 1 else ''} (doorways or open passages)."
+            )
 
     lines.append("")
 

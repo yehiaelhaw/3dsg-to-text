@@ -9,8 +9,8 @@ representation that fuses connectivity with metric direction, so it is the
 natural single view for navigation questions.
 
 Two modes, chosen from the data:
-- With a door graph (ProcTHOR): list each room's doorway-reachable neighbours.
-  These are genuine moves — "you can walk to".
+- With a room connection graph (ProcTHOR): list each room's reachable neighbours
+  (through doorways or open passages). These are genuine moves — "you can walk to".
 - Without one (Gibson): list each room's nearest same-floor neighbours. There is
   no traversability guarantee, so these are framed honestly as proximity —
   "nearest rooms".
@@ -67,7 +67,7 @@ def parse(building: Building) -> str:
     placed_count = sum(len(rs) for _, rs in groups)
 
     lines: list[str] = []
-    mode = "doorways" if connectivity else "proximity"
+    mode = "room connections (doorways or open passages)" if connectivity else "proximity"
     head = f"{building.name} — {placed_count} rooms. Routes by {mode}."
     lines.append(head)
 

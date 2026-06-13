@@ -10,7 +10,8 @@ the *same* facts in the *same* order — rooms degree-first, identical connectiv
 and category inventory — and differ only in rendering (labelled blocks here, prose
 sentences there). Any score delta between them is attributable to format alone.
 
-Runs only where a door graph exists (ProcTHOR); refuses elsewhere (Gibson, 3RScan).
+Runs only where a room connection graph (doors + open-plan passages) exists
+(ProcTHOR); refuses elsewhere (Gibson, 3RScan).
 """
 
 import sys
@@ -27,7 +28,7 @@ from utils.models import Building, Room
 
 
 def _degree(connectivity: dict[str, list[str]], rooms: dict[str, Room], rid: str) -> int:
-    """Number of distinct neighbouring rooms reachable through a door."""
+    """Number of distinct neighbouring rooms reachable through a connection."""
     return len({n for n in connectivity.get(rid, []) if n in rooms})
 
 
@@ -38,7 +39,7 @@ def parse(building: Building) -> str:
     rooms = building.rooms
     connectivity = building.connectivity
     total_objects = sum(len(r.objects) for r in rooms.values())
-    door_count = sum(len(v) for v in connectivity.values()) // 2
+    connection_count = sum(len(v) for v in connectivity.values()) // 2
 
     # Shared ordering with prose: degree desc, ties by id.
     ordered = sorted(
@@ -47,7 +48,10 @@ def parse(building: Building) -> str:
     )
 
     # -- Head: same facts as prose's head --
-    head = f"{building.name} — {len(rooms)} rooms, {total_objects} objects, {door_count} doors."
+    head = (
+        f"{building.name} — {len(rooms)} rooms, {total_objects} objects, "
+        f"{connection_count} room connections (doorways or open passages)."
+    )
     room_types = Counter(r.category for r in rooms.values() if r.category)
     if room_types:
         type_str = ", ".join(
