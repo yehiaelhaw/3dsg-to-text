@@ -15,28 +15,36 @@ from __future__ import annotations
 
 # Information channels each representation's text carries. Combinations ("a+b")
 # take the union of their parts. Unknown reps default to all channels (shown).
+#
+# The metric channel is split in two: "metric" is *pairwise* distance/bearing data
+# (between arbitrary rooms), "metric_edges" is distance/bearing only along room
+# connections. `navigation` carries only the latter — it cannot answer questions
+# about distances between unconnected rooms (e.g. bathroom-to-bathroom proximity
+# when no two bathrooms are adjacent), so it must not be in scope for them.
 REP_CAPS: dict[str, set[str]] = {
     "inventory":        {"inventory"},
     "topology":         {"inventory", "connectivity"},
     "graph_digest":     {"connectivity"},
     "prose":            {"inventory", "connectivity", "object_relations"},
-    "metric_relations": {"inventory", "metric"},
-    "navigation":       {"connectivity", "metric"},
-    "json":             {"inventory", "connectivity", "metric", "object_relations"},
+    "metric_relations": {"inventory", "metric", "metric_edges"},
+    "navigation":       {"connectivity", "metric_edges"},
+    "json":             {"inventory", "connectivity", "metric", "metric_edges", "object_relations"},
     "object_graph":     {"inventory", "object_relations"},
     "proximity_graph":  {"inventory", "object_relations"},
 }
-ALL_CAPS = {"inventory", "connectivity", "metric", "object_relations"}
+ALL_CAPS = {"inventory", "connectivity", "metric", "metric_edges", "object_relations"}
 
 # What each question type needs to be answerable at all. Spatial family needs a
 # spatial channel; the general-reasoning family only needs room/object content
 # (inventory), so the discriminating variable there is format/density, not encoding.
+# proximity needs pairwise metric data; direction/route questions only ask about
+# bearings along connections, so edge-level metric suffices.
 TYPE_NEEDS: dict[str, set[str]] = {
     # spatial family
     "connectivity":    {"connectivity"},
     "proximity":       {"metric"},
-    "direction":       {"metric"},
-    "route":           {"connectivity", "metric"},
+    "direction":       {"metric_edges"},
+    "route":           {"connectivity", "metric_edges"},
     "object_relation": {"object_relations"},
     # general-reasoning family (content only)
     "containment":     {"inventory"},
