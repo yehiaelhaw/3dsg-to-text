@@ -176,7 +176,7 @@ def parse(building: Building) -> str:
     lines.append("")
 
     # -- Multi-step distances (shortest-path door counts, with the route) --
-    pair_lines: list[tuple[int, str, str, str]] = []
+    pair_lines: list[tuple[int, str, str, list[str]]] = []
     for comp in comps:
         if len(comp) < 3:
             continue  # 1- and 2-room groups have nothing multi-step
@@ -185,14 +185,14 @@ def parse(building: Building) -> str:
             for dst, d in dist.items():
                 if d >= 2 and sort_key(src) < sort_key(dst):
                     route = _path(parent, src, dst)
-                    via = ", ".join(label(r) for r in route[1:-1])
-                    pair_lines.append((d, src, dst, via))
+                    pair_lines.append((d, src, dst, route))
     if pair_lines:
         # Farthest pairs first: the diameter is the least obvious fact.
         pair_lines.sort(key=lambda t: (-t[0], sort_key(t[1]), sort_key(t[2])))
-        lines.append("Distance between rooms in steps (connections to cross; only multi-step pairs):")
-        for d, src, dst, via in pair_lines:
-            lines.append(f"  {label(src)} -> {label(dst)}: {d} steps (via {via})")
+        lines.append("Distance between rooms (connections to cross; only multi-step pairs):")
+        for d, src, dst, route in pair_lines:
+            path_str = " -> ".join(label(r) for r in route)
+            lines.append(f"  {path_str}")
 
     return "\n".join(lines).rstrip() + "\n"
 
