@@ -25,6 +25,7 @@ REP_CAPS: dict[str, set[str]] = {
     "inventory":        {"inventory"},
     "topology":         {"inventory", "connectivity"},
     "graph_digest":     {"connectivity"},
+    "ascii_map":        {"connectivity"},
     "prose":            {"inventory", "connectivity", "object_relations"},
     "metric_relations": {"inventory", "metric", "metric_edges"},
     "navigation":       {"connectivity", "metric_edges"},
