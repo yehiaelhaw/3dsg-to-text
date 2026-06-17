@@ -1,6 +1,6 @@
 import sys
 import os
-from collections import Counter
+from collections import Counter, defaultdict
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -8,8 +8,10 @@ from _base import run_parser
 from _format import (
     room_label as _room_label,
     object_inventory as _object_inventory,
-    relation_lines,
+    obj_label as _obj_label,
     sort_key as _id_key,
+    is_attribute_predicate,
+    undirected_components,
 )
 from utils.models import Building, Room
 
@@ -41,9 +43,76 @@ def _room_line(room: Room, connectivity: dict | None, rooms: dict) -> str:
     return "; ".join(parts) + "."
 
 
-def _relations_lines(building: Building) -> list[str]:
-    rel = relation_lines(building, indent="  ")
-    return ["", "Spatial relations:", *rel] if rel else []
+def _relations_by_room(building: Building, room_sort_key) -> list[str]:
+    """Object relations grouped by room, using natural-language 'is' phrasing."""
+    if not building.object_relations:
+        return []
+
+    obj_room: dict[str, str] = {}
+    id_to_label: dict[str, str] = {}
+    for rid, room in building.rooms.items():
+        for obj in room.objects:
+            obj_room[obj.id] = rid
+            id_to_label[obj.id] = _obj_label(obj.category, obj.short_id or obj.id)
+
+    def lbl(oid: str) -> str:
+        return id_to_label.get(oid, f"object [{oid}]")
+
+    by_subject: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    same_edges: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for rel in building.object_relations:
+        if rel.predicate.startswith("same "):
+            same_edges[rel.predicate].append((rel.subject_id, rel.object_id))
+        else:
+            by_subject[rel.subject_id][rel.predicate].append(rel.object_id)
+
+    def spatial_deg(sid: str) -> int:
+        return sum(len(v) for p, v in by_subject[sid].items() if not is_attribute_predicate(p))
+
+    def total_deg(sid: str) -> int:
+        return sum(len(v) for v in by_subject[sid].values())
+
+    def render(sid: str, attr_cap: int = 3) -> str:
+        preds = by_subject[sid]
+        spatial = sorted(p for p in preds if not is_attribute_predicate(p))
+        comparative = sorted(p for p in preds if is_attribute_predicate(p))
+        parts = [f"{pred} {', '.join(lbl(o) for o in preds[pred])}" for pred in spatial]
+        for pred in comparative:
+            objs = preds[pred]
+            shown = ", ".join(lbl(o) for o in objs[:attr_cap])
+            extra = len(objs) - attr_cap
+            parts.append(f"{pred} {shown}" + (f" (+{extra} more)" if extra > 0 else ""))
+        return f"  {lbl(sid)} is {'; '.join(parts)}." if parts else ""
+
+    lines = ["", "Spatial relations by room:"]
+    found = False
+    for room in sorted(building.rooms.values(), key=room_sort_key):
+        subjects = sorted(
+            [sid for sid in by_subject if obj_room.get(sid) == room.id],
+            key=lambda sid: (-spatial_deg(sid), -total_deg(sid), _id_key(sid)),
+        )
+        room_lines = [l for l in (render(sid) for sid in subjects) if l]
+        if room_lines:
+            found = True
+            lines.append(f"{_room_label(room)}:")
+            lines.extend(room_lines)
+
+    if not found:
+        return []
+
+    # Symmetric+transitive "same X" edges: one statement per equivalence group.
+    group_lines = []
+    for pred in sorted(same_edges):
+        attr = pred[len("same "):]
+        comps = [sorted(set(m), key=_id_key) for m in undirected_components(same_edges[pred])]
+        comps.sort(key=lambda g: _id_key(g[0]))
+        for g in comps:
+            group_lines.append(f"  Same {attr}: {', '.join(lbl(o) for o in g)}.")
+    if group_lines:
+        lines += ["", "  Shared attributes (each line lists items sharing that property):"]
+        lines.extend(group_lines)
+
+    return lines
 
 
 def parse(building: Building) -> str:
@@ -107,7 +176,7 @@ def parse(building: Building) -> str:
             lines.append(_room_line(room, connectivity, rooms))
 
     # -- Spatial relations (3DSSG only) --
-    lines.extend(_relations_lines(building))
+    lines.extend(_relations_by_room(building, sort_key))
 
     return "\n".join(lines).rstrip() + "\n"
 
