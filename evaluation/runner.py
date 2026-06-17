@@ -83,8 +83,15 @@ def generate_responses(config: EvalConfig) -> Path:
                 config.scene_contexts_dir, question.scene_id
             )
             for representation in representations:
-                # Skip cells this rep structurally cannot answer.
-                if config.scope_filter and not scope.in_scope(representation, question.question_type):
+                # Skip cells this rep structurally cannot answer -- except the
+                # no-information control (inventory), which is deliberately posed
+                # the spatial questions it cannot answer so its prior-driven
+                # guessing forms the Axis-A floor (see METHODOLOGY 3.1.1). Without
+                # this exemption inventory is never scored on the spatial types and
+                # value_of_spatial_structure.png cannot populate.
+                if (config.scope_filter
+                        and representation != "inventory"
+                        and not scope.in_scope(representation, question.question_type)):
                     continue
 
                 try:

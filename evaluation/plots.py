@@ -9,6 +9,18 @@ zero as if it were a result — so those cells are masked out.
 
 The model is fail-open: an unknown representation or question type is never
 masked, so new parsers/types are shown until their scope is declared here.
+
+Charts produced
+---------------
+plot_aggregate (reads results.csv + aggregate.csv):
+  ac_by_axis.png               AC per question type, in-scope reps, bars+std+dots
+  value_of_spatial_structure.png  AC lift over the inventory floor (Axis-A result)
+  ac_heatmap.png               rep x type mean-AC matrix, out-of-scope cells greyed
+  axis_contrasts.png           paired per-question AC delta for axes B/D/E/F
+plot_per_question (reads results.csv):
+  cost_quality.png             mean AC vs mean prompt tokens, with efficiency frontier
+  faith_vs_ac.png              per-observation guess detector (only if faithfulness on)
+  latency_comparison.png       response latency per representation
 """
 
 from __future__ import annotations
@@ -22,6 +34,20 @@ from pathlib import Path
 # Single source of truth lives in evaluation/scope.py (shared with the runner,
 # which skips out-of-scope cells before they are ever computed).
 from evaluation.scope import in_scope as _in_scope
+
+# Axis isolation pairs (first pole -> second pole) drawn by axis_contrasts.png.
+# Each is a same-information contrast: the delta is averaged only over question
+# types where *both* poles are in scope (axes B-F need both-rep answerability;
+# see METHODOLOGY 3.1.1). Axis A is the spatial ladder (covered by ac_by_axis /
+# value_of_spatial_structure); Axis C is a single-parser density knob, not two
+# committed files, so neither is a two-file pair here. A pair whose poles are
+# absent from a given scene simply produces no bar.
+AXIS_PAIRS = [
+    ("B format",    "topology",         "prose"),
+    ("D frame",     "metric_relations", "navigation"),
+    ("E source",    "object_graph",     "proximity_graph"),
+    ("F structure", "topology",         "graph_digest"),
+]
 
 
 # --- shared loading --------------------------------------------------------
@@ -50,6 +76,25 @@ def _per_question_ac(results_path: Path):
     types = sorted({qt for qt, _ in points})
     reps = sorted({rep for _, rep in points})
     return points, types, reps
+
+
+def _per_qid_ac(results_path: Path):
+    """Return (ac, qtype_of).
+
+    ac[(qid, rep)] = mean answer_correctness over that cell's repetitions.
+    qtype_of[qid]  = the question's type. Keeps question identity (which
+    _per_question_ac drops) so paired per-question deltas can be computed.
+    """
+    rows = [r for r in csv.DictReader(results_path.open(encoding="utf-8")) if not r["error"]]
+    by_qr: dict[tuple, list[float]] = collections.defaultdict(list)
+    qtype_of: dict[str, str] = {}
+    for r in rows:
+        if r["answer_correctness"] == "":
+            continue
+        by_qr[(r["question_id"], r["representation"])].append(float(r["answer_correctness"]))
+        qtype_of[r["question_id"]] = r["question_type"] or "unknown"
+    ac = {k: sum(v) / len(v) for k, v in by_qr.items()}
+    return ac, qtype_of
 
 
 def _colors(reps: list[str]):
@@ -149,6 +194,92 @@ def plot_aggregate(aggregate_path: Path) -> None:
         plt.close(fig)
         print(f"plot -> {out_dir / 'value_of_spatial_structure.png'}")
 
+    # -- Chart 3: scope-masked AC heatmap (rep x type overview) --
+    # The whole matrix at a glance. In-scope cells are coloured by mean AC;
+    # out-of-scope cells are greyed/hatched (a structural gap, not a zero);
+    # an in-scope cell with no data stays white. Rows ordered best-first by the
+    # rep's overall in-scope mean.
+    rep_overall: dict[str, float] = {}
+    for rep in reps:
+        vv = [v for (qt, r), vals in points.items()
+              if r == rep and _in_scope(rep, qt) for v in vals]
+        if vv:
+            rep_overall[rep] = statistics.mean(vv)
+    ordered_reps = sorted(rep_overall, key=lambda r: rep_overall[r], reverse=True)
+    if ordered_reps:
+        M = np.full((len(ordered_reps), len(types)), np.nan)
+        for i, rep in enumerate(ordered_reps):
+            for j, qt in enumerate(types):
+                if _in_scope(rep, qt) and points.get((qt, rep)):
+                    M[i, j] = statistics.mean(points[(qt, rep)])
+        fig, ax = plt.subplots(
+            figsize=(max(8, 1.1 * len(types) + 3), max(4, 0.5 * len(ordered_reps) + 2))
+        )
+        cmap = plt.cm.get_cmap("RdYlGn").copy()
+        cmap.set_bad("white")
+        im = ax.imshow(M, cmap=cmap, vmin=0, vmax=1, aspect="auto")
+        for i, rep in enumerate(ordered_reps):
+            for j, qt in enumerate(types):
+                if not _in_scope(rep, qt):
+                    ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1,
+                                               facecolor="lightgrey", edgecolor="white",
+                                               hatch="//", zorder=2))
+                    ax.text(j, i, "-", ha="center", va="center", color="gray", fontsize=8)
+                elif not np.isnan(M[i, j]):
+                    ax.text(j, i, f"{M[i, j]:.2f}", ha="center", va="center",
+                            color="black", fontsize=8)
+        ax.set_xticks(range(len(types)))
+        ax.set_xticklabels([t.replace("_", " ") for t in types], rotation=20, ha="right")
+        ax.set_yticks(range(len(ordered_reps)))
+        ax.set_yticklabels(ordered_reps)
+        ax.set_title("Answer Correctness heatmap  (mean per rep x type; grey = out of scope)")
+        fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02, label="mean AC")
+        fig.tight_layout()
+        fig.savefig(out_dir / "ac_heatmap.png", dpi=150)
+        plt.close(fig)
+        print(f"plot -> {out_dir / 'ac_heatmap.png'}")
+
+    # -- Chart 4: axis-contrast paired deltas (B/D/E/F isolation) --
+    # For each axis pair, the per-question AC delta (second pole minus first),
+    # over questions where *both* poles are in scope. Bar = mean, whisker = ±1
+    # population std, dots = per question. >0 means the second pole scored higher.
+    qid_ac, qtype_of = _per_qid_ac(results_path)
+    qids = sorted({qid for (qid, _) in qid_ac})
+    bars: list[tuple[str, list[float]]] = []
+    for label, a, b in AXIS_PAIRS:
+        deltas = []
+        for qid in qids:
+            qt = qtype_of[qid]
+            if not (_in_scope(a, qt) and _in_scope(b, qt)):
+                continue
+            if (qid, a) in qid_ac and (qid, b) in qid_ac:
+                deltas.append(qid_ac[(qid, b)] - qid_ac[(qid, a)])
+        if deltas:
+            bars.append((f"{label}: {a} -> {b}", deltas))
+    if bars:
+        fig, ax = plt.subplots(figsize=(8.5, max(3, 0.9 * len(bars) + 1.5)))
+        for i, (lab, deltas) in enumerate(bars):
+            m = statistics.mean(deltas)
+            sd = statistics.pstdev(deltas) if len(deltas) > 1 else 0.0
+            ax.barh(i, m, color="tab:green" if m >= 0 else "tab:red", alpha=0.8)
+            ax.errorbar(m, i, xerr=sd, fmt="none", color="black", capsize=3, linewidth=0.8)
+            jitter = rng.uniform(-0.12, 0.12, len(deltas))
+            ax.scatter(deltas, [i + j for j in jitter], s=16, color="black",
+                       alpha=0.5, zorder=3)
+            ax.text(0.99, i, f"n={len(deltas)}", transform=ax.get_yaxis_transform(),
+                    ha="right", va="center", fontsize=6, color="gray")
+        ax.set_yticks(range(len(bars)))
+        ax.set_yticklabels([lab for lab, _ in bars])
+        ax.invert_yaxis()
+        ax.axvline(0, color="black", linewidth=0.8)
+        ax.set_xlabel("AC delta  (second pole minus first; >0 = second pole better)")
+        ax.set_title("Axis contrasts  (paired per-question AC delta, both-poles-in-scope cells)")
+        ax.grid(axis="x", linestyle="--", alpha=0.4)
+        fig.tight_layout()
+        fig.savefig(out_dir / "axis_contrasts.png", dpi=150)
+        plt.close(fig)
+        print(f"plot -> {out_dir / 'axis_contrasts.png'}")
+
     # retire charts that the scope-aware set replaces / that mislead
     for stale in ("ac_comparison.png", "faithfulness_comparison.png", "ac_delta.png",
                   "ac_lift_over_floor.png"):
@@ -169,36 +300,101 @@ def plot_per_question(results_path: Path) -> None:
     colors = _colors(representations)
     rng = np.random.default_rng(42)
 
-    # -- Faithfulness vs Answer Correctness: a guess / grounding diagnostic --
-    fig, ax = plt.subplots(figsize=(7.5, 6.5))
-    # quadrant shading: high AC + low faithfulness = credit without grounding (lucky guess)
-    ax.axhspan(0.5, 1.05, xmin=0, xmax=0.5 / 1.05, color="tab:red", alpha=0.06)
-    ax.axhline(0.5, color="gray", linestyle=":", linewidth=0.8)
-    ax.axvline(0.5, color="gray", linestyle=":", linewidth=0.8)
-    ax.text(0.02, 1.0, "lucky guess\n(high AC, low faithfulness)", fontsize=7, color="tab:red", va="top")
-    ax.text(0.52, 0.03, "grounded but wrong", fontsize=7, color="gray", va="bottom")
-
-    for rep in representations:
-        rr = [r for r in rows if r["representation"] == rep
-              and r["faithfulness"] != "" and r["answer_correctness"] != ""]
-        xs = np.array([float(r["faithfulness"]) for r in rr])
-        ys = np.array([float(r["answer_correctness"]) for r in rr])
-        if len(xs) == 0:
+    # -- Cost vs Quality: accuracy per prompt token (the operational trade-off) --
+    # x = mean prompt tokens (context size = serialization overhead), y = mean AC,
+    # one point per rep over its *in-scope* cells (the floor's out-of-scope
+    # guessing is excluded so it isn't penalised for questions it isn't meant to
+    # answer). The dashed line is the efficiency frontier (no rep is both cheaper
+    # and more accurate than a point on it) -- this is where the combo-vs-json
+    # ceiling question is read: same AC, far fewer tokens = the combo wins.
+    by_rep_ac: dict[str, list[float]] = collections.defaultdict(list)
+    by_rep_tok: dict[str, list[float]] = collections.defaultdict(list)
+    for r in rows:
+        rep = r["representation"]
+        qt = r["question_type"] or "unknown"
+        if not _in_scope(rep, qt):
             continue
-        xs = xs + rng.uniform(-0.018, 0.018, len(xs))
-        ys = ys + rng.uniform(-0.018, 0.018, len(ys))
-        ax.scatter(xs, ys, label=rep, color=colors.get(rep, "gray"), alpha=0.6, s=28)
-    ax.set_xlabel("Faithfulness (grounded in context)")
-    ax.set_ylabel("Answer correctness (matches key facts)")
-    ax.set_title("Faithfulness vs Answer Correctness  (per observation)")
-    ax.set_xlim(0, 1.05)
-    ax.set_ylim(0, 1.08)
-    ax.legend(fontsize=8, ncol=2)
-    ax.grid(linestyle="--", alpha=0.4)
-    fig.tight_layout()
-    fig.savefig(out_dir / "faith_vs_ac.png", dpi=150)
-    plt.close(fig)
-    print(f"plot -> {out_dir / 'faith_vs_ac.png'}")
+        if r["answer_correctness"] != "":
+            by_rep_ac[rep].append(float(r["answer_correctness"]))
+        tok = r.get("prompt_tokens", "")
+        if tok not in ("", "0", None):
+            try:
+                by_rep_tok[rep].append(float(tok))
+            except ValueError:
+                pass
+    cq_reps = [rep for rep in by_rep_ac if by_rep_tok.get(rep)]
+    if cq_reps:
+        xy = {rep: (statistics.mean(by_rep_tok[rep]), statistics.mean(by_rep_ac[rep]))
+              for rep in cq_reps}
+        # Pareto frontier: minimise tokens, maximise AC.
+        frontier = [rep for rep in xy if not any(
+            o != rep and xy[o][0] <= xy[rep][0] and xy[o][1] >= xy[rep][1]
+            and (xy[o][0] < xy[rep][0] or xy[o][1] > xy[rep][1]) for o in xy)]
+        frontier.sort(key=lambda rep: xy[rep][0])
+        fig, ax = plt.subplots(figsize=(8, 6))
+        if len(frontier) > 1:
+            ax.plot([xy[r][0] for r in frontier], [xy[r][1] for r in frontier],
+                    color="gray", linestyle="--", linewidth=1, zorder=2,
+                    label="efficiency frontier")
+        for rep in cq_reps:
+            x, y = xy[rep]
+            ax.scatter(x, y, color=colors.get(rep, "gray"), s=70,
+                       edgecolor="black", linewidth=0.5, zorder=3)
+            ax.annotate(rep, (x, y), textcoords="offset points", xytext=(6, 4), fontsize=8)
+        ax.set_xlabel("Mean prompt tokens  (context size -> serialization overhead)")
+        ax.set_ylabel("Mean answer correctness  (in-scope cells)")
+        ax.set_title("Cost vs Quality  (upper-left = more accuracy per token)")
+        ax.grid(linestyle="--", alpha=0.4)
+        if len(frontier) > 1:
+            ax.legend(fontsize=8)
+        fig.tight_layout()
+        fig.savefig(out_dir / "cost_quality.png", dpi=150)
+        plt.close(fig)
+        print(f"plot -> {out_dir / 'cost_quality.png'}")
+    else:
+        # No token data recorded (some backends omit it) -> drop any stale chart.
+        stale = out_dir / "cost_quality.png"
+        if stale.exists():
+            stale.unlink()
+
+    # -- Faithfulness vs Answer Correctness: a guess / grounding diagnostic --
+    # Only meaningful when faithfulness was computed (compute_faithfulness=True);
+    # otherwise there is nothing on the x-axis, so skip rather than emit an empty
+    # chart, and remove a stale one from a prior faithfulness-on run.
+    if any(r["faithfulness"] != "" for r in rows):
+        fig, ax = plt.subplots(figsize=(7.5, 6.5))
+        # quadrant shading: high AC + low faithfulness = credit without grounding (lucky guess)
+        ax.axhspan(0.5, 1.05, xmin=0, xmax=0.5 / 1.05, color="tab:red", alpha=0.06)
+        ax.axhline(0.5, color="gray", linestyle=":", linewidth=0.8)
+        ax.axvline(0.5, color="gray", linestyle=":", linewidth=0.8)
+        ax.text(0.02, 1.0, "lucky guess\n(high AC, low faithfulness)", fontsize=7, color="tab:red", va="top")
+        ax.text(0.52, 0.03, "grounded but wrong", fontsize=7, color="gray", va="bottom")
+
+        for rep in representations:
+            rr = [r for r in rows if r["representation"] == rep
+                  and r["faithfulness"] != "" and r["answer_correctness"] != ""]
+            xs = np.array([float(r["faithfulness"]) for r in rr])
+            ys = np.array([float(r["answer_correctness"]) for r in rr])
+            if len(xs) == 0:
+                continue
+            xs = xs + rng.uniform(-0.018, 0.018, len(xs))
+            ys = ys + rng.uniform(-0.018, 0.018, len(ys))
+            ax.scatter(xs, ys, label=rep, color=colors.get(rep, "gray"), alpha=0.6, s=28)
+        ax.set_xlabel("Faithfulness (grounded in context)")
+        ax.set_ylabel("Answer correctness (matches key facts)")
+        ax.set_title("Faithfulness vs Answer Correctness  (per observation)")
+        ax.set_xlim(0, 1.05)
+        ax.set_ylim(0, 1.08)
+        ax.legend(fontsize=8, ncol=2)
+        ax.grid(linestyle="--", alpha=0.4)
+        fig.tight_layout()
+        fig.savefig(out_dir / "faith_vs_ac.png", dpi=150)
+        plt.close(fig)
+        print(f"plot -> {out_dir / 'faith_vs_ac.png'}")
+    else:
+        stale = out_dir / "faith_vs_ac.png"
+        if stale.exists():
+            stale.unlink()
 
     # -- Latency per representation (operational trade-off) --
     latency_map: dict[tuple, list[float]] = collections.defaultdict(list)

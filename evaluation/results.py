@@ -12,7 +12,7 @@ from evaluation.core import CSV_COLUMNS, EvalRecord
 
 _AGGREGATE_COLUMNS = [
     "representation", "question_type",
-    "n", "error_count",
+    "n", "error_count", "n_scored",
     "faithfulness_mean", "faithfulness_std",
     "answer_correctness_mean", "answer_correctness_std",
 ]
@@ -142,7 +142,10 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
         return f"{statistics.mean(vals):.4f}" if vals else ""
 
     def std_of(vals: list[float]) -> str:
-        return f"{statistics.stdev(vals):.4f}" if len(vals) >= 2 else ""
+        # Population std (pstdev), matching the whiskers in plots.py: these are
+        # descriptive spreads of the actual cells, not estimates of a wider
+        # population. A single value has spread 0.0; no values -> blank.
+        return f"{statistics.pstdev(vals):.4f}" if vals else ""
 
     fth = vals_of("faithfulness")
     ac  = vals_of("answer_correctness")
@@ -152,6 +155,10 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
         "question_type":           question_type,
         "n":                       len(rows),
         "error_count":             error_count,
+        # n_scored = cells actually behind the means (non-errored). AC is computed
+        # for every non-errored cell, so this is exactly the AC mean's support; it
+        # also equals the faithfulness support whenever faithfulness is enabled.
+        "n_scored":                len(rows) - error_count,
         "faithfulness_mean":       mean_of(fth),
         "faithfulness_std":        std_of(fth),
         "answer_correctness_mean": mean_of(ac),
