@@ -1,7 +1,7 @@
 """Shared geometry helpers for the metric parsers.
 
-`metric_relations`, `navigation`, and `proximity_graph` all derive spatial
-relations from raw coordinates at parse time — nothing here is stored on the
+`metric_relations` and `navigation` both derive spatial relations from raw
+coordinates at parse time — nothing here is stored on the
 model. The datasets disagree on which axis is "up" (Gibson is z-up; ProcTHOR
 room centroids sit on the x/z plane with a constant y), so the floor plane is
 *detected* from the data rather than hard-coded: within a set of positions the
