@@ -1,21 +1,27 @@
-"""ascii_map -- room connectivity drawn as a 2D ASCII tree (a floor-plan sketch).
+"""room_tree -- room connectivity drawn as an indented connectivity tree.
 
 The thesis bottleneck is that flattening a graph into a 1D token string loses the
-native 2D spatial adjacency a human reads off a map at a glance. Every other
-connectivity view here restates *local* adjacency in linear form -- `topology` as a
-labelled list ("Bedroom [6] connects to ..."), `prose` as sentences, `graph_digest`
-as pre-computed global facts. This parser instead lays the room graph out in two
-dimensions and draws the connections as branches, so adjacency is carried by
-*position on the page* rather than by a list the reader must traverse.
+adjacency a reader takes in at a glance. Every other connectivity view here restates
+*local* adjacency in linear form -- `topology` as a labelled list ("Bedroom [6]
+connects to ..."), `prose` as sentences, `graph_digest` as pre-computed global facts.
+This parser instead *draws* the room graph: each room is listed under a room it
+connects to, with indentation and branch glyphs carrying the connection, so adjacency
+is read off the tree's shape rather than from a list the reader must traverse.
 
-Axis role: it is the visual middle rung of the structure-presentation axis (F) --
-  topology (raw adjacency list) -> ascii_map (adjacency drawn) -> graph_digest
+(It was originally conceived as a 2D floor-plan-style map; that idea was dropped --
+laying rooms out on a grid is ambiguous and lossy -- in favour of the indented
+`tree`-command shape, which is unambiguous and bounded in width. The name reflects
+the tree, not the abandoned map.)
+
+Axis role: it is the drawn middle rung of the structure-presentation axis (F) --
+  topology (raw adjacency list) -> room_tree (adjacency drawn) -> graph_digest
   (adjacency's consequences stated)
 -- and a third point on the format axis (B): structured list vs natural language vs
-spatial diagram. Like `graph_digest` it is deliberately connectivity-only (no metric
-data, no per-room object inventory): a map of doors, nothing else, so any score delta
+drawn tree. Like `graph_digest` it is deliberately connectivity-only (no metric data,
+no per-room object inventory): the door graph, nothing else, so any score delta
 against `topology`/`graph_digest` is attributable to the *presentation* of the same
-connectivity, not to extra content.
+connectivity, not to extra content. It is the room-level analogue of `relations_tree`
+(the object-level support forest drawn the same way).
 
 Layout: each connected component is rooted at its graph center and drawn as an
 indented tree (the `tree`-command shape: each room listed under the room it connects
@@ -23,7 +29,7 @@ up to, with branch glyphs and indentation carrying the connection). Deterministi
 children ordered by id. The indented form never collides and stays bounded in width
 no matter how wide or deep the graph is. A scene with no cycles (the common ProcTHOR
 case) renders as a single faithful tree. Any connection that would close a loop is
-omitted from the drawing and listed afterwards as a back-edge, so the map never
+omitted from the drawing and listed afterwards as a back-edge, so the tree never
 implies a false adjacency nor hides a real one.
 
 Runs only where a room connection graph exists (ProcTHOR); refuses elsewhere.
@@ -153,7 +159,7 @@ def _render(children, root, label_of) -> list[str]:
 
 def parse(building: Building) -> str:
     if not has_room_connectivity(building):
-        raise NotApplicable("ascii_map needs a room connectivity graph; this scene has none")
+        raise NotApplicable("room_tree needs a room connectivity graph; this scene has none")
 
     rooms = building.rooms
     adj = _adjacency(building.connectivity, rooms)
@@ -162,7 +168,7 @@ def parse(building: Building) -> str:
 
     head = (
         f"{building.name} — {len(rooms)} rooms, {connection_count} room connections "
-        "(doorways or open passages). Connectivity map: rooms drawn as an indented "
+        "(doorways or open passages). Connectivity tree: rooms drawn as an indented "
         "tree; each room is listed under a room it directly connects to (indentation "
         "and branch lines show the connection)."
     )
@@ -194,4 +200,4 @@ def parse(building: Building) -> str:
 
 
 if __name__ == "__main__":
-    run_parser(parse, "Draw the room connectivity graph as a 2D ASCII map")
+    run_parser(parse, "Draw the room connectivity graph as an indented ASCII tree")
