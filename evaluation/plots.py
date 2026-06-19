@@ -45,8 +45,8 @@ from evaluation.scope import in_scope as _in_scope
 AXIS_PAIRS = [
     ("B format",    "topology",         "prose"),
     ("D frame",     "metric_relations", "navigation"),
-    ("E source",    "object_graph",     "proximity_graph"),
     ("F structure", "topology",         "graph_digest"),
+    ("G grouping",  "relations_subject", "relations_predicate"),
 ]
 
 

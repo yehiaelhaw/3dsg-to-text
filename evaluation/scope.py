@@ -25,13 +25,17 @@ REP_CAPS: dict[str, set[str]] = {
     "inventory":        {"inventory"},
     "topology":         {"inventory", "connectivity"},
     "graph_digest":     {"connectivity"},
-    "ascii_map":        {"connectivity"},
+    "room_tree":        {"connectivity"},
     "prose":            {"inventory", "connectivity", "object_relations"},
     "metric_relations": {"inventory", "metric", "metric_edges"},
     "navigation":       {"connectivity", "metric_edges"},
+    # relation-linearization family: five presentations of one object-relation graph.
+    "relations_flat":      {"object_relations"},
+    "relations_subject":   {"object_relations"},
+    "relations_predicate": {"object_relations"},
+    "relations_tree":      {"object_relations"},
+    "relations_digest":    {"object_relations"},
     "json":             {"inventory", "connectivity", "metric", "metric_edges", "object_relations"},
-    "object_graph":     {"inventory", "object_relations"},
-    "proximity_graph":  {"inventory", "object_relations"},
 }
 ALL_CAPS = {"inventory", "connectivity", "metric", "metric_edges", "object_relations"}
 
