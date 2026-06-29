@@ -28,6 +28,8 @@ REP_CAPS: dict[str, set[str]] = {
     "room_tree":        {"connectivity"},
     "prose":            {"inventory", "connectivity", "object_relations"},
     "metric_relations": {"inventory", "metric", "metric_edges"},
+    # density-axis (C) twin of metric_relations: same channels, exhaustive all-pairs.
+    "metric_relations_full": {"inventory", "metric", "metric_edges"},
     "navigation":       {"connectivity", "metric_edges"},
     # relation-linearization family: five presentations of one object-relation graph.
     "relations_flat":      {"object_relations"},

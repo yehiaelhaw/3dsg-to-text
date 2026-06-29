@@ -8,11 +8,13 @@ rung of the spatial-encoding ladder (compare `topology`, which keeps only
 connectivity).
 
 Density is controlled, not exhaustive: instead of every O(n^2) room pair, each
-room contributes only its `NEAREST_K` closest same-floor neighbours (pairs are
-de-duplicated). This keeps the salient local structure and caps the
-Lost-in-the-Middle dispersion that an all-pairs dump produces. Raising
-`NEAREST_K` toward the room count recovers the exhaustive variant used for the
-density-axis comparison.
+room lists only its `NEAREST_K` closest same-floor neighbours. Relations are
+grouped by room -- each room heads a block of its nearest neighbours, nearest
+first -- which is the allocentric, room-grouped twin of the egocentric
+`navigation` view (same grouping, only the vantage and bearing differ), so the
+axis-D contrast is a pure frame flip. Listing is directed: a pair appears under
+both of its rooms, not de-duplicated. Raising `NEAREST_K` toward the room count
+recovers the exhaustive variant used for the density-axis comparison.
 
 Runs on any multi-room metric layout (Gibson, ProcTHOR); refuses on single-room
 scenes (3RScan). The floor plane is detected per group (see `_geometry`), so
@@ -21,12 +23,11 @@ bearings are only emitted between rooms on the same floor.
 
 import sys
 import os
-from collections import Counter
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from _base import run_parser, NotApplicable
-from _format import room_label, object_inventory, sort_key
+from _format import room_label, object_inventory, room_type_summary, sort_key
 from _geometry import floor_plane, compass, plane_distance
 from utils.capabilities import has_multiroom_layout, has_floors
 from utils.models import Building, Room
@@ -49,37 +50,26 @@ def _floor_groups(building: Building) -> list[tuple[str | None, list[Room]]]:
     return [(None, placed)]
 
 
-def _salient_pairs(rooms: list[Room]) -> list[tuple[float, Room, Room, float, float]]:
-    """Unordered room pairs from each room's NEAREST_K neighbours, nearest first."""
+def _grouped_relation_lines(rooms: list[Room]) -> list[str]:
+    """Per-room blocks: each room heads its NEAREST_K nearest neighbours, nearest
+    first. Directed -- a pair appears under both of its rooms -- and allocentric
+    (the heading room is the subject: "is 3.2 m north-west of corridor [13]")."""
     positions = [r.position for r in rooms]
     u, v = floor_plane(positions)
 
-    # Directed nearest-K per room, then collapse to unordered pairs keyed by id.
-    chosen: dict[frozenset, tuple[float, Room, Room, float, float]] = {}
-    for a in rooms:
-        dists = []
-        for b in rooms:
-            if a is b:
-                continue
-            d = plane_distance(a.position, b.position, (u, v))
-            dists.append((d, b))
-        dists.sort(key=lambda t: t[0])
-        for d, b in dists[:NEAREST_K]:
-            key = frozenset((a.id, b.id))
-            if key not in chosen:
-                du = a.position[u] - b.position[u]
-                dv = a.position[v] - b.position[v]
-                chosen[key] = (d, a, b, du, dv)
-
-    pairs = sorted(chosen.values(), key=lambda p: p[0])
-    return pairs
-
-
-def _relation_lines(rooms: list[Room]) -> list[str]:
-    lines = []
-    for dist, a, b, du, dv in _salient_pairs(rooms):
-        bearing = compass(du, dv)  # direction of a relative to b
-        lines.append(f"{room_label(a)} is {dist:.1f} m {bearing} of {room_label(b)}.")
+    lines: list[str] = []
+    for a in sorted(rooms, key=lambda r: sort_key(r.id)):
+        ranked = sorted(
+            ((plane_distance(a.position, b.position, (u, v)), b) for b in rooms if b is not a),
+            key=lambda t: t[0],
+        )[:NEAREST_K]
+        if not ranked:
+            continue
+        lines.append(f"{room_label(a)}:")
+        for d, b in ranked:
+            du = a.position[u] - b.position[u]  # direction of a relative to b
+            dv = a.position[v] - b.position[v]
+            lines.append(f"  is {d:.1f} m {compass(du, dv)} of {room_label(b)}.")
     return lines
 
 
@@ -97,17 +87,17 @@ def parse(building: Building) -> str:
 
     groups = _floor_groups(building)
     placed_count = sum(len(rs) for _, rs in groups)
+    # Once NEAREST_K reaches the largest group's neighbour count nothing is
+    # dropped, so the view is the exhaustive all-pairs variant (density axis).
+    exhaustive = NEAREST_K >= max((len(rs) for _, rs in groups), default=0) - 1
 
     lines: list[str] = []
 
     # -- Head --
     floor_desc = f", across {len(groups)} floors" if has_floors(building) else ""
     head = f"{building.name} — {placed_count} rooms{floor_desc}."
-    room_types = Counter(r.category for _, rs in groups for r in rs if r.category)
-    if room_types:
-        type_str = ", ".join(
-            f"{t} ({n})" for t, n in sorted(room_types.items(), key=lambda x: -x[1])
-        )
+    type_str = room_type_summary(r for _, rs in groups for r in rs)
+    if type_str:
         head += f" Room types: {type_str}."
     lines.append(head)
 
@@ -123,12 +113,15 @@ def parse(building: Building) -> str:
 
         if len(rooms) >= 2:
             lines.append("")
-            lines.append(
-                f"Spatial relations (each room's {NEAREST_K} nearest neighbours, nearest "
-                "first; an unlisted pair is farther apart than the listed neighbours of "
-                "both its rooms):"
-            )
-            lines.extend(_relation_lines(rooms))
+            if exhaustive:
+                note = "Spatial relations grouped by room (all neighbours, nearest first):"
+            else:
+                note = (
+                    f"Spatial relations grouped by room (each room's {NEAREST_K} nearest "
+                    "neighbours, nearest first):"
+                )
+            lines.append(note)
+            lines.extend(_grouped_relation_lines(rooms))
 
     return "\n".join(lines).rstrip() + "\n"
 
