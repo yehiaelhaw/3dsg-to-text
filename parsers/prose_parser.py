@@ -1,6 +1,6 @@
 import sys
 import os
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -8,6 +8,7 @@ from _base import run_parser
 from _format import (
     room_label as _room_label,
     object_inventory as _object_inventory,
+    room_type_summary as _room_type_summary,
     obj_label as _obj_label,
     sort_key as _id_key,
     is_attribute_predicate,
@@ -139,11 +140,8 @@ def parse(building: Building) -> str:
             f"{building.name} contains {room_count} rooms{floor_desc} and {total_objects} objects."
         )
 
-    room_types = Counter(r.category for r in rooms.values() if r.category)
-    if room_types:
-        type_str = ", ".join(
-            f"{t} ({n})" for t, n in sorted(room_types.items(), key=lambda x: -x[1])
-        )
+    type_str = _room_type_summary(rooms.values())
+    if type_str:
         lines.append(f"Room types: {type_str}.")
 
     if connectivity:

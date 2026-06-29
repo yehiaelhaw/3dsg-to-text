@@ -19,10 +19,8 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from collections import Counter
-
 from _base import run_parser, NotApplicable
-from _format import room_label, object_inventory, sort_key
+from _format import room_label, object_inventory, room_type_summary, sort_key
 from utils.capabilities import has_room_connectivity
 from utils.models import Building, Room
 
@@ -52,11 +50,8 @@ def parse(building: Building) -> str:
         f"{building.name} — {len(rooms)} rooms, {total_objects} objects, "
         f"{connection_count} room connections (doorways or open passages)."
     )
-    room_types = Counter(r.category for r in rooms.values() if r.category)
-    if room_types:
-        type_str = ", ".join(
-            f"{t} ({n})" for t, n in sorted(room_types.items(), key=lambda x: -x[1])
-        )
+    type_str = room_type_summary(rooms.values())
+    if type_str:
         head += f" Room types: {type_str}."
     lines = [head, ""]
 

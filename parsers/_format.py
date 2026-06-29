@@ -38,6 +38,16 @@ def object_inventory(room: Room) -> str:
     return ", ".join(parts)
 
 
+def room_type_summary(rooms) -> str:
+    """Room categories by descending frequency, same `×` convention as objects:
+    `"bathroom (×5), kitchen (×3), lobby"`. Empty string when no room is typed."""
+    counts = Counter(r.category for r in rooms if r.category)
+    parts = []
+    for cat, n in sorted(counts.items(), key=lambda x: -x[1]):
+        parts.append(f"{cat} (×{n})" if n > 1 else cat)
+    return ", ".join(parts)
+
+
 def is_attribute_predicate(predicate: str) -> bool:
     """True for low-value symmetric/comparative edges (``same color``, ``brighter than``).
 

@@ -12,12 +12,11 @@ spatial information it adds was not used. Universal — runs on every scene.
 
 import sys
 import os
-from collections import Counter
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from _base import run_parser
-from _format import room_label, object_inventory, sort_key
+from _format import room_label, object_inventory, room_type_summary, sort_key
 from utils.models import Building
 
 
@@ -34,11 +33,8 @@ def parse(building: Building) -> str:
         lines.append(f"{building.name} — single {cat} with {total_objects} objects.")
     else:
         lines.append(f"{building.name} — {len(rooms)} rooms, {total_objects} objects.")
-        room_types = Counter(r.category for r in rooms if r.category)
-        if room_types:
-            type_str = ", ".join(
-                f"{t} ({n})" for t, n in sorted(room_types.items(), key=lambda x: -x[1])
-            )
+        type_str = room_type_summary(rooms)
+        if type_str:
             lines.append(f"Room types: {type_str}.")
 
     lines.append("")
