@@ -44,6 +44,7 @@ from evaluation.scope import in_scope as _in_scope
 # absent from a given scene simply produces no bar.
 AXIS_PAIRS = [
     ("B format",    "topology",         "prose"),
+    ("C density",   "metric_relations", "metric_relations_full"),
     ("D frame",     "metric_relations", "navigation"),
     ("F structure", "topology",         "graph_digest"),
     ("G grouping",  "relations_subject", "relations_predicate"),
@@ -97,10 +98,46 @@ def _per_qid_ac(results_path: Path):
     return ac, qtype_of
 
 
+# Stable per-rep colours, reused across every chart so a representation keeps the
+# same colour in all figures (lets a thesis reader cross-reference). Grouped by
+# axis family: grey control, blue connectivity/structure, green metric/frame,
+# warm relations (axis G), purple/black prose+json ceiling, magenta combos.
+# tab10 carries only 10 hues, so the old resampling collapsed the 16-rep set into
+# duplicates; a fixed map avoids that and stays stable as reps come and go.
+REP_COLORS: dict[str, str] = {
+    "inventory":                     "#9e9e9e",  # control / floor
+    "json":                          "#1f1f1f",  # raw-coordinate ceiling
+    "prose":                         "#6a3d9a",  # natural language
+    # connectivity / structure (axis A connectivity, F)
+    "topology":                      "#1f78b4",
+    "room_tree":                     "#a6cee3",
+    "graph_digest":                  "#08519c",
+    # metric / frame (axis A metric, C, D)
+    "metric_relations":              "#33a02c",
+    "metric_relations_full":         "#b2df8a",
+    "navigation":                    "#00bcd4",
+    # object relations (axis G)
+    "relations_flat":                "#e31a1c",
+    "relations_predicate":           "#ff7f00",
+    "relations_subject":             "#b15928",
+    "relations_digest":              "#fdbf6f",
+    "relations_tree":                "#8c510a",
+    # multi-view combinations
+    "topology+metric_relations":     "#fec4ff",
+    "graph_digest+metric_relations": "#ce1256",
+}
+
+
 def _colors(reps: list[str]):
+    """Stable colour per rep. Unknown reps fall back to tab20 (fail-open) so a
+    new parser is still drawn -- just not with a curated colour until added above."""
     import matplotlib.pyplot as plt
-    cmap = plt.cm.get_cmap("tab10", max(len(reps), 1))
-    return {rep: cmap(i) for i, rep in enumerate(reps)}
+    extra = [r for r in reps if r not in REP_COLORS]
+    fallback = {}
+    if extra:
+        cmap = plt.cm.get_cmap("tab20", max(len(extra), 1))
+        fallback = {r: cmap(i) for i, r in enumerate(extra)}
+    return {rep: REP_COLORS.get(rep, fallback.get(rep)) for rep in reps}
 
 
 # --- aggregate-level charts (AC by axis, lift over floor) -------------------
@@ -137,23 +174,30 @@ def plot_aggregate(aggregate_path: Path) -> None:
             ax.bar(xpos, mean, barw * 0.9, color=color[rep], alpha=0.85,
                    label=rep if rep not in used else None)
             used.add(rep)
-            ax.errorbar(xpos, mean, yerr=std, fmt="none", color="black", capsize=2, linewidth=0.8)
+            # AC is bounded [0,1]; clip the +/-1 std whisker so it never shoots
+            # past the frame (the bimodal 0/1 spread makes std large).
+            lo, hi = max(0.0, mean - std), min(1.0, mean + std)
+            ax.errorbar(xpos, mean, yerr=[[mean - lo], [hi - mean]], fmt="none",
+                        color="black", capsize=2, linewidth=0.8)
             jitter = rng.uniform(-barw * 0.25, barw * 0.25, len(vals))
-            ax.scatter(xpos + jitter, vals, s=14, color=color[rep],
-                       edgecolor="black", linewidth=0.4, zorder=3, alpha=0.9)
-            ax.text(xpos, -0.06, f"n={len(vals)}", ha="center", va="top", fontsize=6, color="gray")
+            # low alpha so coincident points darken (honest density) without blobs
+            ax.scatter(xpos + jitter, vals, s=10, color=color[rep],
+                       edgecolor="black", linewidth=0.3, zorder=3, alpha=0.55)
+            ax.text(xpos, -0.04, f"n={len(vals)}", ha="center", va="top",
+                    fontsize=6, color="gray", rotation=90)
 
     ax.set_xticks(range(len(types)))
     ax.set_xticklabels([t.replace("_", " ") for t in types], rotation=20, ha="right")
     ax.set_ylabel("Answer correctness")
     ax.set_title("Answer Correctness by Axis  (in-scope reps only; bar=mean, whisker=±1 std, dots=per question)")
-    ax.set_ylim(-0.1, 1.05)
+    ax.set_ylim(-0.18, 1.05)  # extra bottom room for the rotated n= labels
     ax.axhline(0, color="black", linewidth=0.6)
     ax.grid(axis="y", linestyle="--", alpha=0.4)
+    # Legend outside the axes -- 16 reps would otherwise sit on top of the bars.
     handles = [Patch(color=color[r], label=r) for r in reps if r in used]
-    ax.legend(handles=handles, ncol=min(len(handles), 4), fontsize=8, loc="upper right")
-    fig.tight_layout()
-    fig.savefig(out_dir / "ac_by_axis.png", dpi=150)
+    ax.legend(handles=handles, ncol=1, fontsize=8, loc="center left",
+              bbox_to_anchor=(1.005, 0.5), frameon=False)
+    fig.savefig(out_dir / "ac_by_axis.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"plot -> {out_dir / 'ac_by_axis.png'}")
 
@@ -188,9 +232,9 @@ def plot_aggregate(aggregate_path: Path) -> None:
         ax.axhline(0, color="black", linewidth=0.8)
         ax.grid(axis="y", linestyle="--", alpha=0.4)
         handles = [Patch(color=color[r], label=r) for r in reps if r in used]
-        ax.legend(handles=handles, ncol=min(len(handles), 4), fontsize=8)
-        fig.tight_layout()
-        fig.savefig(out_dir / "value_of_spatial_structure.png", dpi=150)
+        ax.legend(handles=handles, ncol=1, fontsize=8, loc="center left",
+                  bbox_to_anchor=(1.005, 0.5), frameon=False)
+        fig.savefig(out_dir / "value_of_spatial_structure.png", dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"plot -> {out_dir / 'value_of_spatial_structure.png'}")
 
@@ -257,7 +301,7 @@ def plot_aggregate(aggregate_path: Path) -> None:
         if deltas:
             bars.append((f"{label}: {a} -> {b}", deltas))
     if bars:
-        fig, ax = plt.subplots(figsize=(8.5, max(3, 0.9 * len(bars) + 1.5)))
+        fig, ax = plt.subplots(figsize=(10.5, max(3, 0.9 * len(bars) + 1.5)))
         for i, (lab, deltas) in enumerate(bars):
             m = statistics.mean(deltas)
             sd = statistics.pstdev(deltas) if len(deltas) > 1 else 0.0
@@ -276,7 +320,7 @@ def plot_aggregate(aggregate_path: Path) -> None:
         ax.set_title("Axis contrasts  (paired per-question AC delta, both-poles-in-scope cells)")
         ax.grid(axis="x", linestyle="--", alpha=0.4)
         fig.tight_layout()
-        fig.savefig(out_dir / "axis_contrasts.png", dpi=150)
+        fig.savefig(out_dir / "axis_contrasts.png", dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"plot -> {out_dir / 'axis_contrasts.png'}")
 
@@ -397,30 +441,42 @@ def plot_per_question(results_path: Path) -> None:
             stale.unlink()
 
     # -- Latency per representation (operational trade-off) --
+    # Box + whiskers per rep (median, IQR, 1.5*IQR whiskers, outliers as fliers).
+    # No point overlay -- with many questions the scatter buried the box, and the
+    # box's own whiskers + fliers already carry the spread. Reps go in a side
+    # legend (boxes left-to-right == legend top-to-bottom) since the long combined
+    # names collide when written diagonally under the axis.
+    from matplotlib.patches import Patch
     latency_map: dict[tuple, list[float]] = collections.defaultdict(list)
     for r in rows:
         if r["latency_ms"]:
             latency_map[(r["question_id"], r["representation"])].append(float(r["latency_ms"]) / 1000)
     question_ids = sorted({r["question_id"] for r in rows}, key=lambda x: int(x) if x.isdigit() else 0)
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    drawn: list[str] = []
     for pos, rep in enumerate(representations):
         per_q = [statistics.mean(latency_map[(qid, rep)])
                  for qid in question_ids if latency_map[(qid, rep)]]
         if not per_q:
             continue
-        ax.boxplot(per_q, positions=[pos], widths=0.4, patch_artist=True,
-                   boxprops=dict(facecolor=colors.get(rep, "gray"), alpha=0.5),
-                   medianprops=dict(color="black", linewidth=2))
-        jitter = rng.uniform(-0.08, 0.08, len(per_q))
-        ax.scatter([pos + j for j in jitter], per_q, color=colors.get(rep, "gray"),
-                   alpha=0.7, s=30, zorder=3)
-    ax.set_xticks(range(len(representations)))
-    ax.set_xticklabels(representations, rotation=15, ha="right")
+        c = colors.get(rep, "gray")
+        ax.boxplot(per_q, positions=[pos], widths=0.55, patch_artist=True,
+                   boxprops=dict(facecolor=c, alpha=0.75, edgecolor="black", linewidth=0.6),
+                   medianprops=dict(color="black", linewidth=1.4),
+                   whiskerprops=dict(color="black", linewidth=0.8),
+                   capprops=dict(color="black", linewidth=0.8),
+                   flierprops=dict(marker="o", markersize=3, markerfacecolor=c,
+                                   markeredgecolor="black", markeredgewidth=0.3, alpha=0.6))
+        drawn.append(rep)
+    ax.set_xticks([])
+    ax.set_xlabel("Representation (see legend)")
     ax.set_ylabel("Mean response latency (s)")
-    ax.set_title("Response Latency by Representation")
+    ax.set_title("Response Latency by Representation  (box = IQR, whiskers = 1.5*IQR, dots = outliers)")
     ax.grid(axis="y", linestyle="--", alpha=0.4)
-    fig.tight_layout()
-    fig.savefig(out_dir / "latency_comparison.png", dpi=150)
+    handles = [Patch(facecolor=colors.get(r, "gray"), edgecolor="black", label=r) for r in drawn]
+    ax.legend(handles=handles, ncol=1, fontsize=8, loc="center left",
+              bbox_to_anchor=(1.005, 0.5), frameon=False)
+    fig.savefig(out_dir / "latency_comparison.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"plot -> {out_dir / 'latency_comparison.png'}")
