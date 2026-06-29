@@ -8,11 +8,11 @@ from pathlib import Path
 from typing import Iterable
 
 from evaluation.config import EvalConfig
-from evaluation.core import CSV_COLUMNS, EvalRecord
+from evaluation.core import CSV_COLUMNS, EvalRecord, is_context_exceeded
 
 _AGGREGATE_COLUMNS = [
     "representation", "question_type",
-    "n", "error_count", "n_scored",
+    "n", "error_count", "context_exceeded", "n_scored",
     "faithfulness_mean", "faithfulness_std",
     "answer_correctness_mean", "answer_correctness_std",
 ]
@@ -128,7 +128,11 @@ def _compute_aggregate(rows: list[dict]) -> list[dict]:
 
 
 def _group_row(representation: str, question_type: str, rows: list[dict]) -> dict:
-    error_count = sum(1 for r in rows if r["error"])
+    # Context-exceeded cells (the rep overflowed the responder window) are a
+    # reportable token-cost outcome, kept separate from real errors and excluded
+    # from the means -- not scored as a wrong answer.
+    context_exceeded = sum(1 for r in rows if is_context_exceeded(r["error"]))
+    error_count = sum(1 for r in rows if r["error"] and not is_context_exceeded(r["error"]))
 
     def vals_of(metric: str) -> list[float]:
         out = []
@@ -155,10 +159,12 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
         "question_type":           question_type,
         "n":                       len(rows),
         "error_count":             error_count,
-        # n_scored = cells actually behind the means (non-errored). AC is computed
-        # for every non-errored cell, so this is exactly the AC mean's support; it
-        # also equals the faithfulness support whenever faithfulness is enabled.
-        "n_scored":                len(rows) - error_count,
+        "context_exceeded":        context_exceeded,
+        # n_scored = cells actually behind the means: total minus real errors and
+        # minus context-exceeded cells (both excluded from the means). AC is
+        # computed for every scored cell, so this is exactly the AC mean's support;
+        # it also equals the faithfulness support whenever faithfulness is enabled.
+        "n_scored":                len(rows) - error_count - context_exceeded,
         "faithfulness_mean":       mean_of(fth),
         "faithfulness_std":        std_of(fth),
         "answer_correctness_mean": mean_of(ac),

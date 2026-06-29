@@ -6,6 +6,19 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
+# Sentinel stored in EvalRecord.error / the responses cache when the responder's
+# context window was too small to hold the representation -- the prompt filled or
+# was truncated to num_ctx, so the rep is clipped and any answer is unreliable.
+# It is a TERMINAL outcome: resume must not retry it and the judge must not score
+# it, and it is reported separately from real errors in the aggregate (a context
+# token-cost result, not a wrong answer). See evaluation/runner.py (the guard)
+# and evaluation/results.py (the aggregate split).
+CONTEXT_EXCEEDED = "CONTEXT_EXCEEDED"
+
+
+def is_context_exceeded(error: Optional[str]) -> bool:
+    return bool(error) and error.startswith(CONTEXT_EXCEEDED)
+
 
 @dataclass
 class KeyFact:
