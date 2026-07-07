@@ -5,10 +5,16 @@ which room opens into which, and what each room contains, with no coordinates,
 distances, or directions. This is the connectivity rung of the spatial-encoding
 ladder (compare `metric_relations`, which keeps distance but not doors).
 
-It is also the structured half of the format axis: `topology` and `prose` carry
-the *same* facts in the *same* order — rooms degree-first, identical connectivity
-and category inventory — and differ only in rendering (labelled blocks here, prose
-sentences there). Any score delta between them is attributable to format alone.
+It is also the structured half of the format axis: per room block, `topology` and
+`prose` carry the *same* facts in the *same* order — rooms degree-first, identical
+connectivity and category inventory — rendered as labelled blocks here, prose
+sentences there. Two admitted departures keep the pair short of a pure syntax flip
+(prose states an explicit per-room object count, and on ProcTHOR adds an
+object-relation section), so read axis B on `connectivity` questions, where the
+twin part carries the answer. See the axis-B note in evaluation/axes.py.
+
+The connectivity-only variant `topology_edges_only` (this parser minus the
+inventories) is the raw-adjacency pole of the structure-presentation axis (F).
 
 Runs only where a room connection graph (doors + open-plan passages) exists
 (ProcTHOR); refuses elsewhere (Gibson, 3RScan).

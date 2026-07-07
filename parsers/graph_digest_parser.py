@@ -115,13 +115,16 @@ def _degree(adj: dict[str, set[str]], rid: str) -> int:
     return len(adj[rid])
 
 
-def parse(building: Building) -> str:
-    if not has_room_connectivity(building):
-        raise NotApplicable("graph_digest needs a room connectivity graph; this scene has none")
+def connectivity_digest(building: Building) -> list[str]:
+    """The derived-structure section without the head line: reachability groups,
+    hubs, bottlenecks and multi-step distances.
 
+    Split out so the synthesized representation can fold these exact facts into a
+    larger document (one head, shared inventory) instead of restating local
+    adjacency. `parse` prepends the head and returns the same text as before.
+    """
     rooms = building.rooms
     adj = _adjacency(building.connectivity, rooms)
-    connection_count = sum(len(v) for v in adj.values()) // 2
 
     def label(rid: str) -> str:
         return room_label(rooms[rid])
@@ -129,10 +132,7 @@ def parse(building: Building) -> str:
     def by_degree(ids):
         return sorted(ids, key=lambda r: (-_degree(adj, r), sort_key(r)))
 
-    head = f"{building.name} — {len(rooms)} rooms, {connection_count} room connections " \
-           "(doorways or open passages). Connectivity digest (derived from the room " \
-           "connection graph; no metric data)."
-    lines = [head, ""]
+    lines: list[str] = []
 
     # -- Reachability groups (connected components) --
     comps = sorted(_components(adj), key=lambda c: (-len(c), sort_key(c[0])))
@@ -193,6 +193,23 @@ def parse(building: Building) -> str:
         for d, src, dst, route in pair_lines:
             path_str = " -> ".join(label(r) for r in route)
             lines.append(f"  {path_str}")
+
+    return lines
+
+
+def parse(building: Building) -> str:
+    if not has_room_connectivity(building):
+        raise NotApplicable("graph_digest needs a room connectivity graph; this scene has none")
+
+    rooms = building.rooms
+    adj = _adjacency(building.connectivity, rooms)
+    connection_count = sum(len(v) for v in adj.values()) // 2
+
+    head = f"{building.name} — {len(rooms)} rooms, {connection_count} room connections " \
+           "(doorways or open passages). Connectivity digest (derived from the room " \
+           "connection graph; no metric data)."
+    lines = [head, ""]
+    lines.extend(connectivity_digest(building))
 
     return "\n".join(lines).rstrip() + "\n"
 
