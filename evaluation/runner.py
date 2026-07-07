@@ -83,6 +83,17 @@ def generate_responses(config: EvalConfig) -> Path:
     num_ctx = config.responder_options.get("num_ctx")
 
     questions = dataset.load(config.dataset_path, config.question_ids)
+
+    # Fail-closed pre-pass (final runs): abort before any LLM call if a rep or
+    # question type would fall through to scope's fail-open defaults.
+    if config.strict_scope:
+        all_reps: set[str] = set()
+        for q in questions:
+            all_reps.update(config.representations or scene_loader.list_representations(
+                config.scene_contexts_dir, q.scene_id
+            ))
+        scope.validate_declared(all_reps, {q.question_type for q in questions})
+
     path = _responses_path(config)
     path.parent.mkdir(parents=True, exist_ok=True)
     done = _cached_keys(path)
