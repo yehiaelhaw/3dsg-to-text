@@ -30,36 +30,39 @@ import collections
 import statistics
 from pathlib import Path
 
-# --- scope model -----------------------------------------------------------
-# Single source of truth lives in evaluation/scope.py (shared with the runner,
-# which skips out-of-scope cells before they are ever computed).
-from evaluation.scope import in_scope as _in_scope
+from evaluation.core import is_context_exceeded
 
-# Axis isolation pairs (first pole -> second pole) drawn by axis_contrasts.png.
-# Each is a same-information contrast: the delta is averaged only over question
-# types where *both* poles are in scope (axes B-F need both-rep answerability;
-# see METHODOLOGY 3.1.1). Axis A is the spatial ladder (covered by ac_by_axis /
-# value_of_spatial_structure); Axis C is a single-parser density knob, not two
-# committed files, so neither is a two-file pair here. A pair whose poles are
-# absent from a given scene simply produces no bar.
-AXIS_PAIRS = [
-    ("B format",    "topology",         "prose"),
-    ("C density",   "metric_relations", "metric_relations_full"),
-    ("D frame",     "metric_relations", "navigation"),
-    ("F structure", "topology",         "graph_digest"),
-    ("G grouping",  "relations_subject", "relations_predicate"),
-]
+# --- scope + axis model ----------------------------------------------------
+# scope.py: which rep can answer which type (the structural mask, shared with the
+# runner, which skips out-of-scope cells before they are computed). axes.py: how
+# reps group into axis ladders for reporting (ladder order, floor/ceiling roles,
+# host dataset) -- so the charts and report.md tell the same axis story.
+#
+# AXIS_PAIRS (the same-information contrast pairs for axis_contrasts.png) is now
+# derived in axes.py from the AXES registry; each delta is averaged only over
+# question types where *both* poles are in scope. Axis A is a ladder (covered by
+# axis_cards / value_of_spatial_structure), so it contributes no pair. Retracted
+# axes C/E are absent there. A pair whose poles are absent from a scene draws no bar.
+from evaluation.scope import in_scope as _in_scope
+from evaluation.axes import (
+    AXES, AXIS_PAIRS, CEILING, FLOOR, SMALL_N, dataset_of, rep_role,
+)
 
 
 # --- shared loading --------------------------------------------------------
 
-def _per_question_ac(results_path: Path):
+def _per_question_ac(results_path: Path, dataset: str | None = None):
     """Return (points, types, reps).
 
     points[(qtype, rep)] = list of one mean answer_correctness per question
     (averaged over repetitions). This is the basis for means, error bars, dots.
+
+    `dataset` (procthor|3rscan|gibson) restricts to one host dataset -- the axis
+    cards use it so an axis ladder is never pooled across non-comparable datasets.
     """
     rows = [r for r in csv.DictReader(results_path.open(encoding="utf-8")) if not r["error"]]
+    if dataset:
+        rows = [r for r in rows if dataset_of(r["scene_id"]) == dataset]
 
     # (qid, rep) -> list of ac over repetitions; remember each question's type
     by_qr: dict[tuple, list[float]] = collections.defaultdict(list)
@@ -112,9 +115,8 @@ REP_COLORS: dict[str, str] = {
     "topology":                      "#1f78b4",
     "room_tree":                     "#a6cee3",
     "graph_digest":                  "#08519c",
-    # metric / frame (axis A metric, C, D)
+    # metric / frame (axis A metric, D)
     "metric_relations":              "#33a02c",
-    "metric_relations_full":         "#b2df8a",
     "navigation":                    "#00bcd4",
     # object relations (axis G)
     "relations_flat":                "#e31a1c",
@@ -140,6 +142,92 @@ def _colors(reps: list[str]):
     return {rep: REP_COLORS.get(rep, fallback.get(rep)) for rep in reps}
 
 
+# --- axis cards (the headline reporting chart) -----------------------------
+
+def _axis_card_reps(axis, qt: str, points: dict) -> list[str]:
+    """Anchored, ladder-ordered reps for one axis x type with data: floor first,
+    in-scope poles in rung order, ceiling last. [] when fewer than two are present.
+    Mirrors report._axis_reps so the chart and the table list the same cells."""
+    reps = []
+    if points.get((qt, FLOOR)):
+        reps.append(FLOOR)
+    for p in axis.ladder:
+        if p in (FLOOR, CEILING):
+            continue
+        if _in_scope(p, qt) and points.get((qt, p)):
+            reps.append(p)
+    if points.get((qt, CEILING)) and CEILING not in reps:
+        reps.append(CEILING)
+    return reps if len(reps) >= 2 else []
+
+
+def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str]:
+    """One figure *per* design axis (axes.AXES) -> axis_card_<id>.png: a subplot per
+    probe type, reps drawn as bars in ladder order with the floor (inventory) and
+    ceiling (json) as a dashed/dotted band so a pole is read against them. Each rep
+    is a readable x-tick label; the y-axis starts at 0. Restricted to the axis's
+    host dataset (never pooled) and its probe types; combos/synthesis are excluded
+    (they answer a different question -- see report.md). Bars hatch when n < SMALL_N
+    (screening-only); whisker = +/-CI95; dots = per-question means. Returns the
+    figure stems written, so the caller can clean up any axis that lost its data.
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
+    rng = np.random.default_rng(42)
+
+    written: list[str] = []
+    for axis in AXES:
+        points, _t, _r = _per_question_ac(results_path, dataset=axis.host)
+        groups = [(qt, reps) for qt in axis.probe_types
+                  if (reps := _axis_card_reps(axis, qt, points))]
+        if not groups:
+            continue
+        fig, axs = plt.subplots(1, len(groups), squeeze=False,
+                                figsize=(max(4.0, 2.6 * len(groups) + 0.4 * sum(len(r) for _, r in groups)), 4.6))
+        for gi, (qt, reps) in enumerate(groups):
+            ax = axs[0][gi]
+            floor_ac = statistics.mean(points[(qt, FLOOR)]) if points.get((qt, FLOOR)) else None
+            ceil_ac = statistics.mean(points[(qt, CEILING)]) if points.get((qt, CEILING)) else None
+            if floor_ac is not None:
+                ax.axhline(floor_ac, color=color.get(FLOOR, "grey"), linestyle="--",
+                           linewidth=1.0, alpha=0.7, zorder=1)
+            if ceil_ac is not None:
+                ax.axhline(ceil_ac, color="black", linestyle=":", linewidth=1.0,
+                           alpha=0.7, zorder=1)
+            for xi, rep in enumerate(reps):
+                vals = points[(qt, rep)]
+                m = statistics.mean(vals)
+                ci = 1.96 * statistics.stdev(vals) / (len(vals) ** 0.5) if len(vals) > 1 else 0.0
+                small = len(vals) < SMALL_N
+                ax.bar(xi, m, 0.72, color=color.get(rep, "grey"), alpha=0.85,
+                       hatch="//" if small else None,
+                       edgecolor="black" if small else "none", linewidth=0.4, zorder=2)
+                lo, hi = max(0.0, m - ci), min(1.0, m + ci)
+                ax.errorbar(xi, m, yerr=[[m - lo], [hi - m]], fmt="none",
+                            color="black", capsize=2, linewidth=0.8, zorder=3)
+                jit = rng.uniform(-0.16, 0.16, len(vals))
+                ax.scatter(xi + jit, vals, s=9, color=color.get(rep, "grey"),
+                           edgecolor="black", linewidth=0.3, alpha=0.5, zorder=4)
+                ax.text(xi, min(1.0, hi) + 0.015, f"n={len(vals)}", ha="center",
+                        va="bottom", fontsize=6, color="gray")
+            ax.set_xticks(range(len(reps)))
+            ax.set_xticklabels(reps, rotation=30, ha="right", fontsize=8)
+            ax.set_ylim(0, 1.08)
+            ax.set_title(qt.replace("_", " "), fontsize=9)
+            ax.grid(axis="y", linestyle="--", alpha=0.3)
+            if gi == 0:
+                ax.set_ylabel("Answer correctness")
+        fig.suptitle(f"Axis {axis.id} - {axis.label}   (host: {axis.host}; "
+                     f"floor=dashed, json=dotted, hatch = n<{SMALL_N})", fontsize=11)
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
+        stem = f"axis_card_{axis.id}.png"
+        fig.savefig(out_dir / stem, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        written.append(stem)
+        print(f"plot -> {out_dir / stem}")
+    return written
+
+
 # --- aggregate-level charts (AC by axis, lift over floor) -------------------
 
 def plot_aggregate(aggregate_path: Path) -> None:
@@ -156,6 +244,12 @@ def plot_aggregate(aggregate_path: Path) -> None:
         return
     color = _colors(reps)
     rng = np.random.default_rng(42)
+
+    # -- Chart 0: axis cards (one figure per axis, ladder order, host dataset) --
+    # The headline reporting view: each axis told as its own ladder. ac_by_axis
+    # below stays as the per-type head-to-head (it also covers the content/general
+    # types no axis ladder probes).
+    written_cards = _plot_axis_cards(results_path, out_dir, color)
 
     # -- Chart 1: scope-masked AC by question type (bars + std + per-question dots) --
     fig, ax = plt.subplots(figsize=(max(10, 2.2 * len(types)), 6))
@@ -243,13 +337,19 @@ def plot_aggregate(aggregate_path: Path) -> None:
     # out-of-scope cells are greyed/hatched (a structural gap, not a zero);
     # an in-scope cell with no data stays white. Rows ordered best-first by the
     # rep's overall in-scope mean.
+    counts = {(qt, rep): len(vals) for (qt, rep), vals in points.items()}
     rep_overall: dict[str, float] = {}
     for rep in reps:
         vv = [v for (qt, r), vals in points.items()
               if r == rep and _in_scope(rep, qt) for v in vals]
         if vv:
             rep_overall[rep] = statistics.mean(vv)
-    ordered_reps = sorted(rep_overall, key=lambda r: rep_overall[r], reverse=True)
+    # Poles first (best-first), then combos + the synthesis candidate as a separate
+    # block below a divider -- they answer a different question than the axis poles,
+    # so they should not read as just more rows in the same ranking.
+    def _block(rep: str) -> int:
+        return 1 if rep_role(rep) in ("combo", "candidate") else 0
+    ordered_reps = sorted(rep_overall, key=lambda r: (_block(r), -rep_overall[r]))
     if ordered_reps:
         M = np.full((len(ordered_reps), len(types)), np.nan)
         for i, rep in enumerate(ordered_reps):
@@ -257,7 +357,7 @@ def plot_aggregate(aggregate_path: Path) -> None:
                 if _in_scope(rep, qt) and points.get((qt, rep)):
                     M[i, j] = statistics.mean(points[(qt, rep)])
         fig, ax = plt.subplots(
-            figsize=(max(8, 1.1 * len(types) + 3), max(4, 0.5 * len(ordered_reps) + 2))
+            figsize=(max(8, 1.3 * len(types) + 3), max(4, 0.55 * len(ordered_reps) + 2))
         )
         cmap = plt.cm.get_cmap("RdYlGn").copy()
         cmap.set_bad("white")
@@ -270,13 +370,22 @@ def plot_aggregate(aggregate_path: Path) -> None:
                                                hatch="//", zorder=2))
                     ax.text(j, i, "-", ha="center", va="center", color="gray", fontsize=8)
                 elif not np.isnan(M[i, j]):
-                    ax.text(j, i, f"{M[i, j]:.2f}", ha="center", va="center",
-                            color="black", fontsize=8)
+                    n = counts.get((qt, rep), 0)
+                    ax.text(j, i, f"{M[i, j]:.2f}\nn={n}", ha="center", va="center",
+                            color="black", fontsize=7)
+                    if 0 < n < SMALL_N:  # screening-only cell: red outline
+                        ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
+                                                   edgecolor="red", linewidth=1.4, zorder=4))
+        # divider between the pole block and the combo/candidate block
+        split = next((i for i, r in enumerate(ordered_reps) if _block(r) == 1), None)
+        if split:
+            ax.axhline(split - 0.5, color="black", linewidth=1.4)
         ax.set_xticks(range(len(types)))
         ax.set_xticklabels([t.replace("_", " ") for t in types], rotation=20, ha="right")
         ax.set_yticks(range(len(ordered_reps)))
         ax.set_yticklabels(ordered_reps)
-        ax.set_title("Answer Correctness heatmap  (mean per rep x type; grey = out of scope)")
+        ax.set_title("Answer Correctness heatmap  (mean per rep x type; grey = out of scope, "
+                     f"red outline = n<{SMALL_N}; combos/synthesis below the line)")
         fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02, label="mean AC")
         fig.tight_layout()
         fig.savefig(out_dir / "ac_heatmap.png", dpi=150)
@@ -324,10 +433,13 @@ def plot_aggregate(aggregate_path: Path) -> None:
         plt.close(fig)
         print(f"plot -> {out_dir / 'axis_contrasts.png'}")
 
-    # retire charts that the scope-aware set replaces / that mislead
-    for stale in ("ac_comparison.png", "faithfulness_comparison.png", "ac_delta.png",
-                  "ac_lift_over_floor.png"):
-        p = out_dir / stale
+    # retire charts that the scope-aware set replaces / that mislead, plus the old
+    # single combined axis card and any per-axis card whose axis lost its data.
+    stale = ["ac_comparison.png", "faithfulness_comparison.png", "ac_delta.png",
+             "ac_lift_over_floor.png", "axis_cards.png"]
+    stale += [p.name for p in out_dir.glob("axis_card_*.png") if p.name not in written_cards]
+    for name in stale:
+        p = out_dir / name
         if p.exists():
             p.unlink()
 
@@ -366,6 +478,18 @@ def plot_per_question(results_path: Path) -> None:
                 by_rep_tok[rep].append(float(tok))
             except ValueError:
                 pass
+    # Coverage per rep (1 - context_exceeded rate) from the *unfiltered* rows: a
+    # rep whose AC mean rests on few survivors (json overflowing dense scenes) is
+    # survivorship-biased, so its marker is shrunk and its cov% annotated -- the
+    # AC alone would read as a clean point otherwise.
+    exc: dict = collections.defaultdict(int)
+    tot: dict = collections.defaultdict(int)
+    for r in csv.DictReader(results_path.open(encoding="utf-8")):
+        tot[r["representation"]] += 1
+        if is_context_exceeded(r["error"]):
+            exc[r["representation"]] += 1
+    cov = {rep: (1 - exc[rep] / tot[rep]) if tot[rep] else 1.0 for rep in tot}
+
     cq_reps = [rep for rep in by_rep_ac if by_rep_tok.get(rep)]
     if cq_reps:
         xy = {rep: (statistics.mean(by_rep_tok[rep]), statistics.mean(by_rep_ac[rep]))
@@ -382,12 +506,20 @@ def plot_per_question(results_path: Path) -> None:
                     label="efficiency frontier")
         for rep in cq_reps:
             x, y = xy[rep]
-            ax.scatter(x, y, color=colors.get(rep, "gray"), s=70,
-                       edgecolor="black", linewidth=0.5, zorder=3)
-            ax.annotate(rep, (x, y), textcoords="offset points", xytext=(6, 4), fontsize=8)
+            c = cov.get(rep, 1.0)
+            ax.scatter(x, y, color=colors.get(rep, "gray"), s=40 + 90 * c,
+                       edgecolor="red" if c < 0.8 else "black",
+                       linewidth=1.4 if c < 0.8 else 0.5, zorder=3)
+            tag = rep if c > 0.999 else f"{rep} (cov {c * 100:.0f}%)"
+            ax.annotate(tag, (x, y), textcoords="offset points", xytext=(6, 4), fontsize=8)
         ax.set_xlabel("Mean prompt tokens  (context size -> serialization overhead)")
-        ax.set_ylabel("Mean answer correctness  (in-scope cells)")
-        ax.set_title("Cost vs Quality  (upper-left = more accuracy per token)")
+        ax.set_ylabel("Mean answer correctness  (in-scope, surviving cells)")
+        ax.set_title("Cost vs Quality", fontsize=12)
+        # keep the explanation off the title (it overran the frame); footnote in the
+        # empty lower-left so it clears the right-hand (often json) markers
+        ax.text(0.01, 0.01,
+                "upper-left = more accuracy per token\nmarker shrinks + red edge as coverage drops",
+                transform=ax.transAxes, ha="left", va="bottom", fontsize=7, color="gray")
         ax.grid(linestyle="--", alpha=0.4)
         if len(frontier) > 1:
             ax.legend(fontsize=8)

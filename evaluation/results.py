@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import statistics
+import sys
 from pathlib import Path
 from typing import Iterable
 
@@ -12,9 +13,13 @@ from evaluation.core import CSV_COLUMNS, EvalRecord, is_context_exceeded
 
 _AGGREGATE_COLUMNS = [
     "representation", "question_type",
-    "n", "error_count", "context_exceeded", "n_scored",
+    "n", "error_count", "context_exceeded", "n_scored", "coverage",
     "faithfulness_mean", "faithfulness_std",
-    "answer_correctness_mean", "answer_correctness_std",
+    "answer_correctness_mean", "answer_correctness_std", "answer_correctness_ci95",
+    # Diagnostic (supporting-detail coverage, not correctness). n_detail is its OWN
+    # support -- sparser than n_scored, since only questions with weight<=1 facts
+    # contribute -- so it is never averaged against the primary AC.
+    "answer_correctness_detail_mean", "answer_correctness_detail_std", "n_detail",
 ]
 
 
@@ -58,6 +63,11 @@ def save(
     t_start = time.perf_counter()
     n_ok = n_err = 0
 
+    if verbose:
+        # Responder/judge text can contain characters outside the console's
+        # codepage (e.g. cp1252 on Windows) -- replace rather than crash mid-run.
+        sys.stdout.reconfigure(errors="replace")
+
     with ResultsWriter(detail_path, resume=config.resume) as writer:
         for record in records:
             writer.add(record)
@@ -89,6 +99,11 @@ def save(
     from evaluation import plots
     plots.plot_aggregate(aggregate_path)
     plots.plot_per_question(detail_path)
+
+    # The tabular half of reporting (coverage / rank-eligibility, small-n register,
+    # per-axis numeric cards) -- regenerated from results.csv alongside the charts.
+    from evaluation.report import write_report
+    write_report(detail_path, aggregate_path)
 
     if verbose:
         elapsed = time.perf_counter() - t_start
@@ -122,8 +137,12 @@ def _compute_aggregate(rows: list[dict]) -> list[dict]:
     for (rep, qt), group in sorted(groups.items()):
         out.append(_group_row(rep, qt, group))
 
-    # overall row across all groups
-    out.append(_group_row("ALL", "ALL", rows))
+    # Overall row across all groups. Labelled an *operational total* (n, error and
+    # context-exceeded counts, throughput), NOT a quality score: it pools floor +
+    # ceiling, in/out-of-scope, every type and dataset, so its AC mean answers no
+    # research question. report.py never surfaces it; read within a type instead
+    # (METHODOLOGY 3.5 / 5.6).
+    out.append(_group_row("ALL", "operational-total", rows))
     return out
 
 
@@ -135,11 +154,14 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
     error_count = sum(1 for r in rows if r["error"] and not is_context_exceeded(r["error"]))
 
     def vals_of(metric: str) -> list[float]:
+        # .get so a CSV predating a column (e.g. answer_correctness_detail) yields an
+        # empty series rather than a KeyError.
         out = []
         for r in rows:
-            if r["error"] or r[metric] in ("", None):
+            v = r.get(metric, "")
+            if r["error"] or v in ("", None):
                 continue
-            out.append(float(r[metric]))
+            out.append(float(v))
         return out
 
     def mean_of(vals: list[float]) -> str:
@@ -151,22 +173,52 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
         # population. A single value has spread 0.0; no values -> blank.
         return f"{statistics.pstdev(vals):.4f}" if vals else ""
 
+    def clustered_ci95_of(metric: str) -> str:
+        # Coarse precision cue, clustered by question: repetitions of one question
+        # are stochastic re-draws, not independent new evidence, so the CI is
+        # 1.96 * sample-std / sqrt(k) over the k per-question means (the same
+        # per-question points plots.py draws), never over pooled question x
+        # repetition rows. Still wide and unreliable at this study's small k --
+        # a display aid, not an inferential claim. Read alongside n, never alone.
+        # (Keyed by (question, representation) so the never-read ALL row does not
+        # pool one question's cells across representations into one cluster.)
+        by_q: dict[tuple[str, str], list[float]] = {}
+        for r in rows:
+            v = r.get(metric, "")
+            if r["error"] or v in ("", None):
+                continue
+            by_q.setdefault((r["question_id"], r["representation"]), []).append(float(v))
+        means = [statistics.mean(v) for v in by_q.values()]
+        if len(means) < 2:
+            return ""
+        return f"{1.96 * statistics.stdev(means) / (len(means) ** 0.5):.4f}"
+
     fth = vals_of("faithfulness")
     ac  = vals_of("answer_correctness")
+    det = vals_of("answer_correctness_detail")  # sparser: only questions with detail facts
 
+    n = len(rows)
+    # n_scored = cells actually behind the means: total minus real errors and minus
+    # context-exceeded cells (both excluded from the means). AC is computed for
+    # every scored cell, so this is the AC mean's support; it also equals the
+    # faithfulness support whenever faithfulness is enabled.
+    n_scored = n - error_count - context_exceeded
     return {
         "representation":          representation,
         "question_type":           question_type,
-        "n":                       len(rows),
+        "n":                       n,
         "error_count":             error_count,
         "context_exceeded":        context_exceeded,
-        # n_scored = cells actually behind the means: total minus real errors and
-        # minus context-exceeded cells (both excluded from the means). AC is
-        # computed for every scored cell, so this is exactly the AC mean's support;
-        # it also equals the faithfulness support whenever faithfulness is enabled.
-        "n_scored":                len(rows) - error_count - context_exceeded,
+        "n_scored":                n_scored,
+        # coverage = scored fraction; a cell below ~0.8 has a survivorship-biased
+        # mean (see report.py / METHODOLOGY 3.5) and must not be ranked on AC alone.
+        "coverage":                f"{n_scored / n:.4f}" if n else "",
         "faithfulness_mean":       mean_of(fth),
         "faithfulness_std":        std_of(fth),
         "answer_correctness_mean": mean_of(ac),
         "answer_correctness_std":  std_of(ac),
+        "answer_correctness_ci95": clustered_ci95_of("answer_correctness"),
+        "answer_correctness_detail_mean": mean_of(det),
+        "answer_correctness_detail_std":  std_of(det),
+        "n_detail":                       len(det),
     }
