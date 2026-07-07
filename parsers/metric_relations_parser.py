@@ -13,8 +13,14 @@ grouped by room -- each room heads a block of its nearest neighbours, nearest
 first -- which is the allocentric, room-grouped twin of the egocentric
 `navigation` view (same grouping, only the vantage and bearing differ), so the
 axis-D contrast is a pure frame flip. Listing is directed: a pair appears under
-both of its rooms, not de-duplicated. Raising `NEAREST_K` toward the room count
-recovers the exhaustive variant used for the density-axis comparison.
+both of its rooms, not de-duplicated.
+
+`NEAREST_K` stays at the salient default of 4 -- the exhaustive all-pairs variant
+this knob used to produce (`metric_relations_full`, the Axis-C density pole) is
+retired: the axis was near-null (-0.043 AC) and the questions probing it were
+partly circular (a global-extremum fact, like the farthest pair in the scene, is
+answerable only by the exhaustive pole, so scoring the salient pole on it just
+measures a missing-data guess, not a density effect).
 
 Runs on any multi-room metric layout (Gibson, ProcTHOR); refuses on single-room
 scenes (3RScan). The floor plane is detected per group (see `_geometry`), so

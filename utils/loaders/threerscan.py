@@ -72,6 +72,14 @@ class ThreeRScanLoader(DatasetLoader):
                     relations = [
                         ObjectRelation(str(r[0]), r[3], str(r[1]))
                         for r in entry["relationships"]
+                        # "same object type" is label-inferable (the category is
+                        # already printed on both endpoints), unlike the other
+                        # "same ..." predicates (color/material/texture/shape/
+                        # state/symmetry/as), which encode attributes not present
+                        # in the label. Dropped at load so every downstream view
+                        # (relations_*, prose, synthesis, json) is unaffected, not
+                        # just relations_digest where it was first noticed.
+                        if r[3] != "same object type"
                     ]
                     break
 
