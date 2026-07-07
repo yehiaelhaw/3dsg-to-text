@@ -49,12 +49,17 @@ class Response:
 
 @dataclass
 class MetricScores:
-    faithfulness:       Optional[float] = None  # 0.0 – 1.0
-    answer_correctness: Optional[float] = None  # 0.0 – 1.0
+    faithfulness:              Optional[float] = None  # 0.0 – 1.0
+    answer_correctness:        Optional[float] = None  # 0.0 – 1.0, core (weight > 1) facts only
+    # Diagnostic only: fraction of the supporting-detail (weight <= 1) facts the answer
+    # carried. Never folded into answer_correctness; None when the question has no detail
+    # facts. Measures volunteered detail (verbosity x representation), not correctness.
+    answer_correctness_detail: Optional[float] = None  # 0.0 – 1.0
     def to_dict(self) -> dict[str, Optional[float]]:
         return {
-            "faithfulness":       self.faithfulness,
-            "answer_correctness": self.answer_correctness,
+            "faithfulness":              self.faithfulness,
+            "answer_correctness":        self.answer_correctness,
+            "answer_correctness_detail": self.answer_correctness_detail,
         }
 
 
@@ -94,7 +99,7 @@ CSV_COLUMNS = [
     "question_type", "question_text",
     "raw_answer", "rubric_reasoning",
     "prompt_tokens", "completion_tokens",
-    "faithfulness", "answer_correctness",
+    "faithfulness", "answer_correctness", "answer_correctness_detail",
     "latency_ms",
     "error",
 ]

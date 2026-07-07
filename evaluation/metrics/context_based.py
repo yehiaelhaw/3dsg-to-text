@@ -107,21 +107,56 @@ Facts:
 {numbered_facts}"""
 
 
+# Facts split into two tiers by weight: the *core* tier (weight > 1) is what the
+# question explicitly asks for and is the ONLY thing the primary answer_correctness
+# scores; the *detail* tier (weight <= 1) is supporting information the question did
+# not ask for -- scored separately as a diagnostic (answer_correctness_detail), never
+# folded into the primary. Splitting here (rather than one Sum(weights)/Sum(all))
+# means a wrong core answer can no longer be masked by volunteered supporting detail.
+# The threshold is > 1 (not == 3) so a future intermediate weight still counts as core
+# and numeric weighting is preserved *within* the core tier.
+_CORE_MIN_WEIGHT = 1.0
+
+
 def rubric_correctness(
     question: str,
     answer: str,
     key_facts: list[KeyFact],
     judge: LLMProvider,
-) -> tuple[float, str]:
+) -> tuple[float, float | None, str]:
+    """Return (core, detail, judge_text).
+
+    core   = Sum(w of YES core facts)   / Sum(w of all core facts)     -- the primary AC
+    detail = Sum(w of YES detail facts) / Sum(w of all detail facts)   -- diagnostic,
+             or None when the question has no detail (weight <= 1) facts.
+    """
     numbered = "\n".join(f"{i + 1}. {kf.fact}" for i, kf in enumerate(key_facts))
     prompt = _RUBRIC_PROMPT.format(
         question=question.strip(), answer=answer.strip(), numbered_facts=numbered
     )
     text = judge.generate(prompt).text
     present = _parse_rubric(text, len(key_facts))
-    total_weight = sum(kf.weight for kf in key_facts)
-    score = sum(kf.weight for kf, p in zip(key_facts, present) if p) / total_weight
-    return round(score, 4), text
+
+    def tier_score(facts: list[tuple[KeyFact, bool]]) -> float | None:
+        total = sum(kf.weight for kf, _ in facts)
+        if total <= 0:
+            return None
+        return round(sum(kf.weight for kf, p in facts if p) / total, 4)
+
+    scored = list(zip(key_facts, present))
+    core   = [(kf, p) for kf, p in scored if kf.weight > _CORE_MIN_WEIGHT]
+    detail = [(kf, p) for kf, p in scored if kf.weight <= _CORE_MIN_WEIGHT]
+
+    core_score = tier_score(core)
+    if core_score is None:
+        # No core (weight > 1) fact -- an authoring error the loader should have
+        # caught (dataset.load validates this). Fail loudly rather than silently
+        # scoring the primary metric off detail facts.
+        raise ValueError(
+            "rubric_correctness: question has no core (weight > 1) key fact; "
+            "the primary answer_correctness is undefined"
+        )
+    return core_score, tier_score(detail), text
 
 
 def _parse_rubric(text: str, n: int) -> list[bool]:

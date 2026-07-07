@@ -326,7 +326,9 @@ def _score_one(rec: dict, config, judge, judge_tag, ctx_cache) -> EvalRecord:
 
         rubric_reasoning = ""
         if question.key_facts:
-            scores.answer_correctness, rubric_reasoning = context_based.rubric_correctness(
+            (scores.answer_correctness,
+             scores.answer_correctness_detail,
+             rubric_reasoning) = context_based.rubric_correctness(
                 question.text, response.raw_answer, question.key_facts, judge
             )
 

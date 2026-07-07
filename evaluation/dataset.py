@@ -50,6 +50,14 @@ def load(
                     KeyFact(fact=f["fact"], weight=float(f.get("weight", 1.0)))
                     for f in raw_facts
                 ]
+                # The primary answer_correctness scores the core (weight > 1) tier only;
+                # a question with no core fact would leave it undefined. Fail fast here
+                # (before any LLM call) rather than erroring mid-run in the judge.
+                if not any(kf.weight > 1.0 for kf in key_facts):
+                    raise ValueError(
+                        f"{path}:{lineno}: question {qid!r} has no core (weight > 1) key "
+                        f"fact; the primary answer_correctness would be undefined"
+                    )
                 questions.append(Question(
                     id=qid,
                     scene_id=raw["scene_id"],
