@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, field
 from typing import Optional
+
+# A runaway responder answer (repetition loops on dense scenes) can exceed csv's
+# default 128 KB per-field cap, breaking every DictReader that reads results.csv
+# (resume bookkeeping, aggregate, report, plots). Raise it once here — core is
+# imported by all of them. 2**31-1 is the max on Windows (32-bit C long).
+csv.field_size_limit(2**31 - 1)
 
 
 # Sentinel stored in EvalRecord.error / the responses cache when the responder's
