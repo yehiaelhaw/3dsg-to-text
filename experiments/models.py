@@ -27,18 +27,28 @@ class ModelProfile:
     options: dict = field(default_factory=dict)
 
 
-# Remote ollama endpoint currently used for the larger responders.
-_NGROK = "https://macaroni-nervous-busily.ngrok-free.dev"
+# Remote ollama endpoints -- university GPU servers reached over an SSH local
+# port-forward (run scripts/ssh_tunnel.ps1 before launching a run that uses
+# these hosts). Replaces the previous Kaggle+ngrok setup.
+#   _VOXEL -> voxel.nes, RTX 3090  24GB VRAM
+#   _PIXEL -> pixel.nes, RTX 5070 Ti 16GB VRAM
+_VOXEL = "http://localhost:11434"
+_PIXEL = "http://localhost:11435"
 
 MODEL_PROFILES: list[ModelProfile] = [
     # --- standard instruction families: greedy decoding (temperature 0) ---
     # (placeholders -- replace with the families you intend to compare)
     ModelProfile("qwen2.5-14b", "ollama", "qwen2.5:14b",
-                 {"host": _NGROK, "num_ctx": 32768, "temperature": 0}),
+                 {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
+    # 32B fits voxel only (Q4 weights ~20GB); 32k-token KV cache spills past
+    # 24GB, so ollama partially offloads to CPU -- slower, but num_ctx stays
+    # matched to the other profiles so context_exceeded cells stay comparable.
+    ModelProfile("qwen2.5-32b", "ollama", "qwen2.5:32b",
+                 {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     ModelProfile("llama3.1-8b", "ollama", "llama3.1:8b",
-                 {"num_ctx": 32768, "temperature": 0}),
+                 {"host": _PIXEL, "num_ctx": 32768, "temperature": 0}),
 
     # --- reasoning family (branch ablation): nonzero floor; r1 degrades at 0 ---
     ModelProfile("deepseek-r1-14b", "ollama", "deepseek-r1:14b",
-                 {"host": _NGROK, "num_ctx": 32768, "temperature": 0.6}),
+                 {"host": _VOXEL, "num_ctx": 32768, "temperature": 0.6}),
 ]
