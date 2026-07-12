@@ -79,6 +79,11 @@ def build_config(profile, scene, *, judge_backend=None, judge_model=None,
         compute_faithfulness=compute_faithfulness,
         resume=True,
         score_only=score_only,
+        # Fail-closed scope validation (METHODOLOGY S3.1 / S5.7): abort before the
+        # first LLM call if any representation part or question type lacks a
+        # scope.py declaration. Free when declarations are complete; catches the
+        # silent-typo mis-scope class on every run, not just "final" ones.
+        strict_scope=True,
     )
 
 
