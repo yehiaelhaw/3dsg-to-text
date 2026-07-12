@@ -165,6 +165,25 @@ def _generate_one(question, representation, repetition, context, responder,
             context=context.strip(),
             question=question.text.strip(),
         )
+        # Pre-call guard: a character-count lower bound (~4 chars/token) already
+        # at the window means the prompt cannot fit no matter what the server
+        # reports. The post-hoc guard below trusts the backend's reported count,
+        # which a serving host with a smaller *effective* window than the
+        # configured num_ctx can undercut -- observed 2026-07: ~45k-token 3RScan
+        # json prompts silently clipped to a reported 16,386 tokens (below the
+        # 32,768 threshold) and scored as real answers. Flagging here is terminal
+        # and spends no generation.
+        if num_ctx:
+            est_min_tokens = len(prompt) // 4
+            if est_min_tokens >= num_ctx - _CTX_RESERVE:
+                return _gen_dict(
+                    question, representation, repetition, responder_tag,
+                    raw_answer="",
+                    prompt_tokens=est_min_tokens,
+                    error=(f"{CONTEXT_EXCEEDED}: prompt is at least ~{est_min_tokens} tokens "
+                           f"(character lower bound) >= context window {num_ctx} "
+                           f"(representation cannot fit; not generated)"),
+                )
         gen = responder.generate(prompt)
         # Context-window guard: if the prompt filled (or was truncated to) the
         # responder's window, the representation did not fit -- mark the cell
