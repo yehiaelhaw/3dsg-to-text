@@ -172,34 +172,44 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
     return [f"## Axis {axis.id} - {axis.label}", f"_{axis.note}_", ""] + body
 
 
-def _planning_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
+def _planning_section(rows: list[dict]) -> list[str]:
     """The planning / real-world-utility probe, reported on its own (not an axis
     pole). A planning question states a *goal*; the model must infer the objects it
     needs (the affordance step) rather than being handed them -- that inference is
     the extra reasoning vs a containment/set_logic question on the same objects.
     inventory is the floor, json the ceiling; in-scope reps carry the inventory
-    channel."""
-    reps = sorted({rep for (rep, qt) in cells if qt == "planning"})
-    if not reps:
-        return []
-    floor = cells.get((FLOOR, "planning"))
-    floor_ac = floor.ac_mean if floor and floor.n_scored else None
+    channel.
 
-    def order(rep: str):  # floor first, poles by AC desc, ceiling last
+    Split per host dataset (never pooled): planning's floor/ceiling meaning differs
+    by dataset (e.g. 3RScan planning needs the raw relation channel, not just
+    inventory -- QA_DESIGN 5), so a pooled `all` row would silently average across
+    incompatible scopes."""
+
+    def order(cells, rep):  # floor first, poles by AC desc, ceiling last
         rank = {"floor": 0, "ceiling": 2}.get(rep_role(rep), 1)
         return (rank, -cells[(rep, "planning")].ac_mean)
 
-    trows = []
-    for rep in sorted(reps, key=order):
-        c = cells[(rep, "planning")]
-        dfloor = ("" if floor_ac is None or c.n_scored == 0
-                  else f"{c.ac_mean - floor_ac:+.2f}")
-        trows.append([rep, rep_role(rep), str(c.n), f"{c.coverage * 100:.0f}",
-                      _ac_str(c), _ci_str(c), dfloor])
-    return (["## Planning / real-world utility (separate probe)",
-             "_Goal-framed questions: the model must infer the objects a goal needs, not be "
-             "handed them. Reported on its own -- not an axis pole. inventory = floor, json = ceiling._", ""]
-            + _table(["rep", "role", "n", "cov%", "AC", "CI95", "vs floor"], trows) + [""])
+    out: list[str] = []
+    for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
+        cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == ds])
+        reps = sorted({rep for (rep, qt) in cells if qt == "planning"})
+        if not reps:
+            continue
+        floor = cells.get((FLOOR, "planning"))
+        floor_ac = floor.ac_mean if floor and floor.n_scored else None
+        trows = []
+        for rep in sorted(reps, key=lambda r: order(cells, r)):
+            c = cells[(rep, "planning")]
+            dfloor = ("" if floor_ac is None or c.n_scored == 0
+                      else f"{c.ac_mean - floor_ac:+.2f}")
+            trows.append([rep, rep_role(rep), str(c.n), f"{c.coverage * 100:.0f}",
+                          _ac_str(c), _ci_str(c), dfloor])
+        out += [f"## Planning / real-world utility (separate probe, host: {ds})",
+                "_Goal-framed questions: the model must infer the objects a goal needs, not be "
+                "handed them. Reported on its own -- not an axis pole, and never pooled across "
+                "datasets. inventory = floor, json = ceiling._", ""]
+        out += _table(["rep", "role", "n", "cov%", "AC", "CI95", "vs floor"], trows) + [""]
+    return out
 
 
 OBJECT_RELATION_TYPES = {"object_relation", "relation_structure", "relation_aggregate"}
@@ -332,7 +342,7 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
     ]
     for axis in AXES:
         lines += _axis_card(axis, rows)
-    lines += _planning_section(cells)
+    lines += _planning_section(rows)
     lines += _coverage_section(cells)
     lines += _small_n_section(cells)
     lines += _combo_section(cells)

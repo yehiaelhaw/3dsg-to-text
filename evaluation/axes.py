@@ -69,7 +69,14 @@ AXES: list[Axis] = [
          ["inventory", "topology", "metric_relations", "json"],
          ["connectivity", "proximity", "direction"],
          note="ladder is per-type: only in-scope rungs are drawn; inventory is the "
-              "spatial-prior floor, not a competitor."),
+              "spatial-prior floor, not a competitor. See Axis A2 for the Gibson "
+              "metric-rung companion card (axis cards are single-host)."),
+    Axis("A2", "Spatial encoding (metric rung)", "gibson",
+         ["metric_relations"],
+         ["proximity"],
+         note="Gibson companion to Axis A: the cleanest metric-rung exhibit in the "
+              "study (no CI overlap vs json) lives on this host, not ProcTHOR, so it "
+              "needs its own card rather than being folded into Axis A."),
     Axis("B", "Format", "procthor",
          ["topology", "prose"],
          ["connectivity"],

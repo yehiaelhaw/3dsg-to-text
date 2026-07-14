@@ -4,3 +4,6 @@ dataset/
 .vscode/
 experiments/results/
 scene_contexts/
+scripts/
+docs/
+logs/
