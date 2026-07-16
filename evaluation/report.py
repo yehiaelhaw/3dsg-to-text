@@ -215,24 +215,33 @@ def _planning_section(rows: list[dict]) -> list[str]:
 OBJECT_RELATION_TYPES = {"object_relation", "relation_structure", "relation_aggregate"}
 
 
-def _coverage_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
+def _coverage_section(rows: list[dict]) -> list[str]:
     """Cells where coverage matters: anything that overflowed the window, plus the
     whole object-relation family (`object_relation`/`relation_structure`/
     `relation_aggregate` -- where json/relations_flat overflow on dense scenes).
-    This is where the survivorship trap is read."""
-    trows = []
-    for (rep, qt), c in sorted(cells.items()):
-        if c.context_exceeded > 0 or qt in OBJECT_RELATION_TYPES:
-            trows.append([rep, qt, str(c.n), str(c.context_exceeded),
-                          f"{c.coverage * 100:.0f}", _ac_str(c),
-                          "yes" if c.rank_eligible else "no"])
-    if not trows:
-        return []
-    return (["## Coverage & rank-eligibility",
-             "_Cells that overflowed the window or carry object relations. "
-             "rank_eligible = coverage >= 80%; a `no` must not be ranked on AC._", ""]
-            + _table(["rep", "type", "n", "exceeded", "cov%", "AC", "rank_eligible"], trows)
-            + [""])
+    This is where the survivorship trap is read.
+
+    Split per host dataset (never pooled): overflow is a host property (json only
+    exceeds the window on dense 3RScan scenes), so a pooled row would average a
+    host where a rep is fully scoreable with one where it fails closed and hide
+    exactly the survivorship signal this table exists to surface."""
+    out: list[str] = []
+    for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
+        cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == ds])
+        trows = []
+        for (rep, qt), c in sorted(cells.items()):
+            if c.context_exceeded > 0 or qt in OBJECT_RELATION_TYPES:
+                trows.append([rep, qt, str(c.n), str(c.context_exceeded),
+                              f"{c.coverage * 100:.0f}", _ac_str(c),
+                              "yes" if c.rank_eligible else "no"])
+        if not trows:
+            continue
+        out += (["## Coverage & rank-eligibility (host: %s)" % ds,
+                 "_Cells that overflowed the window or carry object relations. "
+                 "rank_eligible = coverage >= 80%; a `no` must not be ranked on AC._", ""]
+                + _table(["rep", "type", "n", "exceeded", "cov%", "AC", "rank_eligible"], trows)
+                + [""])
+    return out
 
 
 def _small_n_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
@@ -272,23 +281,35 @@ def _combo_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
             + [""])
 
 
-def _candidate_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
+def _candidate_section(rows: list[dict]) -> list[str]:
     """The synthesis candidate-default vs the json ceiling, with token cost -- the
-    'match the ceiling at a fraction of the tokens' question."""
-    qts = sorted({qt for (rep, qt) in cells if rep == CANDIDATE})
-    if not qts:
-        return []
-    trows = []
-    for qt in qts:
-        s = cells[(CANDIDATE, qt)]
-        j = cells.get((CEILING, qt))
-        st = f"{s.tokens_mean:.0f}" if s.tokens_mean else "-"
-        jt = f"{j.tokens_mean:.0f}" if j and j.tokens_mean else "-"
-        trows.append([qt, _ac_str(s), _ac_str(j) if j else "n/a", st, jt])
-    return (["## Candidate default (synthesis vs json)",
-             "_Can one compact view match the json ceiling at a fraction of the tokens?_", ""]
-            + _table(["type", "synthesis AC", "json AC", "synth tok", "json tok"], trows)
-            + [""])
+    'match the ceiling at a fraction of the tokens' question.
+
+    Split per host dataset (never pooled): most question types here are asked on
+    more than one dataset (aggregation/containment/direction/planning/proximity/
+    route/set_logic all appear on 2-3 hosts) with different floor/ceiling scope
+    semantics per host (same trap as `_planning_section`), and `synthesis`'s own
+    composition is host-dependent (e.g. its object-relation section only fires
+    where `has_object_relations` holds) -- a pooled `all` row would silently
+    average across incompatible scopes and compositions."""
+    out: list[str] = []
+    for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
+        cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == ds])
+        qts = sorted({qt for (rep, qt) in cells if rep == CANDIDATE})
+        if not qts:
+            continue
+        trows = []
+        for qt in qts:
+            s = cells[(CANDIDATE, qt)]
+            j = cells.get((CEILING, qt))
+            st = f"{s.tokens_mean:.0f}" if s.tokens_mean else "-"
+            jt = f"{j.tokens_mean:.0f}" if j and j.tokens_mean else "-"
+            trows.append([qt, _ac_str(s), _ac_str(j) if j else "n/a", st, jt])
+        out += [f"## Candidate default (synthesis vs json, host: {ds})",
+                "_Can one compact view match the json ceiling at a fraction of the "
+                "tokens? Never pooled across datasets._", ""]
+        out += _table(["type", "synthesis AC", "json AC", "synth tok", "json tok"], trows) + [""]
+    return out
 
 
 def _detail_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
@@ -343,10 +364,10 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
     for axis in AXES:
         lines += _axis_card(axis, rows)
     lines += _planning_section(rows)
-    lines += _coverage_section(cells)
+    lines += _coverage_section(rows)
     lines += _small_n_section(cells)
     lines += _combo_section(cells)
-    lines += _candidate_section(cells)
+    lines += _candidate_section(rows)
     lines += _detail_section(cells)
 
     out_path = results_path.parent / "report.md"
