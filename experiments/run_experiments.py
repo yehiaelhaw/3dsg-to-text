@@ -51,12 +51,16 @@ def _select(items, names, kind, key):
 
 
 def build_config(profile, scene, *, judge_backend=None, judge_model=None,
-                  score_only=False, compute_faithfulness=False):
+                  score_only=False, compute_faithfulness=False, representations=None):
     """One EvalConfig for a (model x scene) cell. Imports lazily so --list is cheap.
 
     judge_backend/judge_model default to the fixed gemma2:9b screening judge;
     pass overrides (e.g. from --score-only --judge-backend gemini) to re-judge
     an existing cache with a different judge instead.
+
+    representations overrides the scene's rep set (from --reps) for subset runs --
+    e.g. a second responder on headline cells only, or refilling one purged rep.
+    scenes.py stays the source of truth for what a FULL run covers.
     """
     from evaluation.config import EvalConfig
     return EvalConfig(
@@ -70,7 +74,7 @@ def build_config(profile, scene, *, judge_backend=None, judge_model=None,
         judge_model=judge_model or JUDGE_MODEL,
         # temperature=0.0 is a reasonable determinism default for any judge backend.
         judge_options=JUDGE_OPTIONS,
-        representations=scene.representations,
+        representations=representations or scene.representations,
         # One draw per cell: the (rep x type) group mean already averages over many
         # independent questions, so a repeat is pseudo-replication, not new signal.
         repetitions=1,
@@ -91,6 +95,10 @@ def main():
     ap = argparse.ArgumentParser(description="Run the responder x scene evaluation matrix.")
     ap.add_argument("--models", help="comma-separated ModelProfile names (default: all)")
     ap.add_argument("--scenes", help="comma-separated scene_ids (default: all)")
+    ap.add_argument("--reps", help="comma-separated representation names: override the "
+                                    "rep set of every selected scene (subset runs, e.g. "
+                                    "a second responder on headline cells only; resume "
+                                    "still skips finished cells)")
     ap.add_argument("--list", action="store_true", help="print the matrix and exit")
     ap.add_argument("--generate-only", action="store_true",
                      help="run responder generation only, skip judging "
@@ -115,6 +123,8 @@ def main():
 
     models = _select(MODEL_PROFILES, args.models, "model", lambda m: m.name)
     scenes = _select(SCENES, args.scenes, "scene", lambda s: s.scene_id)
+    reps = ([r.strip() for r in args.reps.split(",") if r.strip()]
+            if args.reps else None)
     combos = list(product(models, scenes))
 
     print(f"matrix: {len(models)} model(s) x {len(scenes)} scene(s) = {len(combos)} run(s)")
@@ -128,7 +138,7 @@ def main():
         from evaluation.runner import generate_responses
         for i, (prof, scene) in enumerate(combos, 1):
             print(f"\n=== [{i}/{len(combos)}] {prof.name} x {scene.scene_id} (generate only) ===")
-            generate_responses(build_config(prof, scene))
+            generate_responses(build_config(prof, scene, representations=reps))
         return
 
     from evaluation.results import save
@@ -144,6 +154,7 @@ def main():
             prof, scene,
             judge_backend=args.judge_backend, judge_model=args.judge_model,
             score_only=args.score_only, compute_faithfulness=args.faithfulness,
+            representations=reps,
         )
         save(iter_records(cfg), cfg)
 
