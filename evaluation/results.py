@@ -23,6 +23,41 @@ _AGGREGATE_COLUMNS = [
 ]
 
 
+def _compact_for_resume(path: Path) -> None:
+    """Drop rows a resumed run supersedes, in place.
+
+    ResultsWriter appends on resume, and the scoring resume-skip
+    (runner._load_done_keys) re-attempts every real-error row -- so without this
+    a retried cell ends up in the CSV twice (the stale error row plus the fresh
+    scored one), and since no downstream aggregation dedups by key, coverage
+    reads below 100% forever after the retry already succeeded (observed on
+    3rscan_7f30f36c synthesis, 2026-07-15). Two rules, preserving file order:
+      1. last write wins per (question_id, representation, repetition);
+      2. real error rows are dropped -- they are exactly the rows the resumed
+         run is about to re-attempt (and re-append if they fail again).
+    Context-exceeded sentinels are terminal (fail-closed by design) and kept.
+    """
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        fieldnames = reader.fieldnames
+        rows = list(reader)
+    if not rows:
+        return
+    last: dict[tuple[str, str, str], dict] = {}
+    for r in rows:
+        last[(r["question_id"], r["representation"], r["repetition"])] = r
+    kept = [r for r in rows
+            if last[(r["question_id"], r["representation"], r["repetition"])] is r
+            and not (r["error"] and not is_context_exceeded(r["error"]))]
+    if len(kept) == len(rows):
+        return
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(kept)
+    print(f"resume: compacted {path.name} -- dropped {len(rows) - len(kept)} superseded row(s)")
+
+
 class ResultsWriter:
     """Streams EvalRecords to a per-question CSV row-by-row."""
 
@@ -30,6 +65,8 @@ class ResultsWriter:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._path = path
         append = resume and path.exists()
+        if append:
+            _compact_for_resume(path)
         self._fh = path.open("a" if append else "w", newline="", encoding="utf-8")
         self._writer = csv.DictWriter(self._fh, fieldnames=CSV_COLUMNS)
         if not append:

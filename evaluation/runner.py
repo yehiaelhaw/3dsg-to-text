@@ -96,6 +96,8 @@ def generate_responses(config: EvalConfig) -> Path:
 
     path = _responses_path(config)
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        _compact_cache(path)
     done = _cached_keys(path)
 
     print(f"PHASE 1/2  generate -> {path}  (responder: {responder_tag})")
@@ -231,6 +233,40 @@ def _gen_dict(question, representation, repetition, responder_tag, *,
 def _write(fh, rec: dict) -> None:
     fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
     fh.flush()
+
+
+def _compact_cache(path: Path) -> None:
+    """Drop cache lines a resumed generation supersedes, in place.
+
+    Generation appends, and _cached_keys does not mark real-error lines done --
+    so every resume re-appends retried cells and the stale lines pile up
+    (scoring already reads last-write-wins via _load_cache, but the file grows
+    unbounded and its keys stop mirroring results.csv, the same defect
+    results._compact_for_resume fixes on the CSV side). Same two rules,
+    preserving line order: last write wins per key, real-error lines dropped
+    (they are about to be re-attempted), context-exceeded sentinels kept.
+    """
+    parsed: list[tuple[str, dict]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed.append((line, json.loads(line)))
+        except json.JSONDecodeError:
+            continue
+    last: dict[tuple[str, str, str], int] = {}
+    for i, (_, rec) in enumerate(parsed):
+        last[(rec["question_id"], rec["representation"], str(rec["repetition"]))] = i
+    kept = []
+    for i, (line, rec) in enumerate(parsed):
+        err = rec.get("error")
+        if (last[(rec["question_id"], rec["representation"], str(rec["repetition"]))] == i
+                and not (err and not is_context_exceeded(err))):
+            kept.append(line)
+    if len(kept) != len(parsed):
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+        print(f"resume: compacted {path.name} -- dropped {len(parsed) - len(kept)} superseded line(s)")
 
 
 def _cached_keys(path: Path) -> set[tuple[str, str, str]]:
