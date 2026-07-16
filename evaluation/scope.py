@@ -84,11 +84,32 @@ REP_CAPS: dict[str, set[str]] = {
     "json":             {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
     # synthesized best-of-axes default: prose backbone + derived connectivity
-    # (graph_digest) + salient metric (metric_relations), so it carries every
-    # channel on a fully-equipped scene. Egocentric routing is deliberately left
-    # to navigation, but synthesis still carries metric_edges (per-room bearings),
-    # so it stays in scope for direction/route -- the gap to navigation there is a
-    # result to measure, not a cell to mask.
+    # (graph_digest) + salient metric (metric_relations) + derived object-relation
+    # structure (relations_digest), so it carries every channel on a fully-equipped
+    # scene. Egocentric routing is deliberately left to navigation, but synthesis
+    # still carries metric_edges (per-room bearings), so it stays in scope for
+    # direction/route -- the gap to navigation there is a result to measure, not a
+    # cell to mask.
+    #
+    # object_relations_derived history: this channel was an over-claim from
+    # 2026-07-14 to (same day) its fix. Briefly, synthesis's relations content was
+    # raw enumeration only (prose's section, reused verbatim) with none of
+    # relations_digest's guaranteed derived content (deepest-chain, top-N
+    # receptacles, proximity-cluster membership, relation-type census) -- yet the
+    # channel was claimed anyway. Root-caused to `parsers/synthesis_parser.py`
+    # (recovered after being briefly missing from disk) never having imported
+    # `relations_digest_parser`. Fixed by extracting `object_relations_digest`
+    # (relations_digest_parser.py, mirrors `graph_digest_parser.connectivity_digest`
+    # -- body without the head line, byte-identical to the standalone view) and
+    # folding it into `synthesis_parser.parse`, appended after the raw section
+    # (verified byte-identical `relations_digest` output; verified the fold-in
+    # does not restate prose's own "Shared attributes" clique rollup -- that
+    # trailing block is cut from the raw tier since the derived section always
+    # supplies it whenever both are present). Channel restored the same day.
+    # scene_contexts/*/synthesis.txt regenerated for all 9 scenes 2026-07-14.
+    # NB: `prose` still declares this channel without carrying the content --
+    # left unchanged since it wasn't part of this correction and already-published
+    # axis-G numbers were computed under its current declaration.
     "synthesis":        {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
 }

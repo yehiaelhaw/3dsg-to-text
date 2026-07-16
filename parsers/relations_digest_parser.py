@@ -49,10 +49,15 @@ def _root_to_leaf_paths(children: dict[str, list[str]], roots: list[str]) -> lis
     return paths
 
 
-def parse(building: Building) -> str:
-    if not has_object_relations(building):
-        raise NotApplicable("relations_digest needs annotated object relations; this scene has none")
+def object_relations_digest(building: Building) -> list[str]:
+    """The derived-structure section without the head line: support depth,
+    receptacles, proximity clusters, shared-attribute cliques and the relation
+    census.
 
+    Split out so the synthesized representation can fold these exact facts into
+    a larger document (one head, shared inventory) instead of carrying only raw
+    triples. `parse` prepends the head and returns the same text as before.
+    """
     rels = building.object_relations
     _, lbl = resolve_labels(building)
     children, roots, _, edge_pred = support_forest(rels)
@@ -66,11 +71,7 @@ def parse(building: Building) -> str:
         return s
 
     census = Counter(classify_predicate(r.predicate) for r in rels)
-    head = (
-        f"{building.name} -- object-relation digest (derived from {len(rels)} relations; "
-        "facts pre-computed, not the raw edge list)."
-    )
-    lines = [head, ""]
+    lines: list[str] = []
 
     # -- Support depth: the multi-hop stacking chains, read leaf -> base --
     paths = _root_to_leaf_paths(children, roots)
@@ -129,6 +130,21 @@ def parse(building: Building) -> str:
              ("other", "other")]
     parts = [f"{census[c]} {name}" for c, name in order if census[c]]
     lines.append(f"Relation census: {', '.join(parts)}.")
+
+    return lines
+
+
+def parse(building: Building) -> str:
+    if not has_object_relations(building):
+        raise NotApplicable("relations_digest needs annotated object relations; this scene has none")
+
+    rels = building.object_relations
+    head = (
+        f"{building.name} -- object-relation digest (derived from {len(rels)} relations; "
+        "facts pre-computed, not the raw edge list)."
+    )
+    lines = [head, ""]
+    lines.extend(object_relations_digest(building))
 
     return "\n".join(lines).rstrip() + "\n"
 
