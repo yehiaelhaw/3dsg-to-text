@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import re
 import time
 
 import ollama
 
 from evaluation.llm.base import GenerationResult, LLMProvider
+
+_THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 
 
 class OllamaProvider(LLMProvider):
@@ -24,8 +27,20 @@ class OllamaProvider(LLMProvider):
         )
         latency_ms = (time.perf_counter() - t0) * 1000
 
+        text = response.response
+        # Reasoning models (deepseek-r1) inline a <think>...</think> trace in
+        # the response. The judge must only ever see the final answer, so the
+        # trace is stripped; an unclosed trace (generation cut off mid-think)
+        # leaves no final answer, which is stored as such. completion_tokens
+        # still counts the trace -- thinking stays in the cost accounting.
+        if "<think>" in text:
+            text = _THINK_RE.sub("", text)
+            if "<think>" in text:
+                text = text.split("<think>", 1)[0]
+            text = text.lstrip()
+
         return GenerationResult(
-            text=response.response,
+            text=text,
             prompt_tokens=response.prompt_eval_count or 0,
             completion_tokens=response.eval_count or 0,
             latency_ms=round(latency_ms, 2),
