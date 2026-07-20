@@ -46,7 +46,7 @@ SCENES: list[Scene] = [
     Scene("procthor_train232", _qa("procthor_train232"), _PROCTHOR_REPS),
     Scene("procthor_train314", _qa("procthor_train314"), _PROCTHOR_REPS),
 
-    # 3RScan (axis G): auto-discover the 8 single files. No combos -- concatenating
+    # 3RScan (axis G): auto-discover the 9 single files. No combos -- concatenating
     # two relations_* views would mix poles of the same axis. The trio spans the
     # density gradient (02b33dfb 355 rels < d7d40d62 < 7f30f36c 3971 rels).
     Scene("3rscan_02b33dfb", _qa("3rscan_02b33dfb"), None),

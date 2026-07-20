@@ -13,10 +13,11 @@ masked, so new parsers/types are shown until their scope is declared here.
 Charts produced
 ---------------
 plot_aggregate (reads results.csv + aggregate.csv):
+  axis_card_<id>.png           one figure per axis in evaluation.axes.AXES (A/A2/B/D/F/G)
   ac_by_axis.png               AC per question type, in-scope reps, bars+std+dots
   value_of_spatial_structure.png  AC lift over the inventory floor (Axis-A result)
   ac_heatmap.png               rep x type mean-AC matrix, out-of-scope cells greyed
-  axis_contrasts.png           paired per-question AC delta for axes B/D/E/F
+  axis_contrasts.png           paired per-question AC delta for axes B/D/F/G (evaluation.axes.AXIS_PAIRS)
 plot_per_question (reads results.csv):
   cost_quality.png             mean AC vs mean prompt tokens, with efficiency frontier
   faith_vs_ac.png              per-observation guess detector (only if faithfulness on)
