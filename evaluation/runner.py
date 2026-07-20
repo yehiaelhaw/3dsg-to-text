@@ -408,13 +408,26 @@ def _get_context(config, scene_id, representation, cache) -> str:
 
 
 def _load_done_keys(config: EvalConfig) -> set[tuple[str, str, str]]:
-    """(question_id, representation, repetition) already scored without error."""
+    """(question_id, representation, repetition) already scored without error
+    by THIS config's judge.
+
+    Scoping the key to the judge is what makes a score_only pass with a new
+    judge (the Gemini confirmatory re-judge over screening-scored rows)
+    actually re-judge instead of resume-skipping every cell, while an
+    interrupted pass under the same judge still resumes past its own work.
+    Rows from another judge -- including its context-exceeded sentinels, which
+    _score_one re-emits without a judge call -- are rescored so the directory
+    ends up under a single judge tag.
+    """
     path = Path(config.output_dir) / "results.csv"
     if not path.exists():
         return set()
+    judge_tag = f"{config.judge_backend}/{config.judge_model}"
     done: set[tuple[str, str, str]] = set()
     with path.open(encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
+            if row.get("judge") != judge_tag:
+                continue
             err = row.get("error")
             # Real errors are left out so they get re-judged on resume;
             # context-exceeded cells are terminal, so treat them as done.

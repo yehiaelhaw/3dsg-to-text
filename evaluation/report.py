@@ -344,16 +344,30 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
 
     cells = _cells(rows)
     responder = rows[0].get("responder", "?")
-    judge = rows[0].get("judge", "?")
-    tier = tier_of(judge)
+    judges = sorted({r.get("judge", "?") for r in rows})
     datasets = sorted({dataset_of(r["scene_id"]) for r in rows})
     today = datetime.date.today().isoformat()
+
+    if len(judges) == 1:
+        judge = judges[0]
+        tier = tier_of(judge)
+        judge_line = (f"- judge: `{judge}`  |  tier: **{tier}**"
+                      + ("  (ranking only, not reported effect sizes)" if tier == "screening" else ""))
+    else:
+        # Directory mixes judges (e.g. a headline subset re-judged by Gemini, then a
+        # coverage-gap fill run with the default screening judge on newly-added reps).
+        # A single global tier would be true for some cells and false for others --
+        # naming rows[0]'s judge as if it applied everywhere risks presenting a
+        # screening cell as confirmatory. Force the reader to the per-row column.
+        tiers = sorted({tier_of(j) for j in judges})
+        judge_line = (f"- judges: {', '.join(f'`{j}`' for j in judges)}  |  tiers: **{'/'.join(tiers)}** "
+                      "(MIXED -- judge varies by row; check the `judge` column in results.csv "
+                      "before citing any cell, never assume confirmatory)")
 
     lines = [
         f"# Evaluation report - {responder}",
         "",
-        f"- judge: `{judge}`  |  tier: **{tier}**"
-        + ("  (ranking only, not reported effect sizes)" if tier == "screening" else ""),
+        judge_line,
         f"- datasets: {', '.join(datasets)}  |  generated: {today}",
         "",
         "> Do NOT read an ALL/ALL grand mean. Every number below is within one "
