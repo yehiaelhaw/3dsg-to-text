@@ -112,7 +112,8 @@ def generate_responses(config: EvalConfig) -> Path:
                 # Skip cells this rep structurally cannot answer -- except the
                 # no-information control (inventory), which is deliberately posed
                 # the spatial questions it cannot answer so its prior-driven
-                # guessing forms the Axis-A floor (see METHODOLOGY 3.1.1). Without
+                # guessing forms the spatial-encoding floor (see METHODOLOGY 3.1.1).
+                # Without
                 # this exemption inventory is never scored on the spatial types and
                 # value_of_spatial_structure.png cannot populate.
                 if (config.scope_filter

@@ -10,11 +10,12 @@ It is also the structured half of the format axis: per room block, `topology` an
 connectivity and category inventory — rendered as labelled blocks here, prose
 sentences there. Two admitted departures keep the pair short of a pure syntax flip
 (prose states an explicit per-room object count, and on ProcTHOR adds an
-object-relation section), so read axis B on `connectivity` questions, where the
-twin part carries the answer. See the axis-B note in evaluation/axes.py.
+object-relation section), so read the format axis on `connectivity` questions,
+where the twin part carries the answer. See the format-axis note in
+evaluation/axes.py.
 
 The connectivity-only variant `topology_edges_only` (this parser minus the
-inventories) is the raw-adjacency pole of the structure-presentation axis (F).
+inventories) is the raw-adjacency pole of the structure-presentation axis.
 
 Runs only where a room connection graph (doors + open-plan passages) exists
 (ProcTHOR); refuses elsewhere (Gibson, 3RScan).

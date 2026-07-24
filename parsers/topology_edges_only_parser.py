@@ -6,10 +6,11 @@ order (degree desc, ties by id), same labels, same "connects to" blocks — the
 only difference from `topology` is the dropped inventory content.
 
 Axis role: the content-matched raw-adjacency pole of the structure-presentation
-axis (F). `room_tree` and `graph_digest` are deliberately connectivity-only, so
-the raw pole must be too — otherwise an axis-F delta could be caused by
-`topology`'s inventory content (distractor text + token load) rather than by
-how the same graph is presented. Full `topology` keeps its axis A/B roles; the
+axis. `room_tree` and `graph_digest` are deliberately connectivity-only, so
+the raw pole must be too — otherwise a structure-presentation delta could be caused
+by `topology`'s inventory content (distractor text + token load) rather than by
+how the same graph is presented. Full `topology` keeps its spatial-encoding and
+format roles; the
 side pair (`topology` vs `topology_edges_only`) additionally reads as a free
 does-irrelevant-content-hurt contrast on connectivity questions.
 

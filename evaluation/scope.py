@@ -35,7 +35,7 @@ from __future__ import annotations
 # The object-relation channel is split in three, because the five relations_*
 # views do NOT all carry the same granularity despite linearizing the same edge
 # set (relations_tree and relations_digest are lossy derived presentations, the
-# object-level analogs of graph_digest/room_tree on axis F):
+# object-level analogs of graph_digest/room_tree on the structure-presentation axis):
 #   - "object_relations_raw": every individual triple is stated (support,
 #     proximity, directional, comparative) -- arbitrary specific-pair lookups
 #     are answerable. relations_flat/subject/predicate carry this; relations_tree
@@ -59,8 +59,9 @@ from __future__ import annotations
 REP_CAPS: dict[str, set[str]] = {
     "inventory":        {"inventory"},
     "topology":         {"inventory", "connectivity"},
-    # topology minus the inventories: the content-matched raw-adjacency pole of
-    # axis F (room_tree/graph_digest are connectivity-only, so the raw pole is too).
+    # topology minus the inventories: the content-matched raw-adjacency pole of the
+    # structure-presentation axis (room_tree/graph_digest are connectivity-only, so
+    # the raw pole is too).
     "topology_edges_only": {"connectivity"},
     "graph_digest":     {"connectivity"},
     "room_tree":        {"connectivity"},
@@ -109,7 +110,7 @@ REP_CAPS: dict[str, set[str]] = {
     # scene_contexts/*/synthesis.txt regenerated for all 9 scenes 2026-07-14.
     # NB: `prose` still declares this channel without carrying the content --
     # left unchanged since it wasn't part of this correction and already-published
-    # axis-G numbers were computed under its current declaration.
+    # relation-linearization numbers were computed under its current declaration.
     "synthesis":        {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
 }

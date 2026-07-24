@@ -25,14 +25,15 @@ def _qa(scene_id: str) -> str:
 
 
 # ProcTHOR rep set (shared across its scenes for gradient comparability): the
-# explicit list adds the two orthogonal combos and pins the full Axis-F ladder
-# (topology_edges_only -> room_tree -> graph_digest; all connectivity-only, so
-# full topology's inventories can't masquerade as a presentation effect).
-# relations_* are deliberately excluded
-# -- Axis G is near-trivial on ProcTHOR's on-forest (the G deep-dive lives on
-# 3RScan). metric_relations_full (the Axis-C exhaustive pole) is retired: the
-# axis was near-null (-0.043) and half its questions were circular (only the
-# exhaustive pole could answer the farthest-pair facts it was scored on).
+# explicit list adds the two orthogonal combos and pins the full structure-
+# presentation ladder (topology_edges_only -> room_tree -> graph_digest; all
+# connectivity-only, so full topology's inventories can't masquerade as a
+# presentation effect). relations_* are deliberately excluded
+# -- relation linearization is near-trivial on ProcTHOR's on-forest (its deep-dive
+# lives on 3RScan). metric_relations_full (the retracted density axis's exhaustive
+# pole) is retired: the axis was near-null (-0.043) and half its questions were
+# circular (only the exhaustive pole could answer the farthest-pair facts it was
+# scored on).
 _PROCTHOR_REPS = [
     "inventory", "topology", "topology_edges_only", "room_tree", "graph_digest",
     "prose", "metric_relations", "navigation", "json", "synthesis",
@@ -41,19 +42,22 @@ _PROCTHOR_REPS = [
 
 
 SCENES: list[Scene] = [
-    # ProcTHOR (axes A/B/F). Three 10-room trees (all connectivity graphs are trees).
+    # ProcTHOR (spatial-encoding / format / structure-presentation axes). Three
+    # 10-room trees (all connectivity graphs are trees).
     Scene("procthor_train1", _qa("procthor_train1"), _PROCTHOR_REPS),
     Scene("procthor_train232", _qa("procthor_train232"), _PROCTHOR_REPS),
     Scene("procthor_train314", _qa("procthor_train314"), _PROCTHOR_REPS),
 
-    # 3RScan (axis G): auto-discover the 9 single files. No combos -- concatenating
-    # two relations_* views would mix poles of the same axis. The trio spans the
+    # 3RScan (relation-linearization axis): auto-discover the 9 single files. No
+    # combos -- concatenating two relations_* views would mix poles of the same
+    # axis. The trio spans the
     # density gradient (02b33dfb 355 rels < d7d40d62 < 7f30f36c 3971 rels).
     Scene("3rscan_02b33dfb", _qa("3rscan_02b33dfb"), None),
     Scene("3rscan_d7d40d62", _qa("3rscan_d7d40d62"), None),
     Scene("3rscan_7f30f36c", _qa("3rscan_7f30f36c"), None),
 
-    # Gibson (axes A/D): auto-discover the 6 single files. No door graph, so no
+    # Gibson (spatial-encoding / reference-frame axes): auto-discover the 6 single
+    # files. No door graph, so no
     # orthogonal channel to cross with the metric views -> no combos. The trio
     # spans a floor-area gradient (Brinnon 35 rooms > Thrall > Donaldson 27).
     Scene("Brinnon", _qa("Brinnon"), None),

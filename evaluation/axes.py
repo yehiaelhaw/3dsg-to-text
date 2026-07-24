@@ -49,7 +49,10 @@ MIN_COVERAGE = 0.80
 
 @dataclass(frozen=True)
 class Axis:
-    id: str                       # "A", "B", ...
+    id: str                       # descriptive slug ("spatial_encoding", ...): the
+                                  # machine key for filenames (axis_card_<id>.png) and
+                                  # AXIS_BY_ID. Axes are named, not lettered -- there is
+                                  # no A/B/D/F/G scheme (and thus no confusing C/E gap).
     label: str                    # short human label
     host: str                     # primary host dataset (procthor | 3rscan | gibson)
     ladder: list[str]             # reps in rung/ladder order (poles; floor/ceiling
@@ -60,45 +63,48 @@ class Axis:
     note: str = ""                # caveat surfaced in the card
 
 
-# The order/content mirrors METHODOLOGY 1 and AXIS_CONTRAST. Axis C and E are
-# retracted (see those docs) and intentionally absent. Axis A is a ladder, not a
-# single contrast pair, so it carries no headline_pair (its result is read as lift
+# The order/content mirrors METHODOLOGY 1 and AXIS_CONTRAST. The retracted density
+# and source-fidelity axes (see those docs) are intentionally absent -- with named
+# axes there is no letter gap to explain. The spatial-encoding axis is a ladder, not
+# a single contrast pair, so it carries no headline_pair (its result is read as lift
 # over the floor / where the peak sits, not a two-pole delta).
 AXES: list[Axis] = [
-    Axis("A", "Spatial encoding", "procthor",
+    Axis("spatial_encoding", "Spatial encoding", "procthor",
          ["inventory", "topology", "metric_relations", "json"],
          ["connectivity", "proximity", "direction"],
          note="ladder is per-type: only in-scope rungs are drawn; inventory is the "
-              "spatial-prior floor, not a competitor. See Axis A2 for the Gibson "
-              "metric-rung companion card (axis cards are single-host)."),
-    Axis("A2", "Spatial encoding (metric rung)", "gibson",
+              "spatial-prior floor, not a competitor. See the Spatial encoding "
+              "(metric rung) card for the Gibson metric-rung companion (axis cards "
+              "are single-host)."),
+    Axis("metric_rung", "Spatial encoding (metric rung)", "gibson",
          ["metric_relations"],
          ["proximity"],
-         note="Gibson companion to Axis A: the cleanest metric-rung exhibit in the "
-              "study (no CI overlap vs json) lives on this host, not ProcTHOR, so it "
-              "needs its own card rather than being folded into Axis A."),
-    Axis("B", "Format", "procthor",
+         note="Gibson companion to the spatial-encoding axis: the cleanest metric-rung "
+              "exhibit in the study (no CI overlap vs json) lives on this host, not "
+              "ProcTHOR, so it needs its own card rather than being folded into the "
+              "main spatial-encoding card."),
+    Axis("format", "Format", "procthor",
          ["topology", "prose"],
          ["connectivity"],
          headline_pair=("topology", "prose"),
          note="prose is a content superset of topology (adds the object-relation "
               "section) -- not a pure syntax flip; account for the extra content."),
-    Axis("D", "Reference frame", "gibson",
+    Axis("reference_frame", "Reference frame", "gibson",
          ["metric_relations", "navigation"],
          ["direction", "route"],
          headline_pair=("metric_relations", "navigation"),
          note="pure-frame isolation only on Gibson; on ProcTHOR navigation also "
               "restricts to doorway moves, so it fuses connectivity (coverage view)."),
-    Axis("F", "Structure presentation", "procthor",
+    Axis("structure_presentation", "Structure presentation", "procthor",
          ["topology_edges_only", "room_tree", "graph_digest"],
          ["connectivity"],
          headline_pair=("topology_edges_only", "graph_digest"),
          note="same door graph, three content-matched presentations (all "
               "connectivity-only): raw adjacency -> drawn tree -> derived "
-              "structure. Full topology (with inventories) stays on axes A/B; "
-              "topology vs topology_edges_only reads as a distractor-content "
-              "contrast, not part of this ladder."),
-    Axis("G", "Relation linearization", "3rscan",
+              "structure. Full topology (with inventories) stays on the spatial-"
+              "encoding/format axes; topology vs topology_edges_only reads as a "
+              "distractor-content contrast, not part of this ladder."),
+    Axis("relation_linearization", "Relation linearization", "3rscan",
          ["relations_flat", "relations_subject", "relations_predicate",
           "relations_tree", "relations_digest"],
          ["object_relation", "relation_structure", "relation_aggregate"],
@@ -107,16 +113,17 @@ AXES: list[Axis] = [
               "(near-trivial on ProcTHOR's on-forest). relations_tree/relations_digest "
               "are lossy derived presentations (narrower scope.py channels), so "
               "object_relation/relation_structure/relation_aggregate are read as one "
-              "axis-G probe family, not three separate axes."),
+              "relation-linearization probe family, not three separate axes."),
 ]
 
 AXIS_BY_ID = {a.id: a for a in AXES}
 
 # Re-derived for plots.axis_contrasts (paired per-question AC delta). Each entry is
-# (label, first_pole, second_pole); only axes with a headline_pair contribute (A is
-# a ladder). plots.py imports this rather than maintaining its own copy.
+# (label, first_pole, second_pole); only axes with a headline_pair contribute (the
+# spatial-encoding axis is a ladder, so it has none). plots.py imports this rather
+# than maintaining its own copy.
 AXIS_PAIRS = [
-    (f"{a.id} {a.label}", a.headline_pair[0], a.headline_pair[1])
+    (a.label, a.headline_pair[0], a.headline_pair[1])
     for a in AXES if a.headline_pair
 ]
 

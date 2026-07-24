@@ -169,7 +169,7 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
         body.append("")
     if not body:
         return []
-    return [f"## Axis {axis.id} - {axis.label}", f"_{axis.note}_", ""] + body
+    return [f"## {axis.label}", f"_{axis.note}_", ""] + body
 
 
 def _planning_section(rows: list[dict]) -> list[str]:

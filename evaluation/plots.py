@@ -13,11 +13,13 @@ masked, so new parsers/types are shown until their scope is declared here.
 Charts produced
 ---------------
 plot_aggregate (reads results.csv + aggregate.csv):
-  axis_card_<id>.png           one figure per axis in evaluation.axes.AXES (A/A2/B/D/F/G)
+  axis_card_<id>.png           one figure per axis in evaluation.axes.AXES (named,
+                               e.g. axis_card_spatial_encoding.png)
   ac_by_axis.png               AC per question type, in-scope reps, bars+std+dots
-  value_of_spatial_structure.png  AC lift over the inventory floor (Axis-A result)
+  value_of_spatial_structure.png  AC lift over the inventory floor (spatial-encoding result)
   ac_heatmap.png               rep x type mean-AC matrix, out-of-scope cells greyed
-  axis_contrasts.png           paired per-question AC delta for axes B/D/F/G (evaluation.axes.AXIS_PAIRS)
+  axis_contrasts.png           paired per-question AC delta for each axis with a
+                               headline pair (evaluation.axes.AXIS_PAIRS)
 plot_per_question (reads results.csv):
   cost_quality.png             mean AC vs mean prompt tokens, with efficiency frontier
   faith_vs_ac.png              per-observation guess detector (only if faithfulness on)
@@ -41,9 +43,9 @@ from evaluation.core import is_context_exceeded
 #
 # AXIS_PAIRS (the same-information contrast pairs for axis_contrasts.png) is now
 # derived in axes.py from the AXES registry; each delta is averaged only over
-# question types where *both* poles are in scope. Axis A is a ladder (covered by
-# axis_cards / value_of_spatial_structure), so it contributes no pair. Retracted
-# axes C/E are absent there. A pair whose poles are absent from a scene draws no bar.
+# question types where *both* poles are in scope. The spatial-encoding axis is a
+# ladder (covered by axis_cards / value_of_spatial_structure), so it contributes no
+# pair. A pair whose poles are absent from a scene draws no bar.
 from evaluation.scope import in_scope as _in_scope
 from evaluation.axes import (
     AXES, AXIS_PAIRS, CEILING, FLOOR, SMALL_N, dataset_of, rep_role,
@@ -105,21 +107,21 @@ def _per_qid_ac(results_path: Path):
 # Stable per-rep colours, reused across every chart so a representation keeps the
 # same colour in all figures (lets a thesis reader cross-reference). Grouped by
 # axis family: grey control, blue connectivity/structure, green metric/frame,
-# warm relations (axis G), purple/black prose+json ceiling, magenta combos.
+# warm relations (relation linearization), purple/black prose+json ceiling, magenta combos.
 # tab10 carries only 10 hues, so the old resampling collapsed the 16-rep set into
 # duplicates; a fixed map avoids that and stays stable as reps come and go.
 REP_COLORS: dict[str, str] = {
     "inventory":                     "#9e9e9e",  # control / floor
     "json":                          "#1f1f1f",  # raw-coordinate ceiling
     "prose":                         "#6a3d9a",  # natural language
-    # connectivity / structure (axis A connectivity, F)
+    # connectivity / structure (spatial-encoding connectivity, structure presentation)
     "topology":                      "#1f78b4",
     "room_tree":                     "#a6cee3",
     "graph_digest":                  "#08519c",
-    # metric / frame (axis A metric, D)
+    # metric / frame (spatial-encoding metric, reference frame)
     "metric_relations":              "#33a02c",
     "navigation":                    "#00bcd4",
-    # object relations (axis G)
+    # object relations (relation linearization)
     "relations_flat":                "#e31a1c",
     "relations_predicate":           "#ff7f00",
     "relations_subject":             "#b15928",
@@ -218,7 +220,7 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
             ax.grid(axis="y", linestyle="--", alpha=0.3)
             if gi == 0:
                 ax.set_ylabel("Answer correctness")
-        fig.suptitle(f"Axis {axis.id} - {axis.label}   (host: {axis.host}; "
+        fig.suptitle(f"{axis.label}   (host: {axis.host}; "
                      f"floor=dashed, json=dotted, hatch = n<{SMALL_N})", fontsize=11)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
         stem = f"axis_card_{axis.id}.png"
@@ -393,7 +395,8 @@ def plot_aggregate(aggregate_path: Path) -> None:
         plt.close(fig)
         print(f"plot -> {out_dir / 'ac_heatmap.png'}")
 
-    # -- Chart 4: axis-contrast paired deltas (B/D/E/F isolation) --
+    # -- Chart 4: axis-contrast paired deltas (headline-pair axes: format,
+    #    reference frame, structure presentation, relation linearization) --
     # For each axis pair, the per-question AC delta (second pole minus first),
     # over questions where *both* poles are in scope. Bar = mean, whisker = ±1
     # population std, dots = per question. >0 means the second pole scored higher.
