@@ -15,7 +15,7 @@ _AGGREGATE_COLUMNS = [
     "representation", "question_type",
     "n", "error_count", "context_exceeded", "n_scored", "coverage",
     "faithfulness_mean", "faithfulness_std",
-    "answer_correctness_mean", "answer_correctness_std", "answer_correctness_ci95",
+    "answer_correctness_mean", "answer_correctness_std", "answer_correctness_q_range",
     # Diagnostic (supporting-detail coverage, not correctness). n_detail is its OWN
     # support -- sparser than n_scored, since only questions with weight<=1 facts
     # contribute -- so it is never averaged against the primary AC.
@@ -210,13 +210,15 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
         # population. A single value has spread 0.0; no values -> blank.
         return f"{statistics.pstdev(vals):.4f}" if vals else ""
 
-    def clustered_ci95_of(metric: str) -> str:
-        # Coarse precision cue, clustered by question: repetitions of one question
-        # are stochastic re-draws, not independent new evidence, so the CI is
-        # 1.96 * sample-std / sqrt(k) over the k per-question means (the same
-        # per-question points plots.py draws), never over pooled question x
-        # repetition rows. Still wide and unreliable at this study's small k --
-        # a display aid, not an inferential claim. Read alongside n, never alone.
+    def q_range_of(metric: str) -> str:
+        # Descriptive min-max spread over the k per-question means (the same
+        # per-question points plots.py draws), clustered by question because
+        # repetitions of one question are stochastic re-draws, not independent
+        # new evidence. Deliberately a RANGE and not a confidence interval: at
+        # this study's k an interval would imply a precision the design cannot
+        # support, and interval overlap is never a tie rule (thesis 4.6).
+        # Separation between two representations is decided by the paired
+        # scene-level table in report.py, never from this column.
         # (Keyed by (question, representation) so the never-read ALL row does not
         # pool one question's cells across representations into one cluster.)
         by_q: dict[tuple[str, str], list[float]] = {}
@@ -228,7 +230,7 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
         means = [statistics.mean(v) for v in by_q.values()]
         if len(means) < 2:
             return ""
-        return f"{1.96 * statistics.stdev(means) / (len(means) ** 0.5):.4f}"
+        return f"{min(means):.4f}..{max(means):.4f}"
 
     fth = vals_of("faithfulness")
     ac  = vals_of("answer_correctness")
@@ -254,7 +256,7 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
         "faithfulness_std":        std_of(fth),
         "answer_correctness_mean": mean_of(ac),
         "answer_correctness_std":  std_of(ac),
-        "answer_correctness_ci95": clustered_ci95_of("answer_correctness"),
+        "answer_correctness_q_range": q_range_of("answer_correctness"),
         "answer_correctness_detail_mean": mean_of(det),
         "answer_correctness_detail_std":  std_of(det),
         "n_detail":                       len(det),
