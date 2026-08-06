@@ -3,6 +3,7 @@ dataset/
 .env
 .vscode/
 experiments/results/
+experiments/results_smoke/
 scene_contexts/
 scripts/
 docs/
