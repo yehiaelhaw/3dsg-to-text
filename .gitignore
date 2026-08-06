@@ -5,6 +5,6 @@ dataset/
 experiments/results/
 experiments/results_smoke/
 scene_contexts/
-scripts/
-docs/
-logs/
+/scripts/
+/docs/
+/logs/
