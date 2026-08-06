@@ -171,7 +171,9 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
     is a readable x-tick label; the y-axis starts at 0. Restricted to the axis's
     host dataset (never pooled) and its probe types; combos/synthesis are excluded
     (they answer a different question -- see report.md). Bars hatch when n < SMALL_N
-    (screening-only); whisker = +/-CI95; dots = per-question means. Returns the
+    (screening-only); whisker = min-max range of the per-question means (a
+    descriptive spread, NOT an interval -- overlap is never a tie rule, see
+    thesis 4.6 and report.py's paired table); dots = per-question means. Returns the
     figure stems written, so the caller can clean up any axis that lost its data.
     """
     import matplotlib.pyplot as plt
@@ -200,12 +202,13 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
             for xi, rep in enumerate(reps):
                 vals = points[(qt, rep)]
                 m = statistics.mean(vals)
-                ci = 1.96 * statistics.stdev(vals) / (len(vals) ** 0.5) if len(vals) > 1 else 0.0
                 small = len(vals) < SMALL_N
                 ax.bar(xi, m, 0.72, color=color.get(rep, "grey"), alpha=0.85,
                        hatch="//" if small else None,
                        edgecolor="black" if small else "none", linewidth=0.4, zorder=2)
-                lo, hi = max(0.0, m - ci), min(1.0, m + ci)
+                # Descriptive min-max spread of the per-question means, not an
+                # interval estimate: two of these overlapping means nothing.
+                lo, hi = (min(vals), max(vals)) if len(vals) > 1 else (m, m)
                 ax.errorbar(xi, m, yerr=[[m - lo], [hi - m]], fmt="none",
                             color="black", capsize=2, linewidth=0.8, zorder=3)
                 jit = rng.uniform(-0.16, 0.16, len(vals))
@@ -461,81 +464,119 @@ def plot_per_question(results_path: Path) -> None:
     rng = np.random.default_rng(42)
 
     # -- Cost vs Quality: accuracy per prompt token (the operational trade-off) --
-    # x = mean prompt tokens (context size = serialization overhead), y = mean AC,
-    # one point per rep over its *in-scope* cells (the floor's out-of-scope
-    # guessing is excluded so it isn't penalised for questions it isn't meant to
-    # answer). The dashed line is the efficiency frontier (no rep is both cheaper
-    # and more accurate than a point on it) -- this is where the combo-vs-json
+    # One PANEL PER QUESTION TYPE, and one figure per host dataset. The y-axis must
+    # never pool AC across question types: that is the `ALL` row the reporting rules
+    # forbid quoting (thesis 4.6), and it averages across exactly the boundaries the
+    # axis design exists to hold apart -- a single pooled point per rep silently
+    # ranks a rep that is strong on connectivity against one strong on set_logic.
+    # The x-axis IS legitimately pooled: the representation is the same serialized
+    # file whatever question is asked of it, so its token cost does not vary by type.
+    # Within a panel: the dashed line is the efficiency frontier (no rep is both
+    # cheaper and more accurate than a point on it) -- where the combo-vs-json
     # ceiling question is read: same AC, far fewer tokens = the combo wins.
-    by_rep_ac: dict[str, list[float]] = collections.defaultdict(list)
-    by_rep_tok: dict[str, list[float]] = collections.defaultdict(list)
-    for r in rows:
-        rep = r["representation"]
-        qt = r["question_type"] or "unknown"
-        if not _in_scope(rep, qt):
-            continue
-        if r["answer_correctness"] != "":
-            by_rep_ac[rep].append(float(r["answer_correctness"]))
-        tok = r.get("prompt_tokens", "")
-        if tok not in ("", "0", None):
-            try:
-                by_rep_tok[rep].append(float(tok))
-            except ValueError:
-                pass
-    # Coverage per rep (1 - context_exceeded rate) from the *unfiltered* rows: a
-    # rep whose AC mean rests on few survivors (json overflowing dense scenes) is
-    # survivorship-biased, so its marker is shrunk and its cov% annotated -- the
-    # AC alone would read as a clean point otherwise.
-    exc: dict = collections.defaultdict(int)
-    tot: dict = collections.defaultdict(int)
-    for r in csv.DictReader(results_path.open(encoding="utf-8")):
-        tot[r["representation"]] += 1
-        if is_context_exceeded(r["error"]):
-            exc[r["representation"]] += 1
-    cov = {rep: (1 - exc[rep] / tot[rep]) if tot[rep] else 1.0 for rep in tot}
-
-    cq_reps = [rep for rep in by_rep_ac if by_rep_tok.get(rep)]
-    if cq_reps:
-        xy = {rep: (statistics.mean(by_rep_tok[rep]), statistics.mean(by_rep_ac[rep]))
-              for rep in cq_reps}
-        # Pareto frontier: minimise tokens, maximise AC.
-        frontier = [rep for rep in xy if not any(
-            o != rep and xy[o][0] <= xy[rep][0] and xy[o][1] >= xy[rep][1]
-            and (xy[o][0] < xy[rep][0] or xy[o][1] > xy[rep][1]) for o in xy)]
-        frontier.sort(key=lambda rep: xy[rep][0])
-        fig, ax = plt.subplots(figsize=(8, 6))
-        if len(frontier) > 1:
-            ax.plot([xy[r][0] for r in frontier], [xy[r][1] for r in frontier],
-                    color="gray", linestyle="--", linewidth=1, zorder=2,
-                    label="efficiency frontier")
-        for rep in cq_reps:
-            x, y = xy[rep]
-            c = cov.get(rep, 1.0)
-            ax.scatter(x, y, color=colors.get(rep, "gray"), s=40 + 90 * c,
-                       edgecolor="red" if c < 0.8 else "black",
-                       linewidth=1.4 if c < 0.8 else 0.5, zorder=3)
-            tag = rep if c > 0.999 else f"{rep} (cov {c * 100:.0f}%)"
-            ax.annotate(tag, (x, y), textcoords="offset points", xytext=(6, 4), fontsize=8)
-        ax.set_xlabel("Mean prompt tokens  (context size -> serialization overhead)")
-        ax.set_ylabel("Mean answer correctness  (in-scope, surviving cells)")
-        ax.set_title("Cost vs Quality", fontsize=12)
-        # keep the explanation off the title (it overran the frame); footnote in the
-        # empty lower-left so it clears the right-hand (often json) markers
-        ax.text(0.01, 0.01,
-                "upper-left = more accuracy per token\nmarker shrinks + red edge as coverage drops",
-                transform=ax.transAxes, ha="left", va="bottom", fontsize=7, color="gray")
-        ax.grid(linestyle="--", alpha=0.4)
-        if len(frontier) > 1:
-            ax.legend(fontsize=8)
-        fig.tight_layout()
-        fig.savefig(out_dir / "cost_quality.png", dpi=150)
-        plt.close(fig)
-        print(f"plot -> {out_dir / 'cost_quality.png'}")
-    else:
-        # No token data recorded (some backends omit it) -> drop any stale chart.
-        stale = out_dir / "cost_quality.png"
+    #
+    # Coverage per rep (1 - context_exceeded rate) comes from the *unfiltered* rows:
+    # a rep whose AC rests on few survivors (json overflowing dense scenes) is
+    # survivorship-biased, so its marker is shrunk and its cov% annotated -- the AC
+    # alone would read as a clean point otherwise.
+    all_rows = list(csv.DictReader(results_path.open(encoding="utf-8")))
+    for stale_name in ("cost_quality.png",):   # pooled-AC predecessor of this chart
+        stale = out_dir / stale_name
         if stale.exists():
             stale.unlink()
+
+    datasets = sorted({dataset_of(r["scene_id"]) for r in rows})
+    written_cq: set[str] = set()
+    for ds in datasets:
+        ds_rows = [r for r in rows if dataset_of(r["scene_id"]) == ds]
+        # tokens: pooled per rep within the host (same file for every question)
+        by_rep_tok: dict[str, list[float]] = collections.defaultdict(list)
+        # AC: kept separate per question type -- never pooled
+        by_qt_rep_ac: dict[str, dict[str, list[float]]] = collections.defaultdict(
+            lambda: collections.defaultdict(list))
+        for r in ds_rows:
+            rep = r["representation"]
+            qt = r["question_type"] or "unknown"
+            if not _in_scope(rep, qt):
+                continue
+            if r["answer_correctness"] != "":
+                by_qt_rep_ac[qt][rep].append(float(r["answer_correctness"]))
+            tok = r.get("prompt_tokens", "")
+            if tok not in ("", "0", None):
+                try:
+                    by_rep_tok[rep].append(float(tok))
+                except ValueError:
+                    pass
+
+        exc: dict = collections.defaultdict(int)
+        tot: dict = collections.defaultdict(int)
+        for r in all_rows:
+            if dataset_of(r["scene_id"]) != ds:
+                continue
+            tot[r["representation"]] += 1
+            if is_context_exceeded(r["error"]):
+                exc[r["representation"]] += 1
+        cov = {rep: (1 - exc[rep] / tot[rep]) if tot[rep] else 1.0 for rep in tot}
+
+        qts = sorted(qt for qt in by_qt_rep_ac
+                     if any(by_rep_tok.get(rep) for rep in by_qt_rep_ac[qt]))
+        if not qts:
+            continue   # no token data recorded (some backends omit it)
+
+        ncols = min(3, len(qts))
+        nrows = (len(qts) + ncols - 1) // ncols
+        fig, axes = plt.subplots(nrows, ncols, figsize=(5.0 * ncols, 4.2 * nrows),
+                                 squeeze=False)
+        for idx, qt in enumerate(qts):
+            ax = axes[idx // ncols][idx % ncols]
+            reps = [rep for rep in by_qt_rep_ac[qt] if by_rep_tok.get(rep)]
+            xy = {rep: (statistics.mean(by_rep_tok[rep]),
+                        statistics.mean(by_qt_rep_ac[qt][rep])) for rep in reps}
+            # Pareto frontier: minimise tokens, maximise AC.
+            frontier = [rep for rep in xy if not any(
+                o != rep and xy[o][0] <= xy[rep][0] and xy[o][1] >= xy[rep][1]
+                and (xy[o][0] < xy[rep][0] or xy[o][1] > xy[rep][1]) for o in xy)]
+            frontier.sort(key=lambda rep: xy[rep][0])
+            if len(frontier) > 1:
+                ax.plot([xy[r][0] for r in frontier], [xy[r][1] for r in frontier],
+                        color="gray", linestyle="--", linewidth=1, zorder=2,
+                        label="efficiency frontier")
+            for rep in reps:
+                x, y = xy[rep]
+                c = cov.get(rep, 1.0)
+                ax.scatter(x, y, color=colors.get(rep, "gray"), s=40 + 90 * c,
+                           edgecolor="red" if c < 0.8 else "black",
+                           linewidth=1.4 if c < 0.8 else 0.5, zorder=3)
+                tag = rep if c > 0.999 else f"{rep} (cov {c * 100:.0f}%)"
+                ax.annotate(tag, (x, y), textcoords="offset points",
+                            xytext=(6, 4), fontsize=7)
+            ax.set_title(qt, fontsize=10)
+            ax.set_ylim(-0.05, 1.05)
+            ax.grid(linestyle="--", alpha=0.4)
+            if len(frontier) > 1:
+                ax.legend(fontsize=7)
+        for idx in range(len(qts), nrows * ncols):
+            axes[idx // ncols][idx % ncols].axis("off")
+
+        fig.supxlabel("Mean prompt tokens  (context size -> serialization overhead; "
+                      "same file for every question type)", fontsize=9)
+        fig.supylabel("Mean answer correctness  (in-scope, surviving cells)", fontsize=9)
+        fig.suptitle(f"Cost vs Quality by question type - host: {ds}", fontsize=12)
+        fig.text(0.01, 0.005,
+                 "upper-left = more accuracy per token  |  marker shrinks + red edge as "
+                 "coverage drops  |  AC is never pooled across question types",
+                 ha="left", va="bottom", fontsize=7, color="gray")
+        fig.tight_layout(rect=(0.01, 0.02, 1, 0.97))
+        name = f"cost_quality_{ds}.png"
+        fig.savefig(out_dir / name, dpi=150)
+        plt.close(fig)
+        written_cq.add(name)
+        print(f"plot -> {out_dir / name}")
+
+    # drop per-host charts whose host lost its data since the last run
+    for p in out_dir.glob("cost_quality_*.png"):
+        if p.name not in written_cq:
+            p.unlink()
 
     # -- Faithfulness vs Answer Correctness: a guess / grounding diagnostic --
     # Only meaningful when faithfulness was computed (compute_faithfulness=True);
