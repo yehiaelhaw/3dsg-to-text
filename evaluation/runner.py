@@ -219,6 +219,7 @@ def _gen_dict(question, representation, repetition, responder_tag, *,
         "scene_id":          question.scene_id,
         "question_text":     question.text,
         "question_type":     question.question_type,
+        "question_style":    question.question_style,
         "key_facts":         [{"fact": kf.fact, "weight": kf.weight} for kf in question.key_facts],
         "representation":    representation,
         "repetition":        repetition,
@@ -351,6 +352,10 @@ def _score_one(rec: dict, config, judge, judge_tag, ctx_cache) -> EvalRecord:
         scene_id=rec["scene_id"],
         text=rec["question_text"],
         question_type=rec["question_type"],
+        # .get: caches written before question_style existed carry no such key, and a
+        # score_only re-judge must still read them (the tag is backfilled into
+        # results.csv separately by experiments/scripts/backfill_question_style.py).
+        question_style=rec.get("question_style"),
         key_facts=[KeyFact(fact=f["fact"], weight=f["weight"]) for f in rec.get("key_facts", [])],
     )
     response = Response(

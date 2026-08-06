@@ -39,6 +39,13 @@ class Question:
     scene_id:       str
     text:           str
     question_type:  Optional[str] = None
+    # `natural` where a user could have asked this without ever having seen a
+    # derived view's output, `constructed` where the concept mirrors that output's
+    # computed vocabulary. Only the types exposed to a derived pole carry it
+    # (connectivity + the 3RScan relation family); None elsewhere. This is what the
+    # vocabulary-coupling re-cut in report.py splits on -- the remedy the declared
+    # confound points at (thesis 4.5 / 4.6).
+    question_style: Optional[str] = None
     key_facts:      list[KeyFact] = field(default_factory=list)
 
 
@@ -90,6 +97,7 @@ class EvalRecord:
             "judge":            self.judge,
             "question_text":    self.question.text,
             "question_type":    self.question.question_type,
+            "question_style":   self.question.question_style,
             "raw_answer":       self.response.raw_answer,
             "latency_ms":       self.response.latency_ms,
             "prompt_tokens":    self.response.prompt_tokens,
@@ -103,7 +111,7 @@ class EvalRecord:
 CSV_COLUMNS = [
     "question_id", "scene_id", "representation", "repetition",
     "responder", "judge",
-    "question_type", "question_text",
+    "question_type", "question_style", "question_text",
     "raw_answer", "rubric_reasoning",
     "prompt_tokens", "completion_tokens",
     "faithfulness", "answer_correctness", "answer_correctness_detail",

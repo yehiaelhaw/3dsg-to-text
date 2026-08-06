@@ -41,6 +41,9 @@ def load(
 
             qt_raw = raw.get("question_type")
             question_type = qt_raw or None
+            # Only the types exposed to a derived pole are tagged; absent elsewhere
+            # by design, so a missing tag is not an error (see core.Question).
+            question_style = raw.get("question_style") or None
 
             try:
                 raw_facts = raw.get("key_facts")
@@ -63,6 +66,7 @@ def load(
                     scene_id=raw["scene_id"],
                     text=raw["text"],
                     question_type=question_type,
+                    question_style=question_style,
                     key_facts=key_facts,
                 ))
             except KeyError as exc:
