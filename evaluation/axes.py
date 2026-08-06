@@ -46,6 +46,39 @@ def rep_role(rep: str) -> str:
 SMALL_N = 6
 MIN_COVERAGE = 0.80
 
+# --- separation rule (thesis 4.6) -------------------------------------
+# Comparisons are PAIRED and the SCENE is the unit of replication: both members
+# of a pair are evaluated on the same scene-question instances, so they are
+# compared on their per-question difference, averaged within each host scene.
+# No confidence interval is computed and interval overlap is never a decision
+# rule -- at three scenes and a handful of questions per cell an interval would
+# imply a precision this design cannot support. Spreads are descriptive only.
+#
+# A pair is a CONSISTENT ADVANTAGE when the overall mean of the scene-level
+# differences clears PRACTICAL_MARGIN in absolute value, no scene runs against
+# that direction, and at least MIN_SCENES_SHOWING of them show it. A scene whose
+# difference is exactly zero does not contradict a direction, but neither does it
+# supply one -- hence two conditions rather than one.
+#
+# The margin is fixed for all comparisons and is deliberately coarser than the
+# granularity of one question's AC: a question carries 1-4 core facts, so a
+# single fact changing hands moves a small cell by more than a finer margin
+# would tolerate. It is NOT preregistered -- it was set once preliminary results
+# already existed -- so it lives here, applied uniformly to every regenerated
+# report, precisely so that no single pair can be graded under a margin picked
+# for it.
+PRACTICAL_MARGIN = 0.10
+MIN_SCENES_SHOWING = 2
+
+# Verdict vocabulary (thesis 4.6, Table 4.5). CAPPED_VERDICT is what a
+# declared confound downgrades an otherwise-consistent result to.
+VERDICT_CONSISTENT = "consistent advantage"
+VERDICT_DIRECTIONAL = "directional"
+VERDICT_MIXED = "mixed"
+VERDICT_NO_SEPARATION = "no practically meaningful separation"
+VERDICT_NOT_LICENSED = "not licensed"
+CAPPED_VERDICT = VERDICT_DIRECTIONAL
+
 
 @dataclass(frozen=True)
 class Axis:
@@ -61,6 +94,41 @@ class Axis:
     headline_pair: tuple[str, str] | None = None  # within-axis contrast for the
                                   # paired-delta chart; None = pure ladder, no pair
     note: str = ""                # caveat surfaced in the card
+    # A DECLARED confound (thesis 4.6): named in the design chapter, not
+    # discovered in the results, and it caps the verdict at CAPPED_VERDICT
+    # however consistent the scene values are. Empty string = none declared.
+    confound: str = ""
+    # Which reps the confound attaches to. Empty tuple = the whole axis (the
+    # format pair's content superset); otherwise only pairs touching one of
+    # these reps are capped (the derived poles' vocabulary coupling).
+    confound_reps: tuple[str, ...] = ()
+    # What KIND of confound, which decides whether the natural/constructed re-cut
+    # can resolve it. "vocabulary": the question's wording mirrors a derived pole's
+    # own printed output, so the `natural` subset -- questions a user could have
+    # asked without ever seeing that output -- is by construction uncoupled and the
+    # cap does not apply there. "content": one member simply carries more content
+    # than the other (prose superset of topology), which no question-style split
+    # addresses, so the cap stands on every subset. Only "vocabulary" axes are
+    # re-cut (thesis 4.6 / 6.7 name the two axes with a derived pole).
+    confound_kind: str = ""
+
+    def confound_for(self, rep_a: str, rep_b: str) -> str:
+        """The declared confound capping this pair's verdict, or "".
+
+        Only the axis's OWN contrast can be capped. A comparison against the
+        floor or the ceiling is an anchor comparison, not the design decision
+        this axis isolates, so neither the format pair's content superset nor a
+        derived pole's vocabulary coupling is a confound there.
+        """
+        if not self.confound:
+            return ""
+        if FLOOR in (rep_a, rep_b) or CEILING in (rep_a, rep_b):
+            return ""
+        if not self.confound_reps:
+            return self.confound
+        if rep_a in self.confound_reps or rep_b in self.confound_reps:
+            return self.confound
+        return ""
 
 
 # The order/content mirrors METHODOLOGY 1 and AXIS_CONTRAST. The retracted density
@@ -80,15 +148,19 @@ AXES: list[Axis] = [
          ["metric_relations"],
          ["proximity"],
          note="Gibson companion to the spatial-encoding axis: the cleanest metric-rung "
-              "exhibit in the study (no CI overlap vs json) lives on this host, not "
-              "ProcTHOR, so it needs its own card rather than being folded into the "
-              "main spatial-encoding card."),
+              "exhibit in the study lives on this host, not ProcTHOR (a consistent "
+              "advantage over json across all three scenes), so it needs its own card "
+              "rather than being folded into the main spatial-encoding card."),
     Axis("format", "Format", "procthor",
          ["topology", "prose"],
          ["connectivity"],
          headline_pair=("topology", "prose"),
          note="prose is a content superset of topology (adds the object-relation "
-              "section) -- not a pure syntax flip; account for the extra content."),
+              "section) -- not a pure syntax flip; account for the extra content.",
+         confound="prose is a content superset of topology, so the pair is not a "
+                  "pure format flip",
+         confound_reps=("prose",),
+         confound_kind="content"),
     Axis("reference_frame", "Reference frame", "gibson",
          ["metric_relations", "navigation"],
          ["direction", "route"],
@@ -103,7 +175,11 @@ AXES: list[Axis] = [
               "connectivity-only): raw adjacency -> drawn tree -> derived "
               "structure. Full topology (with inventories) stays on the spatial-"
               "encoding/format axes; topology vs topology_edges_only reads as a "
-              "distractor-content contrast, not part of this ladder."),
+              "distractor-content contrast, not part of this ladder.",
+         confound="question vocabulary mirrors graph_digest's own computed output "
+                  "(hub / bottleneck); read the natural/constructed re-cut",
+         confound_reps=("graph_digest",),
+         confound_kind="vocabulary"),
     Axis("relation_linearization", "Relation linearization", "3rscan",
          ["relations_flat", "relations_subject", "relations_predicate",
           "relations_tree", "relations_digest"],
@@ -113,7 +189,11 @@ AXES: list[Axis] = [
               "(near-trivial on ProcTHOR's on-forest). relations_tree/relations_digest "
               "are lossy derived presentations (narrower scope.py channels), so "
               "object_relation/relation_structure/relation_aggregate are read as one "
-              "relation-linearization probe family, not three separate axes."),
+              "relation-linearization probe family, not three separate axes.",
+         confound="question vocabulary mirrors relations_digest's own computed "
+                  "output (chain depth / clusters); read the natural/constructed re-cut",
+         confound_reps=("relations_digest",),
+         confound_kind="vocabulary"),
 ]
 
 AXIS_BY_ID = {a.id: a for a in AXES}

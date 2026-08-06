@@ -2,11 +2,12 @@
 
 The charts (`plots.py`) are the visual layer; this is the layer for the facts a
 chart cannot legibly carry: coverage / rank-eligibility (the context_exceeded
-survivorship trap), the small-n register, and per-cell n + CI. It is regenerated
+survivorship trap), the small-n register, per-cell n, and the paired scene-level
+separation table that decides every axis verdict. It is regenerated
 from `results.csv` on every run/aggregation alongside the PNGs, so it never goes
 stale, and it is the seed for publication tables at thesis-writing time.
 
-Design rules enforced here (see METHODOLOGY 3.5):
+Design rules enforced here (thesis 4.6 `sec:meth-analysis`; METHODOLOGY 3.5/3.7):
 - No `ALL/ALL` grand mean is ever surfaced; every number is within one question
   type, and axis cards are within one host dataset (no cross-dataset pooling).
 - Axis cards are floor/ceiling-anchored and ladder-ordered (evaluation/axes.py).
@@ -16,12 +17,18 @@ Design rules enforced here (see METHODOLOGY 3.5):
 - Combos and the `synthesis` candidate get their own tables, never mixed into a
   pole card.
 
-These are descriptive *display* statistics over the same per-cell AC values and
-the same grouping as `results._group_row` -- no new analysis. CI95 = 1.96*s/sqrt(k)
-over the k per-question means (clustered by question -- repetitions are stochastic
-re-draws, not independent items, so pooling question x repetition would overstate
-precision); a coarse precision cue, wide and unreliable at the small k this study
-runs at.
+The per-cell tables are descriptive *display* statistics over the same per-cell AC
+values and the same grouping as `results._group_row` -- no new analysis. The
+spread printed beside each mean is the min-max RANGE over the k per-question
+means: descriptive only, never an interval estimate. No confidence interval is
+computed anywhere and interval overlap is never used as a decision rule (see
+thesis 4.6) -- at three scenes and a handful of questions per cell an
+interval would imply a precision this design cannot support.
+
+Separation between two representations is decided in `_paired_section` instead,
+which is the actual analysis: paired per-question differences, averaged within
+each host scene, judged against a pre-declared practical margin with a
+consistency requirement across scenes (evaluation/axes.py).
 """
 
 from __future__ import annotations
@@ -29,13 +36,15 @@ from __future__ import annotations
 import collections
 import csv
 import datetime
-import math
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
 from evaluation.axes import (
-    AXES, CANDIDATE, CEILING, FLOOR, MIN_COVERAGE, SMALL_N,
+    AXES, AXIS_BY_ID, CANDIDATE, CAPPED_VERDICT, CEILING, FLOOR, MIN_COVERAGE,
+    MIN_SCENES_SHOWING, PRACTICAL_MARGIN, SMALL_N,
+    VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
+    VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED,
     dataset_of, rep_role, tier_of,
 )
 from evaluation.core import is_context_exceeded
@@ -50,7 +59,10 @@ class Cell:
     context_exceeded: int
     n_scored: int
     ac_mean: float
-    ac_ci95: float
+    # Descriptive min-max spread over the k per-question means. NOT an interval
+    # estimate and never a decision rule -- separation is decided in
+    # `_paired_section`. (lo, hi); (0.0, 0.0) when there is nothing to spread.
+    ac_range: tuple[float, float]
     coverage: float
     tokens_mean: float | None
     # Diagnostic: supporting-detail coverage over its OWN support (cells with weight<=1
@@ -69,9 +81,9 @@ def _cell(rows: list[dict]) -> Cell:
     error_count = sum(1 for r in rows if r["error"] and not is_context_exceeded(r["error"]))
     ac = [float(r["answer_correctness"]) for r in rows
           if not r["error"] and r["answer_correctness"] not in ("", None)]
-    # CI clustered by question (repetitions of one question are not independent
-    # evidence): per-question means first, then 1.96*s/sqrt(k) over the k means --
-    # matching results._group_row and the per-question points in plots.py.
+    # Per-question means first (repetitions of one question are not independent
+    # evidence), then their min-max range -- matching the per-question points
+    # plots.py draws. A descriptive spread, not a precision estimate.
     ac_by_q: dict[str, list[float]] = collections.defaultdict(list)
     for r in rows:
         if not r["error"] and r["answer_correctness"] not in ("", None):
@@ -92,9 +104,9 @@ def _cell(rows: list[dict]) -> Cell:
             pass
     n_scored = n - error_count - context_exceeded
     ac_mean = statistics.mean(ac) if ac else 0.0
-    ac_ci95 = 1.96 * statistics.stdev(q_means) / math.sqrt(len(q_means)) if len(q_means) > 1 else 0.0
+    ac_range = (min(q_means), max(q_means)) if q_means else (0.0, 0.0)
     coverage = n_scored / n if n else 0.0
-    return Cell(n, error_count, context_exceeded, n_scored, ac_mean, ac_ci95,
+    return Cell(n, error_count, context_exceeded, n_scored, ac_mean, ac_range,
                 coverage, statistics.mean(toks) if toks else None,
                 statistics.mean(det) if det else None, len(det))
 
@@ -126,8 +138,23 @@ def _ac_str(c: Cell) -> str:
     return s
 
 
-def _ci_str(c: Cell) -> str:
-    return f"+/-{c.ac_ci95:.2f}" if c.n_scored > 1 else ""
+def _range_str(c: Cell) -> str:
+    """Descriptive min-max spread of the per-question means. Deliberately NOT an
+    interval: two of these overlapping means nothing, and overlap is never a tie
+    rule (thesis 4.6). Separation is read from the paired table."""
+    lo, hi = c.ac_range
+    return f"{lo:.2f}-{hi:.2f}" if c.n_scored > 1 else ""
+
+
+def _tok_str(p) -> str:
+    """Mean prompt tokens of the two members, in the comparison's own order
+    (`rep_b` vs `rep_a`), with b's share of a. This is what the cost rule of
+    thesis 4.6 is read from: a pair that does not separate on correctness while
+    differing sharply here is a result, not the absence of one."""
+    a, b = p.tokens_a, p.tokens_b
+    if not a or not b:
+        return "-"
+    return f"{b:.0f} vs {a:.0f} ({b / a:.2f}x)"
 
 
 def _axis_reps(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[str]:
@@ -163,9 +190,9 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
             dfloor = ("" if floor_ac is None or c.n_scored == 0
                       else f"{c.ac_mean - floor_ac:+.2f}")
             trows.append([rep, rep_role(rep), str(c.n), f"{c.coverage * 100:.0f}",
-                          _ac_str(c), _ci_str(c), dfloor])
+                          _ac_str(c), _range_str(c), dfloor])
         body.append(f"**{qt}** (host: {axis.host})")
-        body += _table(["rep", "role", "n", "cov%", "AC", "CI95", "vs floor"], trows)
+        body += _table(["rep", "role", "n", "cov%", "AC", "q-range", "vs floor"], trows)
         body.append("")
     if not body:
         return []
@@ -203,13 +230,324 @@ def _planning_section(rows: list[dict]) -> list[str]:
             dfloor = ("" if floor_ac is None or c.n_scored == 0
                       else f"{c.ac_mean - floor_ac:+.2f}")
             trows.append([rep, rep_role(rep), str(c.n), f"{c.coverage * 100:.0f}",
-                          _ac_str(c), _ci_str(c), dfloor])
+                          _ac_str(c), _range_str(c), dfloor])
         out += [f"## Planning / real-world utility (separate probe, host: {ds})",
                 "_Goal-framed questions: the model must infer the objects a goal needs, not be "
                 "handed them. Reported on its own -- not an axis pole, and never pooled across "
                 "datasets. inventory = floor, json = ceiling._", ""]
-        out += _table(["rep", "role", "n", "cov%", "AC", "CI95", "vs floor"], trows) + [""]
+        out += _table(["rep", "role", "n", "cov%", "AC", "q-range", "vs floor"], trows) + [""]
     return out
+
+
+# --- the separation analysis (thesis 4.6) -----------------------------
+# This is the only place a comparison between two representations is decided.
+# Everything above is display.
+
+@dataclass
+class Paired:
+    """One axis pair x question type, compared the way the design licenses.
+
+    `scene_deltas` maps scene_id -> the mean per-question AC difference
+    (rep_b - rep_a) over the questions BOTH members answered in that scene. The
+    scene is the unit of replication: questions are nested within scenes, so the
+    headline figure is the unweighted mean of the scene values, not a mean over
+    pooled questions (which would let a question-rich scene outvote the others).
+    """
+    axis_id: str
+    host: str
+    qt: str
+    rep_a: str                      # earlier rung / baseline
+    rep_b: str                      # later rung, or the ceiling
+    scene_deltas: dict[str, float]
+    n_questions: int                # paired questions summed across scenes
+    verdict: str
+    confound: str
+    capped: bool                    # the confound actually downgraded the grade
+    ineligible: str                 # why the gates failed, or ""
+    # Mean prompt tokens of each member, carried so the cost rule (thesis 4.6) is
+    # decided from the same row as the verdict: a pair that fails to separate on
+    # correctness while differing sharply in tokens is a result, and the cheaper
+    # member is reported as the more efficient alternative -- never as the winner.
+    tokens_a: float | None = None
+    tokens_b: float | None = None
+
+    @property
+    def mean(self) -> float:
+        v = list(self.scene_deltas.values())
+        return statistics.mean(v) if v else 0.0
+
+    @property
+    def spread(self) -> tuple[float, float]:
+        v = list(self.scene_deltas.values())
+        return (min(v), max(v)) if v else (0.0, 0.0)
+
+
+def _verdict(scene_deltas: dict[str, float], confound: str, ineligible: str) -> str:
+    """The verdict scale of thesis 4.6, Table 4.5.
+
+    A scene whose delta is exactly 0.0 does not contradict a direction, but
+    neither does it supply one -- which is why consistency needs both `no scene
+    reversed` and `at least MIN_SCENES_SHOWING showing`. The margin-met but
+    under-replicated case (e.g. +0.30 / 0.0 / 0.0) is graded down to directional:
+    the direction is not contradicted but two scenes do not attest it, and the
+    conservative grade is the one the design can carry.
+
+    MIXED is decided on the scene values, not on their mean. Testing the mean
+    alone made cancellation -- the *strongest* form of scene disagreement -- read
+    as a null: +0.143 / -0.222 / -0.214 averages to -0.098, lands under the
+    margin, and printed as `no practically meaningful separation` even though one
+    scene clears the margin one way and two clear it the other. That is the
+    opposite of what this verdict exists to say, so disagreement is now tested as
+    `some scene clears +margin AND some scene clears -margin`, reusing the same
+    declared margin rather than introducing a second threshold. A single scene
+    moving while the others sit flat (+0.000 / +0.053 / -0.250) is still not a
+    reversal and still grades as no separation.
+    """
+    if ineligible or not scene_deltas:
+        return VERDICT_NOT_LICENSED
+
+    vals = list(scene_deltas.values())
+    mean = statistics.mean(vals)
+    margin_met = abs(mean) >= PRACTICAL_MARGIN
+    direction = (mean > 0) - (mean < 0)          # +1 / -1 / 0
+    reversed_ = any((v > 0) - (v < 0) == -direction for v in vals) if direction else False
+    showing = sum(1 for v in vals if (v > 0) - (v < 0) == direction) if direction else 0
+    # Scenes disagree at the declared margin, whatever their mean does.
+    disagree = max(vals) >= PRACTICAL_MARGIN and min(vals) <= -PRACTICAL_MARGIN
+
+    if disagree:
+        return VERDICT_MIXED
+    if direction == 0:
+        return VERDICT_NO_SEPARATION
+    if reversed_:
+        return VERDICT_MIXED if margin_met else VERDICT_NO_SEPARATION
+    if margin_met and showing >= MIN_SCENES_SHOWING:
+        # A declared confound caps an otherwise-consistent result. It never
+        # promotes and never rescues -- only downgrades.
+        return CAPPED_VERDICT if confound else VERDICT_CONSISTENT
+    return VERDICT_DIRECTIONAL
+
+
+def _paired_pairs(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[tuple[str, str]]:
+    """Which contrasts to compute for one axis x question type.
+
+    The ladder baseline against each later rung (the axis's own story), the
+    declared headline pair, and each rung against the json ceiling (the anchor
+    comparison). Deduplicated, always ordered (earlier, later) so the reported
+    delta's sign is unambiguous.
+    """
+    rungs = [p for p in axis.ladder
+             if p not in (FLOOR, CEILING) and in_scope(p, qt) and (p, qt) in cells]
+    pairs: list[tuple[str, str]] = []
+    if rungs:
+        base = rungs[0]
+        pairs += [(base, r) for r in rungs[1:]]
+    if axis.headline_pair:
+        a, b = axis.headline_pair
+        if (a, qt) in cells and (b, qt) in cells and in_scope(a, qt) and in_scope(b, qt):
+            pairs.append((a, b))
+    if (CEILING, qt) in cells:
+        pairs += [(r, CEILING) for r in rungs]
+    seen: set[tuple[str, str]] = set()
+    out = []
+    for p in pairs:
+        if p not in seen and p[0] != p[1]:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
+                 lift_confound: bool = False) -> list[Paired]:
+    """Every licensed axis contrast, compared per scene and graded.
+
+    `style` restricts to one question-style subset (`natural` / `constructed`) --
+    the vocabulary-coupling re-cut. The restriction is applied before `_cells`, so
+    the eligibility gates are evaluated on the subset actually being compared
+    rather than inherited from the pooled cell. `axes` narrows which axes are
+    walked (the re-cut only reads the ones carrying a declared confound).
+
+    `lift_confound` drops the cap. It exists for exactly one caller: the `natural`
+    half of the re-cut, where a vocabulary confound is resolved *by construction*
+    -- a natural question is one a user could have asked without ever having seen
+    the derived view's output, so its wording cannot be mirroring that output.
+    Capping there would suppress the very finding the re-cut was built to produce.
+    Never lift a `content` confound this way; no question-style split addresses it.
+    """
+    out: list[Paired] = []
+    for axis in (AXES if axes is None else axes):
+        host_rows = [r for r in rows if dataset_of(r["scene_id"]) == axis.host]
+        if style is not None:
+            host_rows = [r for r in host_rows if (r.get("question_style") or "") == style]
+        if not host_rows:
+            continue
+        cells = _cells(host_rows)
+
+        # (rep, question_id) -> mean AC over that question's scored rows, and
+        # question_id -> scene. Errors and context-exceeded rows carry no AC, so
+        # they simply fail to pair -- an overflowing rep contributes no delta
+        # rather than a zero, and its coverage gate catches it below.
+        ac: dict[tuple[str, str], list[float]] = collections.defaultdict(list)
+        scene_of: dict[str, str] = {}
+        for r in host_rows:
+            if r["error"] or r["answer_correctness"] in ("", None):
+                continue
+            ac[(r["representation"], r["question_id"])].append(float(r["answer_correctness"]))
+            scene_of[r["question_id"]] = r["scene_id"]
+        q_mean = {k: statistics.mean(v) for k, v in ac.items()}
+
+        for qt in axis.probe_types:
+            qids = {q for (rep, q) in q_mean
+                    if any(r["question_id"] == q and (r["question_type"] or "unknown") == qt
+                           for r in host_rows)}
+            for rep_a, rep_b in _paired_pairs(axis, qt, cells):
+                by_scene: dict[str, list[float]] = collections.defaultdict(list)
+                for q in qids:
+                    if (rep_a, q) in q_mean and (rep_b, q) in q_mean:
+                        by_scene[scene_of[q]].append(q_mean[(rep_b, q)] - q_mean[(rep_a, q)])
+                if not by_scene:
+                    continue
+                scene_deltas = {s: statistics.mean(v) for s, v in sorted(by_scene.items())}
+                n_q = sum(len(v) for v in by_scene.values())
+
+                # Rank-eligibility gates, applied to the comparison rather than
+                # to either cell alone: a pair is only as licensed as its weaker
+                # member, and the paired question count is its real support.
+                reasons = []
+                for rep in (rep_a, rep_b):
+                    c = cells.get((rep, qt))
+                    if c and not c.rank_eligible:
+                        reasons.append(f"{rep} coverage {c.coverage * 100:.0f}%")
+                if n_q < SMALL_N:
+                    reasons.append(f"only {n_q} paired questions")
+                ineligible = "; ".join(reasons)
+                confound = "" if lift_confound else axis.confound_for(rep_a, rep_b)
+                verdict = _verdict(scene_deltas, confound, ineligible)
+                # The cap fired only where it changed the grade: the same pair
+                # judged without its confound would have been consistent.
+                capped = bool(confound) and verdict == CAPPED_VERDICT and (
+                    _verdict(scene_deltas, "", ineligible) == VERDICT_CONSISTENT)
+                ca, cb = cells.get((rep_a, qt)), cells.get((rep_b, qt))
+                out.append(Paired(axis.id, axis.host, qt, rep_a, rep_b, scene_deltas,
+                                  n_q, verdict, confound, capped, ineligible,
+                                  ca.tokens_mean if ca else None,
+                                  cb.tokens_mean if cb else None))
+    return out
+
+
+def _paired_section(rows: list[dict]) -> list[str]:
+    """The separation table -- the analysis every axis verdict is read from."""
+    prs = _paired_rows(rows)
+    if not prs:
+        return []
+    order = {VERDICT_CONSISTENT: 0, CAPPED_VERDICT: 1, VERDICT_MIXED: 2,
+             VERDICT_NO_SEPARATION: 3, VERDICT_NOT_LICENSED: 4}
+    prs.sort(key=lambda p: (order.get(p.verdict, 9), -abs(p.mean)))
+    trows = []
+    for p in prs:
+        lo, hi = p.spread
+        if p.ineligible:
+            note = p.ineligible
+        elif p.capped:
+            note = f"CAPPED from '{VERDICT_CONSISTENT}' -- {p.confound}"
+        elif p.confound:
+            note = f"declared confound (did not change the grade): {p.confound}"
+        else:
+            note = ""
+        trows.append([f"{p.axis_id}", p.qt, f"`{p.rep_b}` - `{p.rep_a}`",
+                      " / ".join(f"{v:+.3f}" for v in p.scene_deltas.values()),
+                      f"{p.mean:+.3f}", f"{lo:+.3f}..{hi:+.3f}", str(len(p.scene_deltas)),
+                      str(p.n_questions), _tok_str(p), p.verdict, note])
+    return (["## Paired separation (the analysis -- thesis 4.6)",
+             f"_Per-question AC differences, averaged within each host scene; the mean is "
+             f"over the SCENE values (the unit of replication), not over pooled questions. "
+             f"A consistent advantage needs |mean| >= {PRACTICAL_MARGIN:.2f}, no scene "
+             f"reversed, and >= {MIN_SCENES_SHOWING} scenes showing the direction; a "
+             f"declared confound caps it at '{CAPPED_VERDICT}'. Scenes disagreeing by "
+             f"{PRACTICAL_MARGIN:.2f} in BOTH directions is '{VERDICT_MIXED}' whatever the "
+             f"mean does. No confidence intervals, and overlap is never a tie rule. Where a "
+             f"pair shows '{VERDICT_NO_SEPARATION}', the `tokens` column decides: report the "
+             f"cheaper representation as the more efficient alternative -- not as the "
+             f"winner._", ""]
+            + _table(["axis", "type", "comparison", "scene deltas", "mean", "range",
+                      "scenes", "n_q", "tokens (b vs a)", "verdict", "note"], trows) + [""])
+
+
+STYLES = ("natural", "constructed")
+
+
+def _recut_section(rows: list[dict]) -> list[str]:
+    """The vocabulary-coupling re-cut -- the remedy the declared confound points at.
+
+    Two axes carry a derived pole whose own computed output states the concept the
+    question asks for (`graph_digest`'s hub/bottleneck, `relations_digest`'s chain
+    depth/clusters). The cap on those pairs says the pooled figure cannot settle
+    whether the pole reasons better or merely recites; this splits the same paired
+    comparison by the question's authored style tag, which is what settles it:
+    `natural` = a user could have asked it without ever having seen the derived
+    view, `constructed` = the concept mirrors that view's vocabulary.
+
+    Only the comparisons the cap actually fires on are walked: axes whose confound
+    is a `vocabulary` one (the two with a derived pole), and within them only the
+    pairs touching that pole. The format axis's content superset is deliberately absent --
+    it is a real confound, but no question-style split addresses it, so re-cutting
+    it would imply a remedy that does not exist. The ordinary gates apply unchanged
+    to each subset: a split that lands under SMALL_N reads `not licensed`, which is
+    the honest outcome for a subset too thin to rank, not a reason to pool it back
+    together. Rows are ordered so a comparison's two styles sit adjacent -- that
+    adjacency is the argument.
+    """
+    if not any((r.get("question_style") or "") for r in rows):
+        return []   # results.csv predates the tag; nothing to re-cut
+    coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
+    if not coupled:
+        return []
+
+    # The cap is lifted on `natural` only (see _paired_rows) -- there the coupling
+    # is resolved by construction. On `constructed` it stands: that subset is where
+    # the pole's own vocabulary is in the question, so its verdict is exactly the
+    # reading the cap exists to distrust.
+    by_style = {s: _paired_rows(rows, style=s, axes=coupled,
+                                lift_confound=(s == "natural")) for s in STYLES}
+    keyed: dict[tuple[str, str, str, str], dict[str, Paired]] = collections.defaultdict(dict)
+    for s in STYLES:
+        for p in by_style[s]:
+            # Only the comparisons the cap actually fires on. An anchor comparison
+            # against the floor or ceiling carries no vocabulary confound, so it has
+            # nothing for the re-cut to resolve and would only pad the table.
+            axis = AXIS_BY_ID[p.axis_id]
+            if not axis.confound_for(p.rep_a, p.rep_b):
+                continue
+            keyed[(p.axis_id, p.qt, p.rep_a, p.rep_b)][s] = p
+    if not keyed:
+        return []
+
+    trows = []
+    for (axis_id, qt, rep_a, rep_b) in sorted(keyed):
+        for s in STYLES:
+            p = keyed[(axis_id, qt, rep_a, rep_b)].get(s)
+            if p is None:
+                # A style with no questions of this type at all (e.g. relation_aggregate
+                # has zero natural questions) -- recorded as absent, not as a null.
+                trows.append([axis_id, qt, f"`{rep_b}` - `{rep_a}`", s,
+                              "-", "-", "0", "no questions of this style"])
+                continue
+            trows.append([axis_id, qt, f"`{rep_b}` - `{rep_a}`", s,
+                          " / ".join(f"{v:+.3f}" for v in p.scene_deltas.values()),
+                          f"{p.mean:+.3f}", str(p.n_questions),
+                          p.verdict + (f" ({p.ineligible})" if p.ineligible else "")])
+    return (["## Vocabulary re-cut: natural vs constructed (thesis 4.6)",
+             "_Every capped comparison, split by the question's authored style tag. A "
+             "derived pole that only leads on `constructed` questions is reciting its own "
+             "printed vocabulary, not reasoning better -- which is exactly what the capped "
+             "verdict in the table above leaves open. Read the two rows of a comparison "
+             "against each other; that adjacency is the argument. The cap is lifted on "
+             "`natural` (a question a user could have asked without seeing the derived view "
+             "cannot be mirroring it) and stands on `constructed`. Gates apply per subset, "
+             "so a thin split reads `not licensed` rather than being pooled back. The format "
+             "axis's content superset is not re-cut: no style split addresses it._", ""]
+            + _table(["axis", "type", "comparison", "style", "scene deltas", "mean",
+                      "n_q", "verdict"], trows) + [""])
 
 
 OBJECT_RELATION_TYPES = {"object_relation", "relation_structure", "relation_aggregate"}
@@ -375,6 +713,8 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
         "a card, never across types or datasets.",
         "",
     ]
+    lines += _paired_section(rows)
+    lines += _recut_section(rows)
     for axis in AXES:
         lines += _axis_card(axis, rows)
     lines += _planning_section(rows)
