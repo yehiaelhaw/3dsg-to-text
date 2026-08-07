@@ -161,7 +161,7 @@ def rubric_correctness(
 
 def _parse_rubric(text: str, n: int) -> list[bool]:
     results = [False] * n
-    matched = 0
+    seen: set[int] = set()
     for line in text.splitlines():
         # Tolerate markdown emphasis / bullets the judge sometimes adds, e.g.
         # "1.  **YES** - ..." or "- 1) `NO`": strip emphasis chars before matching.
@@ -171,10 +171,16 @@ def _parse_rubric(text: str, n: int) -> list[bool]:
             idx = int(m.group(1)) - 1
             if 0 <= idx < n:
                 results[idx] = m.group(2).upper() == "YES"
-                matched += 1
-    if n > 0 and matched == 0:
-        # No verdict line parsed at all: that is a judge-format failure, not an
-        # all-NO answer. Raise so the record errors (and is re-judged on resume)
-        # instead of silently scoring 0.0.
-        raise ValueError(f"Could not parse any YES/NO verdict from judge output: {text!r}")
+                seen.add(idx)
+    if n > 0 and len(seen) < n:
+        # EVERY fact must get an explicit verdict. A missing line is a judge-format
+        # failure, not an implicit NO: defaulting it to absent silently understates
+        # the answer and biases AC downward, and it does so invisibly because the
+        # record still looks scored. Raise so the record errors and is re-judged on
+        # resume -- the same fail-closed contract the rest of the pipeline follows.
+        # Both the no-verdicts-at-all and the truncated-list cases land here.
+        missing = [i + 1 for i in range(n) if i not in seen]
+        raise ValueError(
+            f"Judge gave no YES/NO verdict for fact(s) {missing} of {n}: {text!r}"
+        )
     return results
