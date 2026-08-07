@@ -195,7 +195,8 @@ AXES: list[Axis] = [
               "encoding/format axes; topology vs topology_edges_only reads as a "
               "distractor-content contrast, not part of this ladder.",
          confound="question vocabulary mirrors graph_digest's own computed output "
-                  "(hub / bottleneck); read the natural/constructed re-cut",
+                  "(hub / bottleneck); read the natural/constructed re-cut and the "
+                  "matched within-fact-set comparison",
          confound_reps=("graph_digest",),
          confound_kind="vocabulary"),
     Axis("relation_linearization", "Relation linearization", "3rscan",
@@ -209,7 +210,8 @@ AXES: list[Axis] = [
               "object_relation/relation_structure/relation_aggregate are read as one "
               "relation-linearization probe family, not three separate axes.",
          confound="question vocabulary mirrors relations_digest's own computed "
-                  "output (chain depth / clusters); read the natural/constructed re-cut",
+                  "output (chain depth / clusters); read the natural/constructed "
+                  "re-cut and the matched within-fact-set comparison",
          confound_reps=("relations_digest",),
          confound_kind="vocabulary"),
     # --- exhibits: graded results the five axes do not cover ------------------

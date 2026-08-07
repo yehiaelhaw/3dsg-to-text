@@ -1,4 +1,4 @@
-"""report.py â€” auto-generated numeric report (the tabular half of reporting).
+"""report.py — auto-generated numeric report (the tabular half of reporting).
 
 The charts (`plots.py`) are the visual layer; this is the layer for the facts a
 chart cannot legibly carry: coverage / rank-eligibility (the context_exceeded
@@ -29,6 +29,11 @@ Separation between two representations is decided in `_paired_section` instead,
 which is the actual analysis: paired per-question differences, averaged within
 each host scene, judged against a pre-declared practical margin with a
 consistency requirement across scenes (evaluation/axes.py).
+
+Two further sections read the question's authored register. `_recut_section`
+splits every capped comparison into its `natural` and `constructed` halves;
+`_matched_section` goes one step further and differences those two halves within
+each fact-set, which is what the balanced corpus was authored to make possible.
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ from __future__ import annotations
 import collections
 import csv
 import datetime
+import json
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +55,61 @@ from evaluation.axes import (
 )
 from evaluation.core import is_context_exceeded
 from evaluation.scope import in_scope
+
+# --- the authored fact-set map ---------------------------------------------
+# `pair_id` is a property of the authored question, not of a run, so it is not a
+# results.csv column (see the comment on core.Question). It is joined here from the
+# QA files at analysis time -- the same (scene_id, question_id) join
+# experiments/scripts/backfill_question_style.py performs -- which keeps every
+# committed results.csv byte-identical.
+#
+# It is used for exactly ONE thing: grouping the two members of a fact-set so their
+# register effects can be differenced. It never filters, never groups a table, and
+# is never compared against the question's own id. Whether a stem was authored
+# before or during the matching exercise is history, not an experimental variable:
+# `natural` means natural and `constructed` means constructed regardless, and all
+# 134 scoped questions participate in every table.
+QA_ROOT = Path(__file__).resolve().parents[1] / "experiments" / "scripts"
+QA_FILENAME = "keyfact-qa.jsonl"
+
+
+def _load_pairs(qa_root: Path | None = None) -> dict[tuple[str, str], str]:
+    """(scene_id, question_id) -> pair_id, over every authored QA file.
+
+    Returns {} when the QA files are not reachable (a report rendered outside the
+    repo) -- the matched section then simply does not render, which is the honest
+    outcome rather than an import-time failure in a display layer.
+
+    `qa_root` is resolved at call time, not bound as a default, so a caller (the
+    smoke test) can point the module constant at a synthetic corpus.
+    """
+    root = Path(qa_root if qa_root is not None else QA_ROOT)
+    pairs: dict[tuple[str, str], str] = {}
+    if not root.is_dir():
+        return pairs
+    for qa_path in sorted(root.glob(f"*/{QA_FILENAME}")):
+        with qa_path.open(encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                q = json.loads(line)
+                if q.get("pair_id"):
+                    pairs[(q["scene_id"], str(q["id"]))] = str(q["pair_id"])
+    return pairs
+
+
+def _row_key(r: dict) -> tuple[str, str]:
+    """A row's (scene_id, authored question id).
+
+    aggregate_results._pool_rows namespaces `question_id` as `<scene_id>:<id>` so
+    identities stay unique across pooled scenes, while leaving `scene_id` bare. The
+    _aggregate/ report is the one anyone actually reads, so a join that forgot this
+    would match nothing there and silently drop the matched section rather than fail.
+    """
+    scene, qid = r["scene_id"], r["question_id"]
+    prefix = f"{scene}:"
+    return scene, (qid[len(prefix):] if qid.startswith(prefix) else qid)
 
 
 @dataclass
@@ -277,6 +338,12 @@ class Paired:
     # member is reported as the more efficient alternative -- never as the winner.
     tokens_a: float | None = None
     tokens_b: float | None = None
+    # How many distinct information requests the paired questions come from. On the
+    # scoped types every fact-set contributes BOTH its natural and its constructed
+    # member, so `n_questions` counts two correlated observations per request and
+    # overstates the support; this is the honest denominator. 0 where no fact-set
+    # map joins (every unpaired question type). Display only -- no verdict reads it.
+    n_factsets: int = 0
 
     @property
     def mean(self) -> float:
@@ -364,8 +431,27 @@ def _paired_pairs(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[tup
     return out
 
 
+def _q_means(host_rows: list[dict]) -> tuple[dict[tuple[str, str], float], dict[str, str]]:
+    """((rep, question_id) -> mean AC over that question's scored rows,
+    question_id -> scene_id).
+
+    Errors and context-exceeded rows carry no AC, so they simply fail to appear --
+    an overflowing rep contributes no delta rather than a zero, and its coverage
+    gate catches it at the call site.
+    """
+    ac: dict[tuple[str, str], list[float]] = collections.defaultdict(list)
+    scene_of: dict[str, str] = {}
+    for r in host_rows:
+        if r["error"] or r["answer_correctness"] in ("", None):
+            continue
+        ac[(r["representation"], r["question_id"])].append(float(r["answer_correctness"]))
+        scene_of[r["question_id"]] = r["scene_id"]
+    return {k: statistics.mean(v) for k, v in ac.items()}, scene_of
+
+
 def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
-                 lift_confound: bool = False) -> list[Paired]:
+                 lift_confound: bool = False,
+                 pairs: dict[tuple[str, str], str] | None = None) -> list[Paired]:
     """Every licensed axis contrast, compared per scene and graded.
 
     `style` restricts to one question-style subset (`natural` / `constructed`) --
@@ -380,6 +466,11 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
     the derived view's output, so its wording cannot be mirroring that output.
     Capping there would suppress the very finding the re-cut was built to produce.
     Never lift a `content` confound this way; no question-style split addresses it.
+
+    `pairs` is the authored fact-set map. It is used only to report how many
+    distinct information requests a comparison rests on: with a balanced corpus the
+    pooled table sees BOTH members of every fact-set, so `n_q` counts correlated
+    observations twice. It changes no delta and no verdict.
     """
     out: list[Paired] = []
     for axis in (AXES if axes is None else axes):
@@ -389,19 +480,13 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
         if not host_rows:
             continue
         cells = _cells(host_rows)
-
-        # (rep, question_id) -> mean AC over that question's scored rows, and
-        # question_id -> scene. Errors and context-exceeded rows carry no AC, so
-        # they simply fail to pair -- an overflowing rep contributes no delta
-        # rather than a zero, and its coverage gate catches it below.
-        ac: dict[tuple[str, str], list[float]] = collections.defaultdict(list)
-        scene_of: dict[str, str] = {}
+        q_mean, scene_of = _q_means(host_rows)
+        # question_id (as it appears in this csv) -> (scene, pair_id), for the count.
+        fs_of: dict[str, tuple[str, str]] = {}
         for r in host_rows:
-            if r["error"] or r["answer_correctness"] in ("", None):
-                continue
-            ac[(r["representation"], r["question_id"])].append(float(r["answer_correctness"]))
-            scene_of[r["question_id"]] = r["scene_id"]
-        q_mean = {k: statistics.mean(v) for k, v in ac.items()}
+            key = _row_key(r)
+            if pairs and key in pairs:
+                fs_of[r["question_id"]] = (key[0], pairs[key])
 
         for qt in axis.probe_types:
             qids = {q for (rep, q) in q_mean
@@ -409,9 +494,12 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
                            for r in host_rows)}
             for rep_a, rep_b in _paired_pairs(axis, qt, cells):
                 by_scene: dict[str, list[float]] = collections.defaultdict(list)
+                factsets: set[tuple[str, str]] = set()
                 for q in qids:
                     if (rep_a, q) in q_mean and (rep_b, q) in q_mean:
                         by_scene[scene_of[q]].append(q_mean[(rep_b, q)] - q_mean[(rep_a, q)])
+                        if q in fs_of:
+                            factsets.add(fs_of[q])
                 if not by_scene:
                     continue
                 scene_deltas = {s: statistics.mean(v) for s, v in sorted(by_scene.items())}
@@ -438,13 +526,14 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
                 out.append(Paired(axis.id, axis.host, qt, rep_a, rep_b, scene_deltas,
                                   n_q, verdict, confound, capped, ineligible,
                                   ca.tokens_mean if ca else None,
-                                  cb.tokens_mean if cb else None))
+                                  cb.tokens_mean if cb else None,
+                                  len(factsets)))
     return out
 
 
-def _paired_section(rows: list[dict]) -> list[str]:
+def _paired_section(rows: list[dict], pairs=None) -> list[str]:
     """The separation table -- the analysis every axis verdict is read from."""
-    prs = _paired_rows(rows)
+    prs = _paired_rows(rows, pairs=pairs)
     if not prs:
         return []
     order = {VERDICT_CONSISTENT: 0, CAPPED_VERDICT: 1, VERDICT_MIXED: 2,
@@ -464,7 +553,8 @@ def _paired_section(rows: list[dict]) -> list[str]:
         trows.append([f"{p.axis_id}", p.qt, f"`{p.rep_b}` - `{p.rep_a}`",
                       " / ".join(f"{v:+.3f}" for v in p.scene_deltas.values()),
                       f"{p.mean:+.3f}", f"{lo:+.3f}..{hi:+.3f}", str(len(p.scene_deltas)),
-                      str(p.n_questions), _tok_str(p), p.verdict, note])
+                      str(p.n_questions), str(p.n_factsets) if p.n_factsets else "",
+                      _tok_str(p), p.verdict, note])
     return (["## Paired separation (the analysis -- thesis 4.6)",
              f"_Per-question AC differences, averaged within each host scene; the mean is "
              f"over the SCENE values (the unit of replication), not over pooled questions. "
@@ -475,9 +565,12 @@ def _paired_section(rows: list[dict]) -> list[str]:
              f"mean does. No confidence intervals, and overlap is never a tie rule. Where a "
              f"pair shows '{VERDICT_NO_SEPARATION}', the `tokens` column decides: report the "
              f"cheaper representation as the more efficient alternative -- not as the "
-             f"winner._", ""]
+             f"winner. On the scoped types every information request contributes both its "
+             f"natural and its constructed stem, so read `fact-sets` -- not `n_q` -- as the "
+             f"count of independent requests behind a row._", ""]
             + _table(["axis", "type", "comparison", "scene deltas", "mean", "range",
-                      "scenes", "n_q", "tokens (b vs a)", "verdict", "note"], trows) + [""])
+                      "scenes", "n_q", "fact-sets", "tokens (b vs a)", "verdict", "note"],
+                     trows) + [""])
 
 
 STYLES = ("natural", "constructed")
@@ -503,6 +596,16 @@ def _recut_section(rows: list[dict]) -> list[str]:
     the honest outcome for a subset too thin to rank, not a reason to pool it back
     together. Rows are ordered so a comparison's two styles sit adjacent -- that
     adjacency is the argument.
+
+    On the scoped types the two halves are balanced by construction: every
+    information request is authored in both registers, so each half holds exactly one
+    member of every fact-set and `n_q` here IS the fact-set count. That balance also
+    sharpens the lift above -- with the facts held constant across the halves, the
+    tag encodes register and nothing else, so `a natural question cannot be mirroring
+    the view` is a claim about wording alone rather than about which concept the
+    author happened to pick. What this table still cannot do is difference the two
+    halves question by question, because its rows compare SETS; `_matched_section`
+    below does that.
     """
     if not any((r.get("question_style") or "") for r in rows):
         return []   # results.csv predates the tag; nothing to re-cut
@@ -534,10 +637,12 @@ def _recut_section(rows: list[dict]) -> list[str]:
         for s in STYLES:
             p = keyed[(axis_id, qt, rep_a, rep_b)].get(s)
             if p is None:
-                # A style with no questions of this type at all (e.g. relation_aggregate
-                # has zero natural questions) -- recorded as absent, not as a null.
+                # A style with no scored questions of this type at all -- recorded as
+                # absent, not as a null. The scoped types are authored balanced (one
+                # member of every fact-set per style), so this now only fires where a
+                # whole subset failed to score, never by construction as it once did.
                 trows.append([axis_id, qt, f"`{rep_b}` - `{rep_a}`", s,
-                              "-", "-", "0", "no questions of this style"])
+                              "-", "-", "0", "no scored questions of this style"])
                 continue
             trows.append([axis_id, qt, f"`{rep_b}` - `{rep_a}`", s,
                           " / ".join(f"{v:+.3f}" for v in p.scene_deltas.values()),
@@ -555,6 +660,130 @@ def _recut_section(rows: list[dict]) -> list[str]:
              "axis's content superset is not re-cut: no style split addresses it._", ""]
             + _table(["axis", "type", "comparison", "style", "scene deltas", "mean",
                       "n_q", "verdict"], trows) + [""])
+
+
+def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[str]:
+    """The matched within-fact-set comparison -- what the balanced corpus buys.
+
+    The re-cut above compares a natural SUBSET against a constructed SUBSET, so any
+    difference between them mixes the register manipulation with whatever else the
+    two sets of facts differ in. On the scoped types the corpus removes that: each
+    information request is authored twice, once in each register, over the same key
+    facts and with the same expected answer. Differencing the two within a fact-set
+    cancels fact selection exactly, leaving the wording:
+
+        d_nat(f) = AC(rep_b, natural f)     - AC(rep_a, natural f)
+        d_con(f) = AC(rep_b, constructed f) - AC(rep_a, constructed f)
+        m(f)     = d_con(f) - d_nat(f)
+
+    averaged within each host scene and then over the scene values, which is the
+    same unit of replication as every other table here.
+
+    Only the comparisons the cap actually fires on are walked, exactly as in the
+    re-cut: an anchor comparison against the floor or the ceiling carries no
+    vocabulary confound, so it has nothing to resolve and would only pad the table.
+
+    A fact-set missing any of its four cells is DROPPED, not zero-filled -- mirroring
+    the membership test in `_paired_rows`. Zero-filling would read a context overflow
+    on one member as `wording made no difference here`, which is the one conclusion
+    the missing data cannot support.
+
+    No confound is passed to `_verdict`. The coupling is the estimand in this table,
+    not a threat to it, so capping would grade down the very quantity the cap exists
+    to point at -- the same reasoning that lifts the cap on the natural half of the
+    re-cut. The gates are otherwise untouched: SMALL_N applies to the fact-set count
+    (the real number of independent requests), and each rep still has to clear its
+    coverage threshold.
+    """
+    if not pairs:
+        return []
+    coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
+    if not coupled:
+        return []
+
+    trows: list[list[str]] = []
+    for axis in coupled:
+        host_rows = [r for r in rows if dataset_of(r["scene_id"]) == axis.host]
+        if not host_rows:
+            continue
+        cells = _cells(host_rows)
+        q_mean, _ = _q_means(host_rows)
+
+        # (scene, pair_id, question_type) -> {style: question_id as this csv spells it}
+        members: dict[tuple[str, str, str], dict[str, str]] = collections.defaultdict(dict)
+        for r in host_rows:
+            key = _row_key(r)
+            pid = pairs.get(key)
+            style = r.get("question_style") or ""
+            if pid and style in STYLES:
+                members[(key[0], pid, r["question_type"] or "unknown")][style] = r["question_id"]
+
+        for qt in axis.probe_types:
+            for rep_a, rep_b in _paired_pairs(axis, qt, cells):
+                if not axis.confound_for(rep_a, rep_b):
+                    continue
+                by_scene: dict[str, list[float]] = collections.defaultdict(list)
+                nat_d: dict[str, list[float]] = collections.defaultdict(list)
+                con_d: dict[str, list[float]] = collections.defaultdict(list)
+                for (scene, _pid, mqt), m in members.items():
+                    if mqt != qt:
+                        continue
+                    nat, con = m.get("natural"), m.get("constructed")
+                    if not nat or not con:
+                        continue
+                    needed = [(rep, q) for rep in (rep_a, rep_b) for q in (nat, con)]
+                    if not all(k in q_mean for k in needed):
+                        continue
+                    d_nat = q_mean[(rep_b, nat)] - q_mean[(rep_a, nat)]
+                    d_con = q_mean[(rep_b, con)] - q_mean[(rep_a, con)]
+                    by_scene[scene].append(d_con - d_nat)
+                    nat_d[scene].append(d_nat)
+                    con_d[scene].append(d_con)
+                if not by_scene:
+                    continue
+
+                scene_deltas = {s: statistics.mean(v) for s, v in sorted(by_scene.items())}
+                n_f = sum(len(v) for v in by_scene.values())
+                reasons = []
+                for rep in (rep_a, rep_b):
+                    c = cells.get((rep, qt))
+                    if c and not c.rank_eligible:
+                        reasons.append(f"{rep} coverage {c.coverage * 100:.0f}%")
+                if n_f < SMALL_N:
+                    reasons.append(f"only {n_f} matched fact-sets")
+                ineligible = "; ".join(reasons)
+                verdict = _verdict(scene_deltas, "", ineligible)
+
+                def _m(d):  # mean over scene means, same unit of replication
+                    return statistics.mean([statistics.mean(v) for v in d.values()])
+
+                trows.append([
+                    axis.id, qt, f"`{rep_b}` - `{rep_a}`",
+                    f"{_m(nat_d):+.3f}", f"{_m(con_d):+.3f}",
+                    " / ".join(f"{v:+.3f}" for v in scene_deltas.values()),
+                    f"{statistics.mean(list(scene_deltas.values())):+.3f}",
+                    str(n_f),
+                    verdict + (f" ({ineligible})" if ineligible else ""),
+                ])
+
+    if not trows:
+        return []
+    return (["## Matched fact-sets: does the lead depend on wording? (thesis 4.6)",
+             "_Each scoped information request is authored twice, once `natural` and once "
+             "`constructed`, over the same key facts and with the same expected answer. "
+             "This table differences the two WITHIN each fact-set, so fact selection "
+             "cancels and only the register remains -- which the re-cut above cannot do, "
+             "since its two halves ask about different facts. `mean` is "
+             "d(constructed) - d(natural): positive means the derived pole's lead is "
+             "larger when the question is worded in that pole's own vocabulary. A fact-set "
+             "with any member unscored is dropped, never zero-filled. Read the verdict as "
+             "a statement about the COUPLING, not about the representation: "
+             f"'{VERDICT_CONSISTENT}' here means the lead is consistently bigger on "
+             f"constructed stems, so the wording is doing work; "
+             f"'{VERDICT_NO_SEPARATION}' means the lead does not depend on wording, which "
+             "is the result that would clear the derived pole._", ""]
+            + _table(["axis", "type", "comparison", "d_natural", "d_constructed",
+                      "scene deltas", "mean", "fact-sets", "verdict"], trows) + [""])
 
 
 OBJECT_RELATION_TYPES = {"object_relation", "relation_structure", "relation_aggregate"}
@@ -720,8 +949,10 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
         "a card, never across types or datasets.",
         "",
     ]
-    lines += _paired_section(rows)
+    pairs = _load_pairs()
+    lines += _paired_section(rows, pairs)
     lines += _recut_section(rows)
+    lines += _matched_section(rows, pairs)
     for axis in AXES:
         lines += _axis_card(axis, rows)
     lines += _planning_section(rows)

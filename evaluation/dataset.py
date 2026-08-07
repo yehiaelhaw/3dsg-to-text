@@ -44,6 +44,10 @@ def load(
             # Only the types exposed to a derived pole are tagged; absent elsewhere
             # by design, so a missing tag is not an error (see core.Question).
             question_style = raw.get("question_style") or None
+            # The fact-set key, present only on the scoped domain (the three types
+            # with a derived pole). Absent elsewhere by design, so missing is not an
+            # error -- same contract as question_style above.
+            pair_id = raw.get("pair_id") or None
 
             try:
                 raw_facts = raw.get("key_facts")
@@ -61,12 +65,18 @@ def load(
                         f"{path}:{lineno}: question {qid!r} has no core (weight > 1) key "
                         f"fact; the primary answer_correctness would be undefined"
                     )
+                if pair_id is not None and not question_style:
+                    raise ValueError(
+                        f"{path}:{lineno}: question {qid!r} is in a pair but carries no "
+                        f"question_style; the register is what the pair contrasts"
+                    )
                 questions.append(Question(
                     id=qid,
                     scene_id=raw["scene_id"],
                     text=raw["text"],
                     question_type=question_type,
                     question_style=question_style,
+                    pair_id=pair_id,
                     key_facts=key_facts,
                 ))
             except KeyError as exc:
