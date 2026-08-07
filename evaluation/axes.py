@@ -94,6 +94,14 @@ class Axis:
     headline_pair: tuple[str, str] | None = None  # within-axis contrast for the
                                   # paired-delta chart; None = pure ladder, no pair
     note: str = ""                # caveat surfaced in the card
+    # What this entry IS, so a reader holding report.md next to the design chapter
+    # can tell the five representation axes from the extra cards. "axis": one of
+    # the five (thesis 4.2). "companion": the same axis measured on a second host,
+    # carded separately because cards are single-host. "exhibit": a graded result
+    # that is not an axis contrast at all -- it borrows the card/paired machinery
+    # so a finding the design axes do not cover still gets a verdict under the
+    # same rules instead of being quoted as an anecdote.
+    kind: str = "axis"
     # A DECLARED confound (thesis 4.6): named in the design chapter, not
     # discovered in the results, and it caps the verdict at CAPPED_VERDICT
     # however consistent the scene values are. Empty string = none declared.
@@ -136,6 +144,10 @@ class Axis:
 # axes there is no letter gap to explain. The spatial-encoding axis is a ladder, not
 # a single contrast pair, so it carries no headline_pair (its result is read as lift
 # over the floor / where the peak sits, not a two-pole delta).
+#
+# Five entries carry kind="axis" -- the five representation axes of thesis 4.2. The
+# rest are companions and exhibits (see Axis.kind); they are cards, not axes, and the
+# renderers say so, so the count here never has to be reconciled against that five.
 AXES: list[Axis] = [
     Axis("spatial_encoding", "Spatial encoding", "procthor",
          ["inventory", "topology", "metric_relations", "json"],
@@ -150,7 +162,8 @@ AXES: list[Axis] = [
          note="Gibson companion to the spatial-encoding axis: the cleanest metric-rung "
               "exhibit in the study lives on this host, not ProcTHOR (a consistent "
               "advantage over json across all three scenes), so it needs its own card "
-              "rather than being folded into the main spatial-encoding card."),
+              "rather than being folded into the main spatial-encoding card.",
+         kind="companion"),
     Axis("format", "Format", "procthor",
          ["topology", "prose"],
          ["connectivity"],
@@ -163,7 +176,12 @@ AXES: list[Axis] = [
          confound_kind="content"),
     Axis("reference_frame", "Reference frame", "gibson",
          ["metric_relations", "navigation"],
-         ["direction", "route"],
+         # direction only. `route` used to be declared here and was dead: all 12
+         # route questions are ProcTHOR's (Gibson has no door graph, which is
+         # exactly why this axis is hosted here), so the entry named a probe this
+         # axis can never be read on. The ProcTHOR route result is a separate
+         # exhibit below and is deliberately NOT a reference-frame reading.
+         ["direction"],
          headline_pair=("metric_relations", "navigation"),
          note="pure-frame isolation only on Gibson; on ProcTHOR navigation also "
               "restricts to doorway moves, so it fuses connectivity (coverage view)."),
@@ -194,6 +212,41 @@ AXES: list[Axis] = [
                   "output (chain depth / clusters); read the natural/constructed re-cut",
          confound_reps=("relations_digest",),
          confound_kind="vocabulary"),
+    # --- exhibits: graded results the five axes do not cover ------------------
+    Axis("route_presentation", "Route presentation", "procthor",
+         ["topology+metric_relations", "navigation"],
+         ["route"],
+         headline_pair=("topology+metric_relations", "navigation"),
+         kind="exhibit",
+         note="NOT a reference-frame result -- that axis stays on Gibson, because on "
+              "ProcTHOR navigation restricts to doorway moves and so fuses "
+              "connectivity; this contrast is presentation-with-frame, not vantage "
+              "alone. The baseline is a COMBO by necessity: a route question needs "
+              "connectivity and metric_edges together and no single pole carries both "
+              "(topology has no metric, metric_relations has no connectivity), so the "
+              "doors-with-distances combination is navigation's only content-matched "
+              "allocentric counterpart. It is a strict channel superset of navigation, "
+              "and it LOSES -- the extra content cannot explain the gap, so nothing is "
+              "capped. Probed on route only: navigation states bearings solely along "
+              "connections, so admitting `direction` would readmit the content gap this "
+              "study hosts the reference-frame axis on Gibson to avoid. Question "
+              "wording shares framing with navigation ('walk', 'connected rooms' -- "
+              "topology says 'connect' too), but no representation prints a route or a "
+              "total distance, so the multi-hop search and the sum are the model's."),
+    Axis("content_verbosity", "Verbosity on content questions", "gibson",
+         ["prose"],
+         ["containment", "aggregation", "set_logic"],
+         kind="exhibit",
+         note="Content-only questions: they need the inventory channel and nothing "
+              "else, so prose and json are matched on everything the question uses and "
+              "json's remaining channels are pure distractor -- which makes this a "
+              "clean verbosity reading rather than a format one. Read it that way: on "
+              "set_logic and containment prose ties the inventory floor exactly (see "
+              "the `vs floor` column), so what separates is json's cost, not prose's "
+              "form; only aggregation puts prose above the floor. metric_relations is "
+              "held out of the ladder despite scoring well here -- it carries channels "
+              "the questions do not need, which is the superset confound this card "
+              "exists without."),
 ]
 
 AXIS_BY_ID = {a.id: a for a in AXES}

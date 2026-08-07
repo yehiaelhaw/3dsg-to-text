@@ -165,12 +165,16 @@ def _axis_card_reps(axis, qt: str, points: dict) -> list[str]:
 
 
 def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str]:
-    """One figure *per* design axis (axes.AXES) -> axis_card_<id>.png: a subplot per
+    """One figure *per* registry entry (axes.AXES) -> axis_card_<id>.png: a subplot per
     probe type, reps drawn as bars in ladder order with the floor (inventory) and
     ceiling (json) as a dashed/dotted band so a pole is read against them. Each rep
-    is a readable x-tick label; the y-axis starts at 0. Restricted to the axis's
-    host dataset (never pooled) and its probe types; combos/synthesis are excluded
-    (they answer a different question -- see report.md). Bars hatch when n < SMALL_N
+    is a readable x-tick label; the y-axis starts at 0. Restricted to the entry's
+    host dataset (never pooled) and its probe types. Only what a ladder declares is
+    drawn, so synthesis never appears and a combo appears only where an entry names
+    one (the route exhibit, where no single pole carries the required channels --
+    everything else stays in report.md's own combo/candidate tables). Entries that
+    are not one of the five design axes say so in the suptitle, from Axis.kind, so
+    a card is never mistaken for an axis. Bars hatch when n < SMALL_N
     (screening-only); whisker = min-max range of the per-question means (a
     descriptive spread, NOT an interval -- overlap is never a tie rule, see
     thesis 4.6 and report.py's paired table); dots = per-question means. Returns the
@@ -223,7 +227,8 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
             ax.grid(axis="y", linestyle="--", alpha=0.3)
             if gi == 0:
                 ax.set_ylabel("Answer correctness")
-        fig.suptitle(f"{axis.label}   (host: {axis.host}; "
+        kind = "" if axis.kind == "axis" else f" [{axis.kind}]"
+        fig.suptitle(f"{axis.label}{kind}   (host: {axis.host}; "
                      f"floor=dashed, json=dotted, hatch = n<{SMALL_N})", fontsize=11)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
         stem = f"axis_card_{axis.id}.png"
@@ -398,8 +403,10 @@ def plot_aggregate(aggregate_path: Path) -> None:
         plt.close(fig)
         print(f"plot -> {out_dir / 'ac_heatmap.png'}")
 
-    # -- Chart 4: axis-contrast paired deltas (headline-pair axes: format,
-    #    reference frame, structure presentation, relation linearization) --
+    # -- Chart 4: axis-contrast paired deltas (every AXES entry declaring a
+    #    headline_pair: format, reference frame, structure presentation, relation
+    #    linearization, and the route-presentation exhibit, whose first member is a
+    #    combo -- in_scope unions a combo's parts, so it pairs like any other) --
     # For each axis pair, the per-question AC delta (second pole minus first),
     # over questions where *both* poles are in scope. Bar = mean, whisker = ±1
     # population std, dots = per question. >0 means the second pole scored higher.

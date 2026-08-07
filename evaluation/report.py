@@ -1,4 +1,4 @@
-"""report.py — auto-generated numeric report (the tabular half of reporting).
+"""report.py â€” auto-generated numeric report (the tabular half of reporting).
 
 The charts (`plots.py`) are the visual layer; this is the layer for the facts a
 chart cannot legibly carry: coverage / rank-eligibility (the context_exceeded
@@ -175,7 +175,13 @@ def _axis_reps(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[str]:
 
 
 def _axis_card(axis, rows: list[dict]) -> list[str]:
-    """One axis card: a per-probe-type anchored table, host dataset only."""
+    """One card: a per-probe-type anchored table, host dataset only.
+
+    The heading names what the entry is whenever it is not one of the five design
+    axes (Axis.kind) -- a companion carding the same axis on a second host, or an
+    exhibit that is not an axis contrast at all. Without that, the card count here
+    reads as an axis count and contradicts the design chapter.
+    """
     cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == axis.host])
     body: list[str] = []
     for qt in axis.probe_types:
@@ -196,7 +202,8 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
         body.append("")
     if not body:
         return []
-    return [f"## {axis.label}", f"_{axis.note}_", ""] + body
+    kind = "" if axis.kind == "axis" else f" ({axis.kind})"
+    return [f"## {axis.label}{kind}", f"_{axis.note}_", ""] + body
 
 
 def _planning_section(rows: list[dict]) -> list[str]:

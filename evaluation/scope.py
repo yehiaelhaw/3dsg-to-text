@@ -108,9 +108,22 @@ REP_CAPS: dict[str, set[str]] = {
     # trailing block is cut from the raw tier since the derived section always
     # supplies it whenever both are present). Channel restored the same day.
     # scene_contexts/*/synthesis.txt regenerated for all 9 scenes 2026-07-14.
-    # NB: `prose` still declares this channel without carrying the content --
-    # left unchanged since it wasn't part of this correction and already-published
-    # relation-linearization numbers were computed under its current declaration.
+    # NB: `prose` also declares this channel. This used to be flagged here as an
+    # unreviewed over-claim of the same kind; re-checked 2026-08-06, it is not one,
+    # and the two cases are not the same kind of thing. The channel is declared by
+    # every view that states the triples exhaustively, because raw enumeration is
+    # what makes the derived content derivable -- that is why relations_flat/
+    # subject/predicate carry it (above), and prose enumerates the same way. The
+    # synthesis defect was a BUILD defect, not a scope-convention question: the
+    # candidate's whole claim is to carry each channel in its winning form, and the
+    # assembled document was silently missing a component it advertised, so the fix
+    # belonged in the parser rather than in this table. Checked against results
+    # rather than left as an argument: on 3RScan relation_aggregate -- the type that
+    # needs this channel and nothing else -- prose scores 0.76, level with
+    # relations_predicate and above relations_flat (0.72) and relations_subject
+    # (0.67), i.e. it derives the aggregate content as well as the enumerating views
+    # whose declaration is not in question. Declaration stands; REP_CAPS unchanged,
+    # which also keeps the published relation-linearization numbers interpretable.
     "synthesis":        {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
 }
