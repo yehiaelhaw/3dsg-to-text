@@ -7,6 +7,7 @@ dataset/
 .vscode/
 experiments/results/
 experiments/results_smoke/
+experiments/results_backup/
 scene_contexts/
 /scripts/
 /docs/
