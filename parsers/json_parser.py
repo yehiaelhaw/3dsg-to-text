@@ -1,3 +1,12 @@
+"""json — the full scene graph as structured JSON. Shared library, no entry point.
+
+This module builds the object (`parse`) and offers both serializations of it
+(`to_json_string`, `to_json_mini_string`), but it is no longer a runnable parser:
+the bare name `json` was retired on 2026-08-09 and the two shipped views are
+`json_pretty_parser` and `json_mini_parser`. Keeping the single `parse` here is
+what makes them content-identical by construction rather than by convention.
+"""
+
 import json
 import sys
 import os
@@ -5,7 +14,6 @@ from typing import Any
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from _base import run_parser
 from utils.loaders import REGISTRY, load
 from utils.models import Building
 
@@ -87,7 +95,3 @@ def to_json_string(data: dict[str, Any], indent: int = 2) -> str:
 # being comparable once whitespace is out of the picture.
 def to_json_mini_string(data: dict[str, Any]) -> str:
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
-
-
-if __name__ == "__main__":
-    run_parser(lambda b: to_json_string(parse(b)), "Serialize a 3D scene to structured JSON")
