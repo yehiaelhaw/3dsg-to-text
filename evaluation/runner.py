@@ -25,7 +25,7 @@ import traceback
 from pathlib import Path
 from typing import Iterator
 
-from evaluation import dataset, scene_loader, scope
+from evaluation import dataset, scene_loader, scope, token_count
 from evaluation.config import EvalConfig
 from evaluation.core import (
     CONTEXT_EXCEEDED,
@@ -57,6 +57,11 @@ Answer the question and explain your reasoning. Include specific values (distanc
 _CTX_RESERVE = 256
 
 
+def _ctx_limit(num_ctx: int) -> int:
+    """Effective prompt budget. One definition, used by both guards."""
+    return num_ctx - _CTX_RESERVE
+
+
 def iter_records(config: EvalConfig) -> Iterator[EvalRecord]:
     """Generate responses (unless score_only), then yield judged records."""
     if not config.score_only:
@@ -81,6 +86,20 @@ def generate_responses(config: EvalConfig) -> Path:
     # Responder context window (ollama num_ctx). Used to flag cells whose prompt
     # overflows it; None for backends that do not expose it -> guard is skipped.
     num_ctx = config.responder_options.get("num_ctx")
+    # Exact pre-call token counter for this responder, built once (the tokenizer
+    # build costs ~0.2s; per-prompt encoding is negligible). Returns None per
+    # prompt on any backend/model it cannot count exactly, which drops
+    # _generate_one back to its character heuristic.
+    sizer = token_count.make_sizer(
+        config.responder_backend, config.responder_model, config.responder_options
+    )
+    if num_ctx:
+        why = token_count.UNSUPPORTED_REASON.get(
+            (config.responder_backend, config.responder_model,
+             config.responder_options.get("host", "http://localhost:11434"))
+        )
+        print(f"  ctx guard: {'estimated (len//4) — ' + why if why else 'exact token count'}"
+              f"  (limit {_ctx_limit(num_ctx)} = num_ctx {num_ctx} - reserve {_CTX_RESERVE})")
 
     questions = dataset.load(config.dataset_path, config.question_ids)
 
@@ -138,7 +157,7 @@ def generate_responses(config: EvalConfig) -> Path:
                         continue
                     rec = _generate_one(
                         question, representation, repetition, context, responder,
-                        responder_tag, num_ctx
+                        responder_tag, num_ctx, sizer
                     )
                     _write(fh, rec)
                     if not rec["error"]:
@@ -146,7 +165,7 @@ def generate_responses(config: EvalConfig) -> Path:
                         print(f"  GEN   {question.id} | {representation} | rep{repetition} | {rec['latency_ms']:.0f}ms")
                     elif is_context_exceeded(rec["error"]):
                         n_ctx += 1
-                        print(f"  CTX!  {question.id} | {representation} | rep{repetition} | prompt {rec['prompt_tokens']} tok >= num_ctx {num_ctx}")
+                        print(f"  CTX!  {question.id} | {representation} | rep{repetition} | prompt {rec['prompt_tokens']} tok, budget {_ctx_limit(num_ctx)}")
                     else:
                         print(f"  ERR   {question.id} | {representation} | rep{repetition}")
 
@@ -162,42 +181,83 @@ def generate_responses(config: EvalConfig) -> Path:
 
 
 def _generate_one(question, representation, repetition, context, responder,
-                  responder_tag, num_ctx=None) -> dict:
+                  responder_tag, num_ctx=None, sizer=None) -> dict:
     try:
         prompt = _RESPONDER_PROMPT.format(
             context=context.strip(),
             question=question.text.strip(),
         )
-        # Pre-call guard: a character-count lower bound (~4 chars/token) already
-        # at the window means the prompt cannot fit no matter what the server
-        # reports. The post-hoc guard below trusts the backend's reported count,
-        # which a serving host with a smaller *effective* window than the
-        # configured num_ctx can undercut -- observed 2026-07: ~45k-token 3RScan
-        # json prompts silently clipped to a reported 16,386 tokens (below the
-        # 32,768 threshold) and scored as real answers. Flagging here is terminal
-        # and spends no generation.
+        # Pre-call guard. Two tiers, and the first is preferred wherever it is
+        # available:
+        #
+        #   exact  -- evaluation.token_count tokenizes the fully rendered prompt
+        #             (chat template, model default system prompt, BOS) with the
+        #             tokenizer read out of the GGUF blob the server is actually
+        #             serving. Verified equal to prompt_eval_count on 13,320
+        #             recorded cells, max delta 0.
+        #   len//4 -- the fallback for backends/models token_count does not
+        #             support. A true lower bound (measured 0.60-0.91 of the real
+        #             count, never above it) but loose: a prompt had to be ~36%
+        #             past the window before it tripped.
+        #
+        # Doing this before the call matters because the post-hoc guard below
+        # trusts the backend's reported count, and an overflowing prompt is
+        # precisely when this server misreports it -- observed 2026-07: ~45k-token
+        # 3RScan json prompts silently clipped to a reported 16,386 tokens (below
+        # the 32,768 threshold) and scored as real answers. Flagging here is
+        # terminal and spends no generation.
+        exact_tokens = sizer(prompt) if sizer else None
         if num_ctx:
-            est_min_tokens = len(prompt) // 4
-            if est_min_tokens >= num_ctx - _CTX_RESERVE:
-                return _gen_dict(
-                    question, representation, repetition, responder_tag,
-                    raw_answer="",
-                    prompt_tokens=est_min_tokens,
-                    error=(f"{CONTEXT_EXCEEDED}: prompt is at least ~{est_min_tokens} tokens "
-                           f"(character lower bound) >= context window {num_ctx} "
-                           f"(representation cannot fit; not generated)"),
-                )
+            limit = _ctx_limit(num_ctx)
+            if exact_tokens is not None:
+                # Strict `>`, where the heuristic below uses `>=`. A prompt of
+                # exactly `limit` leaves exactly _CTX_RESERVE tokens for the
+                # answer, which is the reserve's definition of enough -- and an
+                # exact count is entitled to that boundary. The heuristic is a
+                # lower bound, so it must stay conservative.
+                if exact_tokens > limit:
+                    return _gen_dict(
+                        question, representation, repetition, responder_tag,
+                        raw_answer="",
+                        prompt_tokens=exact_tokens,
+                        error=(f"{CONTEXT_EXCEEDED}: prompt {exact_tokens} tokens "
+                               f"(exact) > budget {limit} = context window {num_ctx} "
+                               f"- {_CTX_RESERVE} reserved for the answer "
+                               f"(representation cannot fit; not generated)"),
+                    )
+            else:
+                est_min_tokens = len(prompt) // 4
+                if est_min_tokens >= limit:
+                    return _gen_dict(
+                        question, representation, repetition, responder_tag,
+                        raw_answer="",
+                        prompt_tokens=est_min_tokens,
+                        error=(f"{CONTEXT_EXCEEDED}: prompt is at least ~{est_min_tokens} tokens "
+                               f"(character lower bound) >= context window {num_ctx} "
+                               f"(representation cannot fit; not generated)"),
+                    )
         gen = responder.generate(prompt)
-        # Context-window guard: if the prompt filled (or was truncated to) the
-        # responder's window, the representation did not fit -- mark the cell
-        # context-exceeded (terminal, unscored) rather than letting the judge
-        # score a clipped answer as a wrong one. Only fires for backends that
-        # report both num_ctx and prompt_tokens (ollama); others skip it.
+        # Post-call backstop, unchanged in effect: if the prompt filled (or was
+        # truncated to) the responder's window, the representation did not fit --
+        # mark the cell context-exceeded (terminal, unscored) rather than letting
+        # the judge score a clipped answer as a wrong one. With the exact guard in
+        # front of it this should now be unreachable; it stays because it is the
+        # only thing that catches a server whose *effective* window is smaller
+        # than the num_ctx it accepted.
         error = None
         if (num_ctx and gen.prompt_tokens
-                and gen.prompt_tokens >= num_ctx - _CTX_RESERVE):
+                and gen.prompt_tokens >= _ctx_limit(num_ctx)):
             error = (f"{CONTEXT_EXCEEDED}: prompt {gen.prompt_tokens} tokens "
                      f">= context window {num_ctx} (representation truncated; not scored)")
+        # Consistency check: the local count and the server's count must agree.
+        # A mismatch means the two have drifted apart -- an ollama upgrade that
+        # changed a chat template, a re-pull under the same tag, or the server
+        # silently truncating. Loud but non-fatal: the recorded prompt_tokens
+        # stays the server's own number either way.
+        elif exact_tokens is not None and gen.prompt_tokens and exact_tokens != gen.prompt_tokens:
+            print(f"  WARN  {question.id} | {representation} | token count drift: "
+                  f"predicted {exact_tokens}, server reported {gen.prompt_tokens} "
+                  f"(delta {gen.prompt_tokens - exact_tokens:+d})")
         return _gen_dict(
             question, representation, repetition, responder_tag,
             raw_answer=gen.text,

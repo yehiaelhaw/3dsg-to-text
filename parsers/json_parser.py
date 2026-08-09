@@ -80,5 +80,14 @@ def to_json_string(data: dict[str, Any], indent: int = 2) -> str:
     return json.dumps(data, indent=indent, ensure_ascii=False)
 
 
+# Same object, no whitespace. `separators` is load-bearing, not cosmetic: dropping
+# `indent` alone leaves json.dumps' default `(", ", ": ")` and gives back only part
+# of the saving (measured on 3rscan_7f30f36c: 113,925 chars vs 102,468 with explicit
+# separators). `ensure_ascii` must match to_json_string's, or the two forms stop
+# being comparable once whitespace is out of the picture.
+def to_json_mini_string(data: dict[str, Any]) -> str:
+    return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+
+
 if __name__ == "__main__":
     run_parser(lambda b: to_json_string(parse(b)), "Serialize a 3D scene to structured JSON")

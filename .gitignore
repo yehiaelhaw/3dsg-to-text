@@ -1,4 +1,7 @@
 __pycache__/
+# Tokenizer vocabularies pulled from ollama /api/show, keyed by served blob
+# digest (evaluation/token_count.py). Regenerated on demand; ~2MB per model.
+evaluation/.token_cache/
 dataset/
 .env
 .vscode/

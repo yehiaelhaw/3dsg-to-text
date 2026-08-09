@@ -36,8 +36,17 @@ class ModelProfile:
 # these hosts). Replaces the previous Kaggle+ngrok setup.
 #   _VOXEL -> voxel.nes, RTX 3090  24GB VRAM
 #   _PIXEL -> pixel.nes, RTX 5070 Ti 16GB VRAM
+#
+# 2026-08-08: every profile is pinned to _VOXEL because a third-party job
+# (Hunyuan3D gradio_app, running as root) holds ~14 of pixel's 16 GB. Ollama
+# does not refuse to serve a card that full -- it loads the model into system
+# RAM instead and keeps answering ~150x slower (measured 0.35 tok/s vs 54
+# tok/s), which presents as a hung run rather than an error. _PIXEL is kept
+# defined so profiles can be moved back one constant at a time once that job
+# ends; check free VRAM first with:
+#   ssh pixel.nes "nvidia-smi --query-compute-apps=pid,used_memory,process_name --format=csv"
 _VOXEL = "http://localhost:11434"
-_PIXEL = "http://localhost:11435"
+_PIXEL = "http://localhost:11435"  # currently unusable -- see note above
 
 MODEL_PROFILES: list[ModelProfile] = [
     # --- standard instruction families: greedy decoding (temperature 0) ---
@@ -48,14 +57,14 @@ MODEL_PROFILES: list[ModelProfile] = [
     # scale curve (screening-tier ablation; confirmatory only per the
     # METHODOLOGY 3.6 contingency rule).
     ModelProfile("qwen2.5-7b", "ollama", "qwen2.5:7b",
-                 {"host": _PIXEL, "num_ctx": 32768, "temperature": 0}),
+                 {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     # 32B fits voxel only (Q4 weights ~20GB); 32k-token KV cache spills past
     # 24GB, so ollama partially offloads to CPU -- slower, but num_ctx stays
     # matched to the other profiles so context_exceeded cells stay comparable.
     ModelProfile("qwen2.5-32b", "ollama", "qwen2.5:32b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     ModelProfile("llama3.1-8b", "ollama", "llama3.1:8b",
-                 {"host": _PIXEL, "num_ctx": 32768, "temperature": 0}),
+                 {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     # Second responder for the headline-cell robustness check (METHODOLOGY
     # 3.6): dense 12B scale-matched to qwen2.5-14b, lineage-independent of
     # responder and both judges, 128k native window so the matched num_ctx
@@ -64,8 +73,20 @@ MODEL_PROFILES: list[ModelProfile] = [
     # profile's directory is judged by Gemini only (confirmatory) -- never
     # run it with --score-only under a different judge; use the profile
     # below for anything screening-tier.
+    # Host moved _PIXEL -> _VOXEL 2026-08-08: a long-running third-party job
+    # (Hunyuan3D gradio_app) pinned ~14 of pixel's 16 GB, leaving too little
+    # VRAM to load this model -- ollama silently fell back to ~97% CPU offload
+    # (0.3 of 10.3 GB resident) and generation slowed ~50-100x, which reads as
+    # a hung run rather than an error. Move back to _PIXEL once that card frees.
     ModelProfile("mistral-nemo-12b", "ollama", "mistral-nemo:12b",
-                 {"host": _PIXEL, "num_ctx": 32768, "temperature": 0}),
+                 {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
+    # Same tag/host as mistral-nemo-12b above but a distinct profile name/directory
+    # (results/mistral-nemo-12b_screening/) -- the second responder's
+    # screening-tier coverage-gap fill (scripts/run_ablation_responders.ps1),
+    # kept separate so the Gemini-confirmatory mistral-nemo-12b directory is
+    # never mixed with gemma2:9b-judged rows (one judge per directory).
+    ModelProfile("mistral-nemo-12b_screening", "ollama", "mistral-nemo:12b",
+                 {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
 
     # --- reasoning family (branch ablation): nonzero floor; r1 degrades at 0 ---
     ModelProfile("deepseek-r1-14b", "ollama", "deepseek-r1:14b",

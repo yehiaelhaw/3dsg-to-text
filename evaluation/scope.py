@@ -84,6 +84,14 @@ REP_CAPS: dict[str, set[str]] = {
     "relations_digest":    {"object_relations", "object_relations_derived"},
     "json":             {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
+    # json_mini is `json` minified -- the same parse() output, serialized without
+    # whitespace -- so it carries exactly the same channels by construction. Declared
+    # here (phase 0 of the ceiling-serializer split) because 3RScan and Gibson
+    # auto-discover reps by file stem: the moment json_mini.json lands in a scene
+    # directory, validate_declared scans it, and an undeclared rep would abort every
+    # run on that host. Nothing else about `json` changes yet.
+    "json_mini":        {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
+                          "object_relations_raw", "object_relations_support", "object_relations_derived"},
     # synthesized best-of-axes default: prose backbone + derived connectivity
     # (graph_digest) + salient metric (metric_relations) + derived object-relation
     # structure (relations_digest), so it carries every channel on a fully-equipped
