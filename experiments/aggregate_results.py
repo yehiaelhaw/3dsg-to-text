@@ -89,6 +89,16 @@ def _write_group(group_dir: Path, fieldnames: list[str], rows: list[dict]) -> No
 
 
 def aggregate_model(model_dir: Path) -> None:
+    # Fail closed before pooling: a retired representation surviving in the inputs
+    # would be pooled into every mean and chart as an extra rep group, and nothing
+    # about the output would look wrong (no filename embeds a rep name). Scoped to
+    # this model only -- a clean directory should not be blocked by an unrelated
+    # dirty one; `check_retired_reps --scope all` gates the whole tree separately.
+    # `inputs` specifically: scanning _aggregate/ here would abort the run that
+    # rewrites it.
+    from experiments.check_retired_reps import assert_clean
+    assert_clean(model_dir, "inputs", quiet=True)
+
     scene_dirs = _scene_dirs(model_dir)
     if not scene_dirs:
         print(f"  (no scene results under {model_dir})")
