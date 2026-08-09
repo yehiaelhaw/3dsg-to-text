@@ -21,7 +21,13 @@ from dataclasses import dataclass
 # candidate (synthesis) and combos answer *different* questions than the axis
 # poles, so they are reported in their own tables, never mixed into a card.
 FLOOR = "inventory"
-CEILING = "json"
+# The complete-information anchor of the primary ladder, minified (2026-08-09).
+# CEILING bounds what a derived view can *express*, not what can score highest:
+# json_pretty carries identical information and is graded against it on the
+# json_formatting cards. Minifying is a cost-accounting correction -- the ceiling's
+# token cost is the denominator of the headline claim, so charging it for
+# pretty-print whitespace overstates every derived view's apparent saving.
+CEILING = "json_mini"
 CANDIDATE = "synthesis"
 
 
@@ -150,7 +156,7 @@ class Axis:
 # renderers say so, so the count here never has to be reconciled against that five.
 AXES: list[Axis] = [
     Axis("spatial_encoding", "Spatial encoding", "procthor",
-         ["inventory", "topology", "metric_relations", "json"],
+         ["inventory", "topology", "metric_relations", "json_mini"],
          ["connectivity", "proximity", "direction"],
          note="ladder is per-type: only in-scope rungs are drawn; inventory is the "
               "spatial-prior floor, not a competitor. See the Spatial encoding "
@@ -161,8 +167,9 @@ AXES: list[Axis] = [
          ["proximity"],
          note="Gibson companion to the spatial-encoding axis: the cleanest metric-rung "
               "exhibit in the study lives on this host, not ProcTHOR (a consistent "
-              "advantage over json across all three scenes), so it needs its own card "
-              "rather than being folded into the main spatial-encoding card.",
+              "advantage over the json_mini ceiling across all three scenes), so it "
+              "needs its own card rather than being folded into the main "
+              "spatial-encoding card.",
          kind="companion"),
     Axis("format", "Format", "procthor",
          ["topology", "prose"],
@@ -240,15 +247,56 @@ AXES: list[Axis] = [
          ["containment", "aggregation", "set_logic"],
          kind="exhibit",
          note="Content-only questions: they need the inventory channel and nothing "
-              "else, so prose and json are matched on everything the question uses and "
-              "json's remaining channels are pure distractor -- which makes this a "
-              "clean verbosity reading rather than a format one. Read it that way: on "
-              "set_logic and containment prose ties the inventory floor exactly (see "
-              "the `vs floor` column), so what separates is json's cost, not prose's "
-              "form; only aggregation puts prose above the floor. metric_relations is "
-              "held out of the ladder despite scoring well here -- it carries channels "
-              "the questions do not need, which is the superset confound this card "
-              "exists without."),
+              "else, so prose and json_mini are matched on everything the question uses "
+              "and json_mini's remaining channels are pure distractor -- which makes "
+              "this a clean verbosity reading rather than a format one. Read it that "
+              "way: on set_logic and containment prose ties the inventory floor exactly "
+              "(see the `vs floor` column), so what separates is json_mini's cost, not "
+              "prose's form; only aggregation puts prose above the floor. "
+              "metric_relations is held out of the ladder despite scoring well here -- "
+              "it carries channels the questions do not need, which is the superset "
+              "confound this card exists without."),
+    # --- formatting ablation: json_pretty vs the json_mini ceiling -------------
+    # Declared 2026-08-09 alongside the ceiling migration, BEFORE any json_mini
+    # cells existed, so neither outcome can be read post-hoc. The two members are
+    # the same parse() output under two serializations, so they are matched on
+    # every channel by construction -- hence no confound (confound_for exempts
+    # any pair containing CEILING anyway), and no headline_pair: a single-rung
+    # ladder plus the ceiling anchor already yields exactly the one pair, and
+    # AXIS_PAIRS feeds axis_contrasts.png, which pools across datasets and would
+    # drag 3RScan back in.
+    #
+    # 3RScan is deliberately not hosted: json_pretty is CONTEXT_EXCEEDED on two of
+    # its three scenes, so its coverage there falls under MIN_COVERAGE and the pair
+    # is not rank-eligible. The host filter is the belt; that gate is the braces.
+    #
+    # probe_types is every non-planning question type on the host -- a stated rule,
+    # not a chosen subset, which is what a two-sided null-hypothesis ablation needs
+    # (planning has its own report section). All counts clear SMALL_N.
+    Axis("json_formatting", "JSON formatting (pretty vs minified)", "procthor",
+         ["json_pretty"],
+         ["connectivity", "direction", "route", "aggregation", "proximity",
+          "set_logic", "containment"],
+         kind="exhibit",
+         note="Same parse() output under two serializations, so the members carry "
+              "identical information and any separation is an accessibility effect of "
+              "FORMATTING, not of content. Interpretation is fixed in advance and is "
+              "two-sided. json_mini is the canonical full-information serialization "
+              "for COST ACCOUNTING; that decision is not a claim about accuracy, so a "
+              "json_pretty win does not unsettle it -- it would mean whitespace aids "
+              "access to the same facts, and what must then be dropped is any "
+              "description of json_mini as an empirical upper bound on accuracy across "
+              "serializations (it bounds INFORMATION, a different claim). No "
+              "separation, or a json_mini win, is reported plainly with no implied "
+              "vindication. Neither direction was predicted."),
+    Axis("json_formatting_gibson", "JSON formatting (Gibson)", "gibson",
+         ["json_pretty"],
+         ["aggregation", "proximity", "set_logic", "direction", "containment"],
+         kind="companion",
+         note="Gibson companion to the JSON formatting exhibit (cards are "
+              "single-host); same construction, same two-sided reading. 3RScan hosts "
+              "no companion: json_pretty overflows the responder window on two of its "
+              "three scenes, so the pair is not rank-eligible there."),
 ]
 
 AXIS_BY_ID = {a.id: a for a in AXES}

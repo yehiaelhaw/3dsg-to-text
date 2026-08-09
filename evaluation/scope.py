@@ -56,6 +56,23 @@ from __future__ import annotations
 #     only. Any new question relying on relations_digest for a specific fact
 #     must still be verified against the actual printed text before being
 #     admitted, same as always (CLAUDE.md "Writing a QA dataset for a scene").
+
+# Every channel there is. Defined before REP_CAPS so the full-information views can
+# reference it instead of restating the list: "identical content ⇒ identical
+# channels" then holds structurally, not by three copies staying in sync.
+ALL_CAPS = {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
+            "object_relations_raw", "object_relations_support", "object_relations_derived"}
+
+# Names that were once valid and are now errors. `json` was split on 2026-08-09 into
+# json_pretty (the historical pretty serialization) and json_mini (the minified
+# ceiling). There is deliberately NO alias: the resume cache keys on
+# (question_id, representation, repetition), so a silent alias would let one logical
+# cell exist under two keys and quietly double a rep group in every mean.
+RETIRED_REPS: dict[str, str] = {
+    "json": "split into 'json_pretty' (historical pretty serialization) and "
+            "'json_mini' (the minified ceiling) on 2026-08-09",
+}
+
 REP_CAPS: dict[str, set[str]] = {
     "inventory":        {"inventory"},
     "topology":         {"inventory", "connectivity"},
@@ -82,16 +99,13 @@ REP_CAPS: dict[str, set[str]] = {
     # support-chain coverage is curated (see note above), so it gets only the
     # "derived" tier, not "support".
     "relations_digest":    {"object_relations", "object_relations_derived"},
-    "json":             {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
-                          "object_relations_raw", "object_relations_support", "object_relations_derived"},
-    # json_mini is `json` minified -- the same parse() output, serialized without
-    # whitespace -- so it carries exactly the same channels by construction. Declared
-    # here (phase 0 of the ceiling-serializer split) because 3RScan and Gibson
-    # auto-discover reps by file stem: the moment json_mini.json lands in a scene
-    # directory, validate_declared scans it, and an undeclared rep would abort every
-    # run on that host. Nothing else about `json` changes yet.
-    "json_mini":        {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
-                          "object_relations_raw", "object_relations_support", "object_relations_derived"},
+    # The two serializations of one parse() output. They are the same object printed
+    # two ways, so they carry exactly the same channels -- expressed by referencing
+    # ALL_CAPS rather than restating it, so the two entries cannot drift apart.
+    # json_mini is the ceiling (axes.CEILING); json_pretty is the raw pole of the
+    # json_formatting ablation. The bare name `json` is retired -- see RETIRED_REPS.
+    "json_mini":        set(ALL_CAPS),
+    "json_pretty":      set(ALL_CAPS),
     # synthesized best-of-axes default: prose backbone + derived connectivity
     # (graph_digest) + salient metric (metric_relations) + derived object-relation
     # structure (relations_digest), so it carries every channel on a fully-equipped
@@ -132,11 +146,12 @@ REP_CAPS: dict[str, set[str]] = {
     # (0.67), i.e. it derives the aggregate content as well as the enumerating views
     # whose declaration is not in question. Declaration stands; REP_CAPS unchanged,
     # which also keeps the published relation-linearization numbers interpretable.
+    # Written out rather than referencing ALL_CAPS: this entry's channel list was
+    # contested (see the object_relations_derived history above), so an auditor
+    # should be able to read the declaration itself, not a constant.
     "synthesis":        {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
 }
-ALL_CAPS = {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
-            "object_relations_raw", "object_relations_support", "object_relations_derived"}
 
 # What each question type needs to be answerable at all. Spatial family needs a
 # spatial channel; the general-reasoning family only needs room/object content
@@ -200,7 +215,12 @@ def validate_declared(reps: set[str], qtypes: set[str | None]) -> None:
     problems: list[str] = []
     for rep in sorted(reps):
         for part in rep.split("+"):
-            if part not in REP_CAPS:
+            if part in RETIRED_REPS:
+                problems.append(
+                    f"representation {part!r} (from {rep!r}) is RETIRED: {RETIRED_REPS[part]}. "
+                    f"Name the replacement explicitly -- there is no alias, on purpose"
+                )
+            elif part not in REP_CAPS:
                 problems.append(f"representation {part!r} (from {rep!r}) has no REP_CAPS entry")
     for qt in sorted(qtypes, key=lambda t: t or ""):
         if not qt:

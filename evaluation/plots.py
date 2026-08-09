@@ -107,12 +107,18 @@ def _per_qid_ac(results_path: Path):
 # Stable per-rep colours, reused across every chart so a representation keeps the
 # same colour in all figures (lets a thesis reader cross-reference). Grouped by
 # axis family: grey control, blue connectivity/structure, green metric/frame,
-# warm relations (relation linearization), purple/black prose+json ceiling, magenta combos.
+# warm relations (relation linearization), purple/black prose+json_mini ceiling, magenta combos.
 # tab10 carries only 10 hues, so the old resampling collapsed the 16-rep set into
 # duplicates; a fixed map avoids that and stays stable as reps come and go.
 REP_COLORS: dict[str, str] = {
     "inventory":                     "#9e9e9e",  # control / floor
-    "json":                          "#1f1f1f",  # raw-coordinate ceiling
+    "json_mini":                     "#1f1f1f",  # raw-coordinate ceiling (inherits
+                                                 # the old `json` black, so every
+                                                 # existing figure keeps its ceiling
+                                                 # colour across the migration)
+    "json_pretty":                   "#5c5c5c",  # same content, pretty-printed --
+                                                 # a lighter grey of the ceiling's
+                                                 # own hue, clear of inventory's
     "prose":                         "#6a3d9a",  # natural language
     # connectivity / structure (spatial-encoding connectivity, structure presentation)
     "topology":                      "#1f78b4",
@@ -167,7 +173,7 @@ def _axis_card_reps(axis, qt: str, points: dict) -> list[str]:
 def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str]:
     """One figure *per* registry entry (axes.AXES) -> axis_card_<id>.png: a subplot per
     probe type, reps drawn as bars in ladder order with the floor (inventory) and
-    ceiling (json) as a dashed/dotted band so a pole is read against them. Each rep
+    ceiling (json_mini) as a dashed/dotted band so a pole is read against them. Each rep
     is a readable x-tick label; the y-axis starts at 0. Restricted to the entry's
     host dataset (never pooled) and its probe types. Only what a ladder declares is
     drawn, so synthesis never appears and a combo appears only where an entry names
@@ -201,8 +207,8 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
                 ax.axhline(floor_ac, color=color.get(FLOOR, "grey"), linestyle="--",
                            linewidth=1.0, alpha=0.7, zorder=1)
             if ceil_ac is not None:
-                ax.axhline(ceil_ac, color="black", linestyle=":", linewidth=1.0,
-                           alpha=0.7, zorder=1)
+                ax.axhline(ceil_ac, color=REP_COLORS.get(CEILING, "black"), linestyle=":",
+                           linewidth=1.0, alpha=0.7, zorder=1)
             for xi, rep in enumerate(reps):
                 vals = points[(qt, rep)]
                 m = statistics.mean(vals)
@@ -228,8 +234,11 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
             if gi == 0:
                 ax.set_ylabel("Answer correctness")
         kind = "" if axis.kind == "axis" else f" [{axis.kind}]"
+        # Anchor names come from the registry, never a literal: the ceiling was
+        # renamed once already (json -> json_mini) and a hardcoded label here would
+        # have kept printing the retired name over correct data.
         fig.suptitle(f"{axis.label}{kind}   (host: {axis.host}; "
-                     f"floor=dashed, json=dotted, hatch = n<{SMALL_N})", fontsize=11)
+                     f"{FLOOR}=dashed, {CEILING}=dotted, hatch = n<{SMALL_N})", fontsize=11)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
         stem = f"axis_card_{axis.id}.png"
         fig.savefig(out_dir / stem, dpi=150, bbox_inches="tight")
@@ -479,11 +488,11 @@ def plot_per_question(results_path: Path) -> None:
     # The x-axis IS legitimately pooled: the representation is the same serialized
     # file whatever question is asked of it, so its token cost does not vary by type.
     # Within a panel: the dashed line is the efficiency frontier (no rep is both
-    # cheaper and more accurate than a point on it) -- where the combo-vs-json
-    # ceiling question is read: same AC, far fewer tokens = the combo wins.
+    # cheaper and more accurate than a point on it) -- where the combo-vs-ceiling
+    # question is read: same AC, far fewer tokens = the combo wins.
     #
     # Coverage per rep (1 - context_exceeded rate) comes from the *unfiltered* rows:
-    # a rep whose AC rests on few survivors (json overflowing dense scenes) is
+    # a rep whose AC rests on few survivors (the JSON views overflowing dense scenes) is
     # survivorship-biased, so its marker is shrunk and its cov% annotated -- the AC
     # alone would read as a clean point otherwise.
     all_rows = list(csv.DictReader(results_path.open(encoding="utf-8")))

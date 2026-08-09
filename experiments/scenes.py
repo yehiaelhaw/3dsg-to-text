@@ -36,7 +36,10 @@ def _qa(scene_id: str) -> str:
 # scored on).
 _PROCTHOR_REPS = [
     "inventory", "topology", "topology_edges_only", "room_tree", "graph_digest",
-    "prose", "metric_relations", "navigation", "json", "synthesis",
+    # json_mini is the ceiling; json_pretty is the same content pretty-printed, kept
+    # as the formatting ablation's raw pole (axes.json_formatting). The bare name
+    # `json` is retired -- scope.RETIRED_REPS aborts any run that still names it.
+    "prose", "metric_relations", "navigation", "json_mini", "json_pretty", "synthesis",
     "topology+metric_relations", "graph_digest+metric_relations",
 ]
 

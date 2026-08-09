@@ -202,10 +202,11 @@ def _generate_one(question, representation, repetition, context, responder,
         #
         # Doing this before the call matters because the post-hoc guard below
         # trusts the backend's reported count, and an overflowing prompt is
-        # precisely when this server misreports it -- observed 2026-07: ~45k-token
-        # 3RScan json prompts silently clipped to a reported 16,386 tokens (below
-        # the 32,768 threshold) and scored as real answers. Flagging here is
-        # terminal and spends no generation.
+        # precisely when this server misreports it -- observed 2026-07: the dense
+        # 3RScan `json` prompts (the rep is now `json_pretty`; measured 49,267 and
+        # 58,794 tokens on qwen2.5, not the ~45k estimated at the time) silently
+        # clipped to a reported 16,386 tokens (below the 32,768 threshold) and
+        # scored as real answers. Flagging here is terminal and spends no generation.
         exact_tokens = sizer(prompt) if sizer else None
         if num_ctx:
             limit = _ctx_limit(num_ctx)

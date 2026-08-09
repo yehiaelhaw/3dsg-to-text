@@ -272,8 +272,8 @@ def _planning_section(rows: list[dict]) -> list[str]:
     pole). A planning question states a *goal*; the model must infer the objects it
     needs (the affordance step) rather than being handed them -- that inference is
     the extra reasoning vs a containment/set_logic question on the same objects.
-    inventory is the floor, json the ceiling; in-scope reps carry the inventory
-    channel.
+    inventory is the floor, json_mini the ceiling; in-scope reps carry the
+    inventory channel.
 
     Split per host dataset (never pooled): planning's floor/ceiling meaning differs
     by dataset (e.g. 3RScan planning needs the raw relation channel, not just
@@ -302,7 +302,7 @@ def _planning_section(rows: list[dict]) -> list[str]:
         out += [f"## Planning / real-world utility (separate probe, host: {ds})",
                 "_Goal-framed questions: the model must infer the objects a goal needs, not be "
                 "handed them. Reported on its own -- not an axis pole, and never pooled across "
-                "datasets. inventory = floor, json = ceiling._", ""]
+                f"datasets. {FLOOR} = floor, {CEILING} = ceiling._", ""]
         out += _table(["rep", "role", "n", "cov%", "AC", "q-range", "vs floor"], trows) + [""]
     return out
 
@@ -406,8 +406,8 @@ def _paired_pairs(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[tup
     """Which contrasts to compute for one axis x question type.
 
     The ladder baseline against each later rung (the axis's own story), the
-    declared headline pair, and each rung against the json ceiling (the anchor
-    comparison). Deduplicated, always ordered (earlier, later) so the reported
+    declared headline pair, and each rung against the json_mini ceiling (the
+    anchor comparison). Deduplicated, always ordered (earlier, later) so the reported
     delta's sign is unambiguous.
     """
     rungs = [p for p in axis.ladder
@@ -792,11 +792,13 @@ OBJECT_RELATION_TYPES = {"object_relation", "relation_structure", "relation_aggr
 def _coverage_section(rows: list[dict]) -> list[str]:
     """Cells where coverage matters: anything that overflowed the window, plus the
     whole object-relation family (`object_relation`/`relation_structure`/
-    `relation_aggregate` -- where json/relations_flat overflow on dense scenes).
+    `relation_aggregate` -- where json_mini/json_pretty/relations_flat overflow on
+    dense scenes).
     This is where the survivorship trap is read.
 
-    Split per host dataset (never pooled): overflow is a host property (json only
-    exceeds the window on dense 3RScan scenes), so a pooled row would average a
+    Split per host dataset (never pooled): overflow is a host property (the JSON
+    views only exceed the window on dense 3RScan scenes -- json_pretty on two of the
+    three, json_mini on 7f30f36c alone), so a pooled row would average a
     host where a rep is fully scoreable with one where it fails closed and hide
     exactly the survivorship signal this table exists to surface."""
     out: list[str] = []
@@ -829,7 +831,7 @@ def _small_n_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
 
 
 def _combo_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
-    """Multi-view combos vs their best single component vs the json ceiling -- the
+    """Multi-view combos vs their best single component vs the json_mini ceiling -- the
     'do two orthogonal views reach the ceiling' question, kept out of the pole cards."""
     combos = sorted({rep for (rep, _) in cells if "+" in rep})
     if not combos:
@@ -850,13 +852,13 @@ def _combo_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
                      if best and c.n_scored else "")
             trows.append([combo, qt, str(c.n), _ac_str(c), best_s, json_s, dbest])
     return (["## Multi-view combinations",
-             "_Each combo vs its best single component and the json ceiling._", ""]
-            + _table(["combo", "type", "n", "AC", "best single", "json AC", "vs best"], trows)
+             f"_Each combo vs its best single component and the {CEILING} ceiling._", ""]
+            + _table(["combo", "type", "n", "AC", "best single", f"{CEILING} AC", "vs best"], trows)
             + [""])
 
 
 def _candidate_section(rows: list[dict]) -> list[str]:
-    """The synthesis candidate-default vs the json ceiling, with token cost -- the
+    """The synthesis candidate-default vs the json_mini ceiling, with token cost -- the
     'match the ceiling at a fraction of the tokens' question.
 
     Split per host dataset (never pooled): most question types here are asked on
@@ -879,10 +881,11 @@ def _candidate_section(rows: list[dict]) -> list[str]:
             st = f"{s.tokens_mean:.0f}" if s.tokens_mean else "-"
             jt = f"{j.tokens_mean:.0f}" if j and j.tokens_mean else "-"
             trows.append([qt, _ac_str(s), _ac_str(j) if j else "n/a", st, jt])
-        out += [f"## Candidate default (synthesis vs json, host: {ds})",
-                "_Can one compact view match the json ceiling at a fraction of the "
+        out += [f"## Candidate default ({CANDIDATE} vs {CEILING}, host: {ds})",
+                f"_Can one compact view match the {CEILING} ceiling at a fraction of the "
                 "tokens? Never pooled across datasets._", ""]
-        out += _table(["type", "synthesis AC", "json AC", "synth tok", "json tok"], trows) + [""]
+        out += _table(["type", f"{CANDIDATE} AC", f"{CEILING} AC",
+                       f"{CANDIDATE} tok", f"{CEILING} tok"], trows) + [""]
     return out
 
 
