@@ -85,26 +85,53 @@ def _fieldnames_with_column(existing: list[str]) -> list[str]:
 
 
 def backfill_file(path: Path, styles: dict[tuple[str, str], str],
-                  dry_run: bool) -> tuple[int, int, bool]:
-    """Returns (rows, unmatched, changed)."""
+                  dry_run: bool, refresh: bool = False) -> tuple[int, int, bool, dict]:
+    """Returns (rows, unmatched, changed, delta).
+
+    Default mode adds the column only when it is absent, and is a no-op otherwise.
+    `refresh` re-joins every row against the CURRENT QA files even where the column
+    already exists. That is needed because the original backfill tagged only the
+    question types then exposed to a derived pole, so rows written before the
+    balanced-corpus work carry an empty tag for questions that now have one --
+    which left two content-identical representations (json_pretty vs json_mini)
+    with different `question_style` coverage purely by provenance.
+
+    `delta` counts what actually moved: set (empty -> tag), cleared (tag -> empty)
+    and retagged (tag -> different tag). Clearing is reported separately because it
+    is the only direction that removes information, and it should be inspected
+    rather than assumed benign.
+    """
     with path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         fieldnames = list(reader.fieldnames or [])
         rows = list(reader)
 
-    if COLUMN in fieldnames:
-        return len(rows), 0, False
+    delta = {"set": 0, "cleared": 0, "retagged": 0}
+    if COLUMN in fieldnames and not refresh:
+        return len(rows), 0, False, delta
     if not rows:
-        return 0, 0, False
+        return 0, 0, False, delta
 
     unmatched = 0
     for r in rows:
         key = (r["scene_id"], r["question_id"])
+        before = r.get(COLUMN) or ""
         if key in styles:
-            r[COLUMN] = styles[key]
+            after = styles[key]
         else:
-            r[COLUMN] = ""
+            after = ""
             unmatched += 1
+        r[COLUMN] = after
+        if before != after:
+            if not before:
+                delta["set"] += 1
+            elif not after:
+                delta["cleared"] += 1
+            else:
+                delta["retagged"] += 1
+
+    if refresh and not any(delta.values()):
+        return len(rows), unmatched, False, delta
 
     if not dry_run:
         out_fields = _fieldnames_with_column(fieldnames)
@@ -122,13 +149,17 @@ def backfill_file(path: Path, styles: dict[tuple[str, str], str],
             raise SystemExit(f"{path}: wrote {written} rows, expected {len(rows)} -- aborted")
         os.replace(tmp, path)
 
-    return len(rows), unmatched, True
+    return len(rows), unmatched, True, delta
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Backfill question_style into results.csv files.")
     ap.add_argument("--models", help="comma-separated model dir names (default: all)")
     ap.add_argument("--dry-run", action="store_true", help="report what would change, write nothing")
+    ap.add_argument("--refresh", action="store_true",
+                    help="re-join question_style for every row against the current QA "
+                         "files, even where the column already exists (the default mode "
+                         "only adds a missing column and is otherwise a no-op)")
     args = ap.parse_args()
 
     if not RESULTS_ROOT.exists():
@@ -150,23 +181,39 @@ def main() -> None:
         model_dirs = [d for d in model_dirs if d.name in wanted]
 
     total_rows = total_unmatched = total_changed = 0
+    totals = {"set": 0, "cleared": 0, "retagged": 0}
     for model_dir in model_dirs:
         files = _scene_files(model_dir)
         if not files:
             continue
         print(f"[{model_dir.name}]")
         for path in files:
-            rows, unmatched, changed = backfill_file(path, styles, args.dry_run)
-            state = ("would add" if args.dry_run else "added") if changed else "already present"
+            rows, unmatched, changed, delta = backfill_file(
+                path, styles, args.dry_run, refresh=args.refresh)
+            if changed:
+                state = ("would refresh" if args.dry_run else "refreshed") if args.refresh \
+                    else ("would add" if args.dry_run else "added")
+            else:
+                state = "no change"
+            moved = "  ".join(f"{k}={v}" for k, v in delta.items() if v)
             flag = f"  !! {unmatched} unmatched" if unmatched else ""
-            print(f"  {path.parent.name:22} {rows:5} rows  {state}{flag}")
+            print(f"  {path.parent.name:22} {rows:5} rows  {state:14}{moved}{flag}")
             total_rows += rows
             total_unmatched += unmatched
             total_changed += int(changed)
+            for k in totals:
+                totals[k] += delta[k]
         print()
 
-    verb = "would backfill" if args.dry_run else "backfilled"
-    print(f"{verb} {total_changed} file(s), {total_rows} rows, {total_unmatched} unmatched")
+    verb = "would update" if args.dry_run else "updated"
+    print(f"{verb} {total_changed} file(s), {total_rows} rows scanned, "
+          f"{total_unmatched} unmatched")
+    if args.refresh:
+        print(f"  question_style values: set={totals['set']}  "
+              f"retagged={totals['retagged']}  cleared={totals['cleared']}")
+        if totals["cleared"]:
+            print("  NOTE: `cleared` removes a tag a row previously carried. Inspect "
+                  "those questions in the QA files before accepting.")
     if total_unmatched:
         raise SystemExit("unmatched rows found -- a results row has no authored question; "
                          "investigate before writing")
