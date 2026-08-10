@@ -65,8 +65,17 @@ NEW_NAME = "json_pretty"
 BACKUP_SUFFIX = ".json-rename.bak"
 
 # Directories with no ModelProfile, so they get no json_mini run and nothing else
-# will rewrite their derived artifacts. `--render` regenerates these three.
-RENAME_ONLY = ("deepseek-r1-14b_screening", "qwen2.5-32b_screening", "qwen2.5-7b_screening")
+# will rewrite their derived artifacts. `--render` regenerates them.
+#
+# Empty since 2026-08-10, and the emptiness is load-bearing. This tuple used to
+# name three orphan `*_screening` directories that no profile pointed at; those
+# were deleted (zero unique rows, stale-rubric scores), and the same three names
+# were then taken by the renamed live screening directories. Every directory
+# under results/ now has a ModelProfile and gets its derived artifacts rewritten
+# by `results.save` on its own run, so there is nothing left for `--render` to
+# cover. Re-listing the old strings here would silently re-render live,
+# profiled directories -- which is exactly what this list was built to exclude.
+RENAME_ONLY: tuple[str, ...] = ()
 
 
 @dataclass

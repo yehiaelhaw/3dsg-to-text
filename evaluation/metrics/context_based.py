@@ -159,28 +159,89 @@ def rubric_correctness(
     return core_score, tier_score(detail), text
 
 
+# A verdict word only counts when the line ends there or continues into a reason.
+# Without that guard a fact RESTATEMENT whose text begins with "No"/"Yes" -- e.g.
+# "4. No other table is included in this shape group" -- parses as a verdict, and
+# silently records the OPPOSITE of the verdict the judge gives on the next line.
+# Nothing raises, so the row still looks scored. Seen on gemini-2.5-flash, which
+# restates each fact on the numbered line and puts YES/NO on an indented bullet.
+_NUM_VERDICT = re.compile(r"^[\-\s]*(\d+)[.)]\s*(YES|NO)\b(.*)$", re.IGNORECASE)
+_REASON_SEP = re.compile(r"^\s*(?:[-–—:;,.!]|$)")
+_SUB_VERDICT = re.compile(r"^[\-•\*\s]*(YES|NO)\b", re.IGNORECASE)
+
+# Only an affirmation earns the fact. A numbered line carrying a short verdict
+# phrase that is NOT "YES" -- "MAYBE", "PARTIALLY YES", "IMPLIED YES" -- means the
+# judge considered the fact and declined to affirm it, which scores as NO. This is
+# deliberately vocabulary-free: no list of hedge words to maintain, and hedges
+# nobody has seen yet resolve the same way. The prompt asks for YES or NO, so a
+# reply that is neither has not met the bar the prompt sets.
+#
+# NOT the same as a fact the judge never mentioned -- that still raises below.
+# "evaluated but not affirmed" and "never evaluated" are different claims, and
+# scoring the second as absent is the silent-understatement bug the fail-closed
+# rule exists to catch (it caught a truncated verdict list at 4/10632 rows).
+#
+# The separator requirement is what keeps a fact RESTATEMENT from being read as a
+# verdict: "3. Bath cabinet [16]" has no reason clause, so it stays pending and
+# waits for the real verdict on the following line.
+_NUM_ANY = re.compile(r"^[\-\s]*(\d+)[.)]\s*(.+)$")
+_SEP_SPLIT = re.compile(r"\s*[-–—:;,.!]\s*")
+_MAX_VERDICT_WORDS = 3
+
+
 def _parse_rubric(text: str, n: int) -> list[bool]:
     results = [False] * n
     seen: set[int] = set()
+    # Index of the most recent numbered fact still awaiting a verdict, so a
+    # verdict on the following indented line can be attributed to it.
+    pending: int | None = None
     for line in text.splitlines():
         # Tolerate markdown emphasis / bullets the judge sometimes adds, e.g.
         # "1.  **YES** - ..." or "- 1) `NO`": strip emphasis chars before matching.
         clean = line.replace("*", "").replace("`", "").replace("_", "").strip()
-        m = re.match(r"^[\-\s]*(\d+)[.)]\s*(YES|NO)\b", clean, re.IGNORECASE)
+        m = _NUM_VERDICT.match(clean)
         if m:
             idx = int(m.group(1)) - 1
             if 0 <= idx < n:
-                results[idx] = m.group(2).upper() == "YES"
+                if _REASON_SEP.match(m.group(3)):
+                    results[idx] = m.group(2).upper() == "YES"
+                    seen.add(idx)
+                    pending = None
+                else:
+                    # Restatement, not a verdict -- wait for the real one below.
+                    pending = idx
+            continue
+        numbered = _NUM_ANY.match(clean)
+        if numbered:
+            idx = int(numbered.group(1)) - 1
+            parts = _SEP_SPLIT.split(numbered.group(2), 1)
+            phrase = parts[0].strip()
+            addressed = (len(parts) > 1 and phrase
+                         and len(phrase.split()) <= _MAX_VERDICT_WORDS)
+            if 0 <= idx < n and idx not in seen and addressed:
+                results[idx] = False   # considered, not affirmed -> NO
                 seen.add(idx)
+                pending = None
+            else:
+                pending = idx if 0 <= idx < n and idx not in seen else None
+            continue
+        # Indented continuation under a numbered fact that has no verdict yet.
+        if pending is not None and pending not in seen and line[:1] in (" ", "\t", "*", "-"):
+            sub = _SUB_VERDICT.match(clean)
+            if sub:
+                results[pending] = sub.group(1).upper() == "YES"
+                seen.add(pending)
+                pending = None
     if n > 0 and len(seen) < n:
-        # EVERY fact must get an explicit verdict. A missing line is a judge-format
-        # failure, not an implicit NO: defaulting it to absent silently understates
-        # the answer and biases AC downward, and it does so invisibly because the
-        # record still looks scored. Raise so the record errors and is re-judged on
-        # resume -- the same fail-closed contract the rest of the pipeline follows.
-        # Both the no-verdicts-at-all and the truncated-list cases land here.
+        # EVERY fact must be ADDRESSED. A fact the judge skipped entirely is a
+        # format failure, not an implicit NO: defaulting it to absent silently
+        # understates the answer and biases AC downward, and it does so invisibly
+        # because the record still looks scored. Raise so the record errors and is
+        # re-judged on resume -- the same fail-closed contract the rest of the
+        # pipeline follows. Both the no-verdicts-at-all and the truncated-list
+        # cases land here. (An addressed-but-hedged fact does NOT: see _NUM_ANY.)
         missing = [i + 1 for i in range(n) if i not in seen]
         raise ValueError(
-            f"Judge gave no YES/NO verdict for fact(s) {missing} of {n}: {text!r}"
+            f"Judge gave no verdict at all for fact(s) {missing} of {n}: {text!r}"
         )
     return results

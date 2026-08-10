@@ -8,6 +8,9 @@ dataset/
 experiments/results/
 experiments/results_smoke/
 experiments/results_backup/
+# Timestamped pre-edit copies of the QA dataset + affected results (backup.py).
+# Large and reconstructible; keep them local.
+experiments/backups/
 scene_contexts/
 /scripts/
 /docs/

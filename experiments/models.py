@@ -17,6 +17,18 @@ selection rationale in docs/METHODOLOGY.md 3.6); the remaining profiles are
 contingency/ablation options (llama3.1-8b dormant third point, qwen2.5-32b
 upper scale rung, deepseek-r1-14b reasoning-branch ablation) that run only
 when their trigger conditions are met.
+
+Naming convention: a `_screening` suffix means the profile's directory is
+judged by gemma2:9b and nothing else; a bare name means it is Gemini-judged
+(confirmatory). The suffix is the directory's judge tier made visible, so the
+one-judge-per-directory invariant is readable from `ls` rather than only from
+the `judge` column. Renamed 2026-08-10: qwen2.5-7b, qwen2.5-32b and
+deepseek-r1-14b were always screening-only but carried bare names, which read
+as if they held confirmatory numbers. If any of them is later promoted under
+the METHODOLOGY 3.6 contingency rule, the Gemini pass gets a NEW bare-named
+profile/directory -- never a second judge in the `_screening` one. llama3.1-8b
+keeps a bare name because it is dormant and its tier is undecided; give it a
+suffix at the moment it is activated at screening tier.
 """
 from __future__ import annotations
 
@@ -56,12 +68,12 @@ MODEL_PROFILES: list[ModelProfile] = [
     # Scale rung below the primary: with 14b/32b it forms the within-family
     # scale curve (screening-tier ablation; confirmatory only per the
     # METHODOLOGY 3.6 contingency rule).
-    ModelProfile("qwen2.5-7b", "ollama", "qwen2.5:7b",
+    ModelProfile("qwen2.5-7b_screening", "ollama", "qwen2.5:7b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     # 32B fits voxel only (Q4 weights ~20GB); 32k-token KV cache spills past
     # 24GB, so ollama partially offloads to CPU -- slower, but num_ctx stays
     # matched to the other profiles so context_exceeded cells stay comparable.
-    ModelProfile("qwen2.5-32b", "ollama", "qwen2.5:32b",
+    ModelProfile("qwen2.5-32b_screening", "ollama", "qwen2.5:32b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     ModelProfile("llama3.1-8b", "ollama", "llama3.1:8b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
@@ -89,6 +101,6 @@ MODEL_PROFILES: list[ModelProfile] = [
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
 
     # --- reasoning family (branch ablation): nonzero floor; r1 degrades at 0 ---
-    ModelProfile("deepseek-r1-14b", "ollama", "deepseek-r1:14b",
+    ModelProfile("deepseek-r1-14b_screening", "ollama", "deepseek-r1:14b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0.6}),
 ]
