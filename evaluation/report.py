@@ -786,6 +786,306 @@ def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> lis
                       "scene deltas", "mean", "fact-sets", "verdict"], trows) + [""])
 
 
+def _sibling_groups(results_path: Path) -> list[tuple[str, Path]]:
+    """(responder directory name, results.csv) for every other model directory
+    holding the same aggregate group.
+
+    Eligibility is four explicit conditions, none of them inferred: the caller is
+    an aggregate-group report, the candidate is a different directory, it holds the
+    same group, and that group has rows. The judge condition is deliberately NOT
+    applied here -- a judge mismatch must be reported as a refusal rather than
+    silently filtered, so `_cross_section` applies it where it can be printed.
+
+    Returns [] for a per-scene report: one scene is not the unit of replication, so
+    agreement measured there would be a single draw dressed up as a replication.
+    Iteration is sorted, so adding a directory can never reorder an existing report.
+    """
+    if results_path.parent.parent.name != "_aggregate":
+        return []
+    group = results_path.parent.name
+    model_dir, root = results_path.parents[2], results_path.parents[3]
+    out = []
+    for d in sorted(root.iterdir()):
+        if not d.is_dir() or d == model_dir:
+            continue
+        p = d / "_aggregate" / group / "results.csv"
+        if p.exists():
+            out.append((d.name, p))
+    return out
+
+
+# A comparison's state under one responder. A delta below the practical margin has
+# NO DIRECTION -- it is not a small win, it is an absence of separation -- so the
+# cross-responder reading is a three-state comparison rather than a sign comparison.
+# This is what keeps `REVERSED` off noise: deltas of +0.03 and -0.02 disagree in
+# sign while neither separates, and that is a null in both, not a failed
+# replication. Where a sub-margin delta's raw sign is shown it is called a LEAN,
+# never a direction, because naming it a direction would reintroduce the very
+# state this three-way split exists to remove.
+AHEAD, NULL, BEHIND = 1, 0, -1
+
+CROSS_PRESERVED   = "ordering preserved"
+CROSS_REVERSED    = "REVERSED"
+CROSS_LEAN_SAME   = "below margin there, leans same way"
+CROSS_LEAN_OPPOSE = "below margin there, leans opposite way"
+CROSS_ONLY_THERE  = "no separation here, separates there"
+CROSS_NULL_BOTH   = "no separation in either"
+
+
+def _dir_state(d: float) -> int:
+    if d >= PRACTICAL_MARGIN:
+        return AHEAD
+    if d <= -PRACTICAL_MARGIN:
+        return BEHIND
+    return NULL
+
+
+def _cross_outcome(d_here: float, d_there: float) -> str:
+    """Direction-and-separation state, never sign alone.
+
+    `REVERSED` requires BOTH sides to clear the practical margin in opposite
+    directions; nothing else can produce it. Where only `here` separates, the
+    sub-margin delta is reported as a lean -- informative, but not a reversal,
+    because a delta that does not separate has no direction to reverse.
+
+    Where `here` does not separate the lean is not split at all: this report is
+    written from `here`'s perspective, so `here` supplies the reference ordering,
+    and with no ordering to preserve there is nothing for `there` to agree with.
+    """
+    sh, st = _dir_state(d_here), _dir_state(d_there)
+    if sh != NULL and st != NULL:
+        return CROSS_PRESERVED if sh == st else CROSS_REVERSED
+    if sh != NULL:
+        return CROSS_LEAN_SAME if (d_there >= 0) == (d_here >= 0) else CROSS_LEAN_OPPOSE
+    if st != NULL:
+        return CROSS_ONLY_THERE
+    return CROSS_NULL_BOTH
+
+
+# A full `aggregate_results` run renders every group of every directory, and each
+# report reads every sibling group -- so without a cache each sibling CSV is parsed
+# and run through `_paired_rows` once per reporting directory, which is the whole
+# quadratic term. Keyed by (path, mtime, size) rather than path alone: the run
+# REWRITES these same files as it proceeds, so a path-only key would serve a report
+# the pre-aggregation contents of a directory aggregated later in the same run.
+_SIB_ROWS: dict[tuple[str, int, int], list[dict]] = {}
+_SIB_PAIRED: dict[tuple[str, int, int], dict] = {}
+
+
+def _sib_key(path: Path) -> tuple[str, int, int]:
+    st = path.stat()
+    return (str(path.resolve()), st.st_mtime_ns, st.st_size)
+
+
+def _read_sibling(path: Path) -> list[dict]:
+    key = _sib_key(path)
+    if key not in _SIB_ROWS:
+        with path.open(encoding="utf-8") as fh:
+            _SIB_ROWS[key] = list(csv.DictReader(fh))
+    return _SIB_ROWS[key]
+
+
+def _sibling_paired(path: Path, other_rows: list[dict], pairs) -> dict:
+    key = _sib_key(path)
+    if key not in _SIB_PAIRED:
+        _SIB_PAIRED[key] = {(p.axis_id, p.qt, p.rep_a, p.rep_b): p
+                            for p in _paired_rows(other_rows, pairs=pairs)}
+    return _SIB_PAIRED[key]
+
+
+def _cross_section(rows: list[dict], results_path: Path,
+                   pairs: dict[tuple[str, str], str] | None = None) -> list[str]:
+    """Does each paired comparison point the same way under a second responder?
+
+    Three rules are enforced in code rather than left to the reader.
+
+    *Orderings, never levels.* Each responder's delta is computed inside its own
+    directory and only the direction states are compared. Two responders differ in
+    general capability for reasons unrelated to representation, so reading the gap
+    between their scores would be reading the responder, not the representation --
+    in either direction. This holds for any pair of directories, not only the
+    scale-matched confirmatory pair of thesis 3.6, since the section renders
+    wherever two same-judge directories exist. No absolute correctness crosses the
+    boundary.
+
+    *One judge per comparison.* A directory under a different judge is refused and
+    the refusal is printed. `feedback_one_judge_per_directory` keeps judges out of a
+    single directory; the same confound reappears across directories the moment two
+    are compared, and a judge change is not a responder change.
+
+    *Matched evidence.* A comparison is read only where both responders averaged
+    over the SAME scenes. Otherwise a disagreement could come from the responder or
+    from which scenes entered the mean, and this section exists to isolate the
+    first. Mismatches are excluded and listed rather than recomputed on the
+    intersection: a recomputed delta would disagree with the same comparison's
+    figure in the paired separation table above, and one comparison must not carry
+    two different numbers in one document.
+
+    Pair orientation needs no canonicalization. `_paired_pairs` derives it from the
+    ladder order in `axes.py`, so for any unordered pair the emitted orientation is
+    identical in every directory; and because the join key is the ORDERED tuple, a
+    hypothetical flip would drop the comparison out of the shared set rather than
+    invert its sign -- an under-report, never a false `REVERSED`. The invariant is
+    asserted in the test suite so a future data-derived ordering fails loudly.
+    """
+    sibs = _sibling_groups(results_path)
+    if not sibs:
+        return []
+    here = {(p.axis_id, p.qt, p.rep_a, p.rep_b): p for p in _paired_rows(rows, pairs=pairs)}
+    if not here:
+        return []
+    judges_here = sorted({r.get("judge", "?") for r in rows})
+    responder = rows[0].get("responder", "?")
+
+    # Gather first, render second. Every exclusion is COLLECTED rather than dropped, so
+    # the compact summary and the collapsed tables are two views of one computation:
+    # nothing is shown that was not computed, and nothing computed is discarded. The
+    # display hierarchy is deliberate -- a reader acts on a reversal or a coverage gap,
+    # never on a preserved row, so the preserved rows are the part that collapses.
+    refused: dict[str, list[str]] = {}
+    read: list[dict] = []
+    for name, path in sibs:
+        other_rows = _read_sibling(path)
+        if not other_rows:
+            continue
+        judges_there = sorted({r.get("judge", "?") for r in other_rows})
+        if judges_there != judges_here:
+            refused.setdefault(", ".join(f"`{j}`" for j in judges_there), []).append(name)
+            continue
+
+        there = _sibling_paired(path, other_rows, pairs)
+        shared, mismatched = [], []
+        for k in here:
+            if k not in there:
+                continue
+            if set(here[k].scene_deltas) == set(there[k].scene_deltas):
+                shared.append(k)
+            else:
+                # Resolved now, not at render time: the excluded row's whole point is
+                # WHICH scenes differed, and `there` is not in scope further down.
+                mismatched.append((k, sorted(here[k].scene_deltas),
+                                   sorted(there[k].scene_deltas)))
+        reps_there = {r["representation"] for r in other_rows}
+        missing = sorted({r for k in here if k not in there
+                          for r in (k[2], k[3]) if r not in reps_there})
+        uncovered = sorted({k[0] for k in here if k not in there} - {k[0] for k in shared})
+
+        trows, tally, reversals = [], collections.Counter(), []
+        for k in shared:
+            a, b = here[k], there[k]
+            outcome = _cross_outcome(a.mean, b.mean)
+            tally[outcome] += 1
+            trows.append([k[0], k[1], f"`{k[3]}` - `{k[2]}`",
+                          f"{a.mean:+.3f}", f"{b.mean:+.3f}",
+                          str(len(a.scene_deltas)), outcome])
+            if outcome == CROSS_REVERSED:
+                reversals.append([f"`{name}`", k[0], k[1], f"`{k[3]}` - `{k[2]}`",
+                                  f"{a.mean:+.3f}", f"{b.mean:+.3f}"])
+        order = {CROSS_REVERSED: 0, CROSS_LEAN_OPPOSE: 1, CROSS_PRESERVED: 2,
+                 CROSS_LEAN_SAME: 3, CROSS_ONLY_THERE: 4, CROSS_NULL_BOTH: 5}
+        trows.sort(key=lambda t: (order.get(t[-1], 9), t[0], t[1]))
+        reversals.sort(key=lambda t: (t[1], t[2]))
+        read.append(dict(name=name, tally=tally, trows=trows, reversals=reversals,
+                         mismatched=mismatched, uncovered=uncovered, missing=missing,
+                         shared=len(shared)))
+
+    if not read and not refused:
+        return []
+
+    out = ["## Cross-responder ordering check (thesis 3.6)", "",
+           f"_Holding the evaluated items fixed, does changing the responder preserve the "
+           f"ordering within each comparison? A directory is read only when it holds the same "
+           f"aggregate group, under an identical judge, on matched scenes -- a judge change is "
+           f"not a responder change, so agreement across judges would measure both at once. "
+           f"Each responder's delta is computed inside its own directory and classified "
+           f"independently as ahead, behind, or no separation at the {PRACTICAL_MARGIN:.2f} "
+           f"margin; absolute correctness LEVELS are never compared. Two responders differ in "
+           f"general capability for reasons that have nothing to do with representation, so a "
+           f"gap between their scores reads the responder rather than the representations -- "
+           f"in either direction, whichever is stronger. `{CROSS_REVERSED}` "
+           f"requires clear separation in opposite directions; a sub-margin delta has no "
+           f"direction at all, and its raw sign is shown only as a lean. Outcomes are reported "
+           f"relative to the ordering in this report's responder, `{responder}`. These results "
+           f"test pairwise ordering stability, NOT cross-responder generalization, which the "
+           f"study does not claim. Every exclusion is printed rather than filtered._", ""]
+
+    if read:
+        srows = []
+        for x in read:
+            t = x["tally"]
+            clear = (t[CROSS_PRESERVED] + t[CROSS_REVERSED]
+                     + t[CROSS_LEAN_SAME] + t[CROSS_LEAN_OPPOSE])
+            srows.append([f"`{x['name']}`", str(x["shared"]), str(clear),
+                          str(t[CROSS_PRESERVED]), str(t[CROSS_REVERSED]),
+                          str(t[CROSS_LEAN_SAME]), str(t[CROSS_LEAN_OPPOSE]),
+                          str(t[CROSS_ONLY_THERE]), str(t[CROSS_NULL_BOTH])])
+        # `matched` and `neither` are carried so the row accounts for itself: matched =
+        # preserved + reversed + both leans + only there + neither. Without them a reader
+        # cannot tell a thin comparison from a broad one that mostly agreed.
+        out += _table(["responder", "matched", "clear here", "preserved", "reversed",
+                       "weakened same lean", "weakened opposite lean", "only there",
+                       "neither"], srows) + [""]
+
+    for judges, names in sorted(refused.items()):
+        out += [f"**Refused (judge mismatch):** "
+                f"{', '.join(f'`{n}`' for n in sorted(names))} -- scored by {judges}, not this "
+                f"directory's {', '.join(f'`{j}`' for j in judges_here)}. Listed rather than "
+                f"dropped, so \"not comparable\" stays distinguishable from \"not found\".", ""]
+
+    if not read:
+        # Nothing was comparable. The headings below would each assert something about a
+        # comparison that never happened -- "no reversals" most of all.
+        return out
+
+    revs = [r for x in read for r in x["reversals"]]
+    out += ["### Reversals", ""]
+    out += (_table(["responder", "axis", "type", "comparison", "d here", "d there"], revs) + [""]
+            if revs else
+            ["**None.** Every comparison that separates on both responders points the same "
+             "way.", ""])
+
+    gaps = [x for x in read if x["uncovered"] or not x["shared"]]
+    if gaps:
+        out += ["### Coverage gaps", ""]
+        for x in gaps:
+            if not x["shared"]:
+                out += [f"- `{x['name']}`: **no comparison** present in both directories on "
+                        f"matched scenes -- a coverage statement, not a result."]
+            if x["uncovered"]:
+                why = (" -- never run on " + ", ".join(f"`{r}`" for r in x["missing"])
+                       if x["missing"] else "")
+                out += [f"- `{x['name']}`: no coverage for "
+                        + ", ".join(f"`{a}`" for a in x["uncovered"]) + why + "."]
+        out += ["", "Nothing about these axes is preserved or reversed at this judge tier. "
+                    "Stated explicitly because an absent section otherwise reads as "
+                    "agreement.", ""]
+
+    if any(x["mismatched"] for x in read):
+        out += ["### Excluded -- evidence not matched", "",
+                "Both directories hold these comparisons but averaged them over different "
+                "scenes, so a difference would confound the responder with the scene set. "
+                "Excluded rather than recomputed on the intersection: a recomputed delta "
+                "would disagree with the same comparison's figure in the paired separation "
+                "table above, and one comparison must not carry two numbers in one document.",
+                ""]
+        for x in read:
+            out += [f"- `{x['name']}` / {k[0]} / {k[1]} / `{k[3]}` - `{k[2]}`: "
+                    f"here {sh}, there {st}" for k, sh, st in x["mismatched"]]
+        out += [""]
+
+    detailed = [x for x in read if x["trows"]]
+    if detailed:
+        out += ["### Full pairwise evidence", ""]
+        for x in detailed:
+            out += ["<details>",
+                    f"<summary>Full pairwise table vs <code>{x['name']}</code> "
+                    f"({x['shared']} matched comparisons)</summary>", ""]
+            out += _table(["axis", "type", "comparison", "d here", f"d {x['name']}",
+                           "scenes (matched)", "outcome"], x["trows"])
+            out += ["", "</details>", ""]
+    return out
+
+
 OBJECT_RELATION_TYPES = {"object_relation", "relation_structure", "relation_aggregate"}
 
 
@@ -956,6 +1256,7 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
     lines += _paired_section(rows, pairs)
     lines += _recut_section(rows)
     lines += _matched_section(rows, pairs)
+    lines += _cross_section(rows, results_path, pairs)
     for axis in AXES:
         lines += _axis_card(axis, rows)
     lines += _planning_section(rows)
