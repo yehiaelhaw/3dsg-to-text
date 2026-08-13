@@ -42,10 +42,12 @@ from evaluation.core import is_context_exceeded
 # host dataset) -- so the charts and report.md tell the same axis story.
 #
 # AXIS_PAIRS (the same-information contrast pairs for axis_contrasts.png) is now
-# derived in axes.py from the AXES registry; each delta is averaged only over
-# question types where *both* poles are in scope. The spatial-encoding axis is a
-# ladder (covered by axis_cards / value_of_spatial_structure), so it contributes no
-# pair. A pair whose poles are absent from a scene draws no bar.
+# derived in axes.py from the AXES registry, and each entry carries the axis's host
+# and probe_types as well as its two poles. A delta is averaged only over questions
+# on that host, of those types, with *both* poles in scope -- the same restriction
+# the axis cards already apply, so a bar and its card describe one question set. The
+# spatial-encoding axis is a ladder (covered by axis_cards / value_of_spatial_-
+# structure), so it contributes no pair. A pair with no such questions draws no bar.
 from evaluation.scope import in_scope as _in_scope
 from evaluation.axes import (
     AXES, AXIS_PAIRS, CEILING, FLOOR, SMALL_N, dataset_of, rep_role,
@@ -86,22 +88,49 @@ def _per_question_ac(results_path: Path, dataset: str | None = None):
 
 
 def _per_qid_ac(results_path: Path):
-    """Return (ac, qtype_of).
+    """Return (ac, qtype_of, host_of).
 
     ac[(qid, rep)] = mean answer_correctness over that cell's repetitions.
     qtype_of[qid]  = the question's type. Keeps question identity (which
     _per_question_ac drops) so paired per-question deltas can be computed.
+    host_of[qid]   = the question's host dataset, so a caller can restrict a
+    contrast to the host its axis declares. Read off `scene_id` (which the
+    aggregate leaves bare -- only `question_id` is namespaced), because a qid
+    alone does not carry its host and the alternative is pooling by default.
     """
     rows = [r for r in csv.DictReader(results_path.open(encoding="utf-8")) if not r["error"]]
     by_qr: dict[tuple, list[float]] = collections.defaultdict(list)
     qtype_of: dict[str, str] = {}
+    host_of: dict[str, str] = {}
     for r in rows:
         if r["answer_correctness"] == "":
             continue
         by_qr[(r["question_id"], r["representation"])].append(float(r["answer_correctness"]))
         qtype_of[r["question_id"]] = r["question_type"] or "unknown"
+        host_of[r["question_id"]] = dataset_of(r["scene_id"])
     ac = {k: sum(v) / len(v) for k, v in by_qr.items()}
-    return ac, qtype_of
+    return ac, qtype_of, host_of
+
+
+def axis_pair_questions(pair, qtype_of: dict, host_of: dict) -> list[str]:
+    """The qids one axis-contrast bar may be computed from, in sorted order.
+
+    Three filters, all required: the axis's declared host, its declared probe
+    types, and the structural scope mask on BOTH poles. The first two come from
+    the axis registry and say what the comparison IS; the third says what could
+    be asked at all, and is kept because an axis may declare a type one pole
+    cannot answer -- an empty bar is the correct outcome there, not a silent
+    substitution of whatever else was in scope.
+
+    Public (not underscored) because the leakage test drives this exact function
+    rather than reimplementing the rule: a copy could agree with a broken
+    original. See tests/test_axis_contrasts_scope.py.
+    """
+    return [qid for qid in sorted(qtype_of)
+            if host_of.get(qid) == pair.host
+            and qtype_of[qid] in pair.probe_types
+            and _in_scope(pair.a, qtype_of[qid])
+            and _in_scope(pair.b, qtype_of[qid])]
 
 
 # Stable per-rep colours, reused across every chart so a representation keeps the
@@ -416,22 +445,23 @@ def plot_aggregate(aggregate_path: Path) -> None:
     #    headline_pair: format, reference frame, structure presentation, relation
     #    linearization, and the route-presentation exhibit, whose first member is a
     #    combo -- in_scope unions a combo's parts, so it pairs like any other) --
-    # For each axis pair, the per-question AC delta (second pole minus first),
-    # over questions where *both* poles are in scope. Bar = mean, whisker = ±1
-    # population std, dots = per question. >0 means the second pole scored higher.
-    qid_ac, qtype_of = _per_qid_ac(results_path)
-    qids = sorted({qid for (qid, _) in qid_ac})
+    # For each axis pair, the per-question AC delta (second pole minus first), over
+    # the questions that axis DECLARES -- its host and its probe types, both poles in
+    # scope (axis_pair_questions). Bar = mean, whisker = ±1 population std, dots =
+    # per question. >0 means the second pole scored higher.
+    #
+    # The host and type filters are the comparison's definition, not a tidy-up: a
+    # Gibson-hosted pair must not average over ProcTHOR questions, and two axes that
+    # share a pair and differ only in declared type are otherwise one number drawn
+    # twice. Leakage is asserted against, in tests/test_axis_contrasts_scope.py.
+    qid_ac, qtype_of, host_of = _per_qid_ac(results_path)
     bars: list[tuple[str, list[float]]] = []
-    for label, a, b in AXIS_PAIRS:
-        deltas = []
-        for qid in qids:
-            qt = qtype_of[qid]
-            if not (_in_scope(a, qt) and _in_scope(b, qt)):
-                continue
-            if (qid, a) in qid_ac and (qid, b) in qid_ac:
-                deltas.append(qid_ac[(qid, b)] - qid_ac[(qid, a)])
+    for pair in AXIS_PAIRS:
+        deltas = [qid_ac[(qid, pair.b)] - qid_ac[(qid, pair.a)]
+                  for qid in axis_pair_questions(pair, qtype_of, host_of)
+                  if (qid, pair.a) in qid_ac and (qid, pair.b) in qid_ac]
         if deltas:
-            bars.append((f"{label}: {a} -> {b}", deltas))
+            bars.append((f"{pair.label} [{pair.host}]: {pair.a} -> {pair.b}", deltas))
     if bars:
         fig, ax = plt.subplots(figsize=(10.5, max(3, 0.9 * len(bars) + 1.5)))
         for i, (lab, deltas) in enumerate(bars):
@@ -449,7 +479,8 @@ def plot_aggregate(aggregate_path: Path) -> None:
         ax.invert_yaxis()
         ax.axvline(0, color="black", linewidth=0.8)
         ax.set_xlabel("AC delta  (second pole minus first; >0 = second pole better)")
-        ax.set_title("Axis contrasts  (paired per-question AC delta, both-poles-in-scope cells)")
+        ax.set_title("Axis contrasts  (paired per-question AC delta; each axis's own "
+                     "host [bracketed] and declared question types)")
         ax.grid(axis="x", linestyle="--", alpha=0.4)
         fig.tight_layout()
         fig.savefig(out_dir / "axis_contrasts.png", dpi=150, bbox_inches="tight")

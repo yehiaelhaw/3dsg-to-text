@@ -15,6 +15,7 @@ story in one place.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import NamedTuple
 
 # --- reporting roles -------------------------------------------------------
 # floor and ceiling anchor every axis card (they bound the band a pole sits in).
@@ -262,9 +263,14 @@ AXES: list[Axis] = [
     # the same parse() output under two serializations, so they are matched on
     # every channel by construction -- hence no confound (confound_for exempts
     # any pair containing CEILING anyway), and no headline_pair: a single-rung
-    # ladder plus the ceiling anchor already yields exactly the one pair, and
-    # AXIS_PAIRS feeds axis_contrasts.png, which pools across datasets and would
-    # drag 3RScan back in.
+    # ladder plus the ceiling anchor already yields exactly the one pair, so a
+    # bar would restate the card.
+    #
+    # (That reason used to be joined by a second one -- AXIS_PAIRS dropped `host`,
+    # so axis_contrasts.png pooled every host and a bar here would have dragged
+    # 3RScan back in. AXIS_PAIRS now carries the host and the pair is filtered to
+    # it, so that hazard is gone; the restatement argument above is what still
+    # withholds the headline_pair.)
     #
     # 3RScan is deliberately not hosted: json_pretty is CONTEXT_EXCEEDED on two of
     # its three scenes, so its coverage there falls under MIN_COVERAGE and the pair
@@ -301,12 +307,32 @@ AXES: list[Axis] = [
 
 AXIS_BY_ID = {a.id: a for a in AXES}
 
-# Re-derived for plots.axis_contrasts (paired per-question AC delta). Each entry is
-# (label, first_pole, second_pole); only axes with a headline_pair contribute (the
-# spatial-encoding axis is a ladder, so it has none). plots.py imports this rather
-# than maintaining its own copy.
+# Re-derived for plots.axis_contrasts (paired per-question AC delta). Only axes with
+# a headline_pair contribute (the spatial-encoding axis is a ladder, so it has none).
+# plots.py imports this rather than maintaining its own copy.
+#
+# `host` and `probe_types` ride along and are NOT optional decoration: a headline
+# pair is only defined on the questions its axis declares. Carrying just the two
+# pole names loses that, and the consumer then has nothing to filter on but the
+# structural scope mask -- which admits every host and every type both poles happen
+# to support. That is strictly wider than the axis, and the surplus is not noise: it
+# mixed ProcTHOR questions into the Gibson-hosted reference-frame contrast and
+# pulled `planning` -- ungraded everywhere -- into two axes, none of it visible on
+# the chart. It also erases any distinction between two axes that share a pair and
+# differ only in the type they declare: they become one number drawn twice.
+# Anything reading AXIS_PAIRS must filter on both fields; the question set is part
+# of the comparison's definition, not a display preference.
+class AxisPair(NamedTuple):
+    label: str                    # bar label (Axis.label)
+    a: str                        # first pole (subtrahend: the delta is b - a)
+    b: str                        # second pole
+    host: str                     # the ONLY host dataset this pair is defined on
+    probe_types: tuple[str, ...]  # the ONLY question types it is read on
+
+
 AXIS_PAIRS = [
-    (a.label, a.headline_pair[0], a.headline_pair[1])
+    AxisPair(a.label, a.headline_pair[0], a.headline_pair[1], a.host,
+             tuple(a.probe_types))
     for a in AXES if a.headline_pair
 ]
 
