@@ -37,6 +37,27 @@ plot_aggregate (reads results.csv + aggregate.csv):
   axis_contrasts.png           paired per-question AC delta for each axis with a
                                headline pair (evaluation.axes.AXIS_PAIRS); already
                                per-axis-host by construction, so it is not split
+  ceiling_premium.png          the headline claim, graded: the best OBSERVED derived
+                               view against the json_mini ceiling, one row per
+                               host x question type
+  paired_separation.png        report.md's separation table drawn: one row per
+                               comparison from report._paired_rows, faceted by host,
+                               graded rows and `not licensed` rows in separate blocks
+
+The last two carry every host in one file, like axis_contrasts.png and for the same
+reason: each ROW is single-host by construction (its deltas come from one host's
+scenes and are labelled with it), so nothing is pooled by putting them on one canvas.
+Both are drawn straight off report.py -- `ceiling_premium` through the same pairing,
+gate and verdict functions, `paired_separation` off the `Paired` objects themselves --
+so a mark in either figure and a row in report.md are the same computation. Neither
+lets the SIGN of a delta decide anything: the verdict chooses the marker, and a
+positive mean the rule does not license is drawn hollow, exactly like a negative one.
+
+A gated comparison keeps its scene deltas in both. Licensing applies to the VERDICT,
+not to whether the difference exists: `not licensed` means the design cannot grade
+this pair, so the row is drawn with its data, greyed, and excluded from every count
+of wins. Hiding the deltas would be a second, undeclared filter on top of the gate.
+
 plot_per_question (reads results.csv):
   cost_quality_<host>.png      mean AC vs mean prompt tokens, with efficiency frontier
   faith_vs_ac.png              per-observation guess detector (only if faithfulness on)
@@ -78,15 +99,26 @@ from pathlib import Path
 # structure), so it contributes no pair. A pair with no such questions draws no bar.
 from evaluation.scope import in_scope as _in_scope
 from evaluation.axes import (
-    AXES, AXIS_PAIRS, CEILING, FLOOR, MIN_COVERAGE, SMALL_N,
-    VERDICT_NOT_LICENSED, dataset_of, rep_role,
+    AXES, AXIS_PAIRS, CANDIDATE, CEILING, FLOOR, MIN_COVERAGE,
+    MIN_SCENES_SHOWING, PRACTICAL_MARGIN, SMALL_N,
+    VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
+    VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED, dataset_of, rep_role,
 )
 # report.py owns the analysis contract (thesis 4.6): what a cell's coverage is,
 # whether it is rank-eligible, and how a difference between two representations is
 # computed. Imported rather than reimplemented -- a chart and report.md are read
 # side by side, and a second copy of these rules would agree today and drift later.
 # `_cells` is private to report's own callers, not to the reporting layer.
-from evaluation.report import _cells, floor_lifts
+#
+# `ceiling_premium` and `paired_separation` below take that further and import the
+# gate and the verdict themselves (`_gates`, `_verdict`, `paired_deltas`,
+# `_summarise`, `_q_means`, `_paired_rows`). They state a GRADE, not a quantity, and
+# a grading rule reimplemented in a drawing module is a rule that will disagree with
+# report.md the first time either side is edited.
+from evaluation.report import (
+    _cells, _gates, _load_pairs, _paired_rows, _q_means, _summarise, _verdict,
+    floor_lifts, paired_deltas,
+)
 
 
 # --- shared loading --------------------------------------------------------
@@ -639,6 +671,428 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
     return {name}
 
 
+# --- the two graded figures (ceiling premium, separation forest) -----------
+# Everything above this line draws a QUANTITY and leaves the reader to judge it.
+# These two draw a VERDICT, so they are held to a stricter rule: every number and
+# every grade comes from report.py, and the sign of a delta is never allowed to
+# stand in for the grade. A positive mean that the declared rule does not license
+# is drawn exactly like a negative one -- hollow, in the verdict's own colour --
+# because "it went up" and "it went up in a way this design can attest" are
+# different claims and only the second is what the figure exists to make.
+
+# Deliberately not a red/green scale. A delta's sign is not good or bad, and
+# colouring it that way would restate the sign the markers already refuse to grade on.
+VERDICT_COLOR = {
+    VERDICT_CONSISTENT:    "#1b6f4a",   # the only graded win
+    VERDICT_DIRECTIONAL:   "#c77c17",   # margin met but under-replicated, or capped
+    VERDICT_MIXED:         "#9d3b8c",   # scenes disagree at the declared margin
+    VERDICT_NO_SEPARATION: "#6b7280",   # null
+    VERDICT_NOT_LICENSED:  "#b0b6bf",   # gates failed -- drawn, never ranked
+}
+BAND = "#e8eaed"        # the +-PRACTICAL_MARGIN region
+SCENE_MARK = "#4a5058"  # the individual scene deltas
+GATED_BG = "#f5f6f7"    # backs the `not licensed` block in the separation forest
+
+# Reps held out of the ceiling-premium candidate pool, each with the reason. Kept as
+# a visible mapping (and printed in the figure's own footer) rather than inlined as a
+# set literal, because the exclusion is a reporting CHOICE that moves the headline
+# number: `synthesis` is both cheap and strong, so withholding it makes the premium
+# look smaller, and a reader must be able to see that it was withheld and why.
+CEILING_PREMIUM_EXCLUDED = {
+    CEILING:       "is the comparator",
+    "json_pretty": "carries the ceiling's own parse() output, so beating it is not a "
+                   "derived-view result",
+    CANDIDATE:     "reported as the candidate default in report.md's candidate section",
+    FLOOR:         "the no-information control, not a derived view",
+}
+
+
+def ceiling_premium_rows(rows: list[dict]) -> list[dict]:
+    """One row per (host, question type): the best OBSERVED derived view vs the ceiling.
+
+    The delta is `rep - json_mini`, question-matched and averaged within scene by
+    `report.paired_deltas`/`_summarise`, gated by `report._gates` and graded by
+    `report._verdict` -- the same four functions the separation table calls, so a
+    mark here and a `json_mini - rep` row in report.md are one computation with one
+    sign flip between them (`_verdict` is symmetric under negation: the margin is on
+    |mean| and reversal/disagreement are defined on the scene values' signs, so
+    flipping every sign flips the direction and leaves the grade alone).
+
+    NO CONFOUND IS PASSED, and that is not an omission: `Axis.confound_for` returns
+    "" whenever the floor or the ceiling is a member, because an anchor comparison is
+    not the design decision an axis isolates. Passing one here would cap a verdict
+    report.md leaves uncapped.
+
+    Two selections happen per row and both are disclosed in the figure. `k` counts
+    the in-scope candidates the winner was chosen from -- the choice is POST-HOC on
+    the same data, an oracle, not a representation anyone declared in advance. And
+    the winner is the largest mean, taken over candidates in sorted-name order so
+    `max` resolves a tie deterministically at the first name rather than by dict order.
+
+    A row whose gate fires is returned WITH its scene deltas and marked
+    `not licensed`. The gate says the design cannot grade the comparison; it does not
+    say the difference is unknown, and dropping the deltas would be a second filter
+    the analysis contract never declared. This is what makes the 3RScan rows legible:
+    json_mini overflows one dense scene there, so its rows are gated on coverage while
+    the derived views behind them sit at full coverage.
+    """
+    out: list[dict] = []
+    for host in sorted({dataset_of(r["scene_id"]) for r in rows}):
+        host_rows = [r for r in rows if dataset_of(r["scene_id"]) == host]
+        cells = _cells(host_rows)
+        q_mean, scene_of = _q_means(host_rows)
+        qtype_of = {r["question_id"]: (r["question_type"] or "unknown") for r in host_rows}
+        # Sorted so `max` below breaks ties at the alphabetically first candidate.
+        pool = sorted({rep for rep, _q in q_mean} - set(CEILING_PREMIUM_EXCLUDED))
+
+        for qt in sorted({qtype_of[q] for _rep, q in q_mean}):
+            if (CEILING, qt) not in cells:
+                continue                      # nothing to be a premium over
+            qids = {q for _rep, q in q_mean if qtype_of[q] == qt}
+            cands = []
+            for rep in pool:
+                if not _in_scope(rep, qt) or (rep, qt) not in cells:
+                    continue
+                by_scene = paired_deltas(q_mean, scene_of, qids, CEILING, rep)
+                if not by_scene:
+                    continue
+                scene_deltas, n_q, q_deltas = _summarise(by_scene)
+                ineligible = _gates(cells, qt, (CEILING, rep), n_q)
+                tok_rep = cells[(rep, qt)].tokens_mean
+                tok_ceil = cells[(CEILING, qt)].tokens_mean
+                cands.append(dict(
+                    host=host, qt=qt, rep=rep, scene_deltas=scene_deltas,
+                    mean=statistics.mean(list(scene_deltas.values())),
+                    n_questions=n_q, q_deltas=q_deltas, ineligible=ineligible,
+                    verdict=_verdict(scene_deltas, "", ineligible),
+                    tok_ratio=(tok_ceil / tok_rep) if tok_rep and tok_ceil else None))
+            if not cands:
+                continue
+            best = dict(max(cands, key=lambda c: c["mean"]))
+            best["k"] = len(cands)
+            out.append(best)
+    return out
+
+
+def _plot_ceiling_premium(prem: list[dict], out_dir: Path,
+                          responder: str, judge: str) -> set[str]:
+    """ceiling_premium.png -- the headline claim with its grade attached."""
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    if not prem:
+        return set()
+    n = len(prem)
+    # The caption, legend and footnote are fixed-size furniture; the plotting area is
+    # not. Reserving them as FRACTIONS of the figure (which is what a row-count-driven
+    # figsize makes them) works at 19 rows and collapses at 5, where the same fraction
+    # is barely an inch and the caption lands on the axes. So the bands are reserved in
+    # INCHES and converted, and every out-of-axes text is positioned the same way.
+    H = 0.46 * n + 4.2
+    TOP_IN, BOTTOM_IN = 1.15, 2.3          # caption band; legend + footnote band
+    axes_h = H - TOP_IN - BOTTOM_IN        # inches of drawable height
+    fig, ax = plt.subplots(figsize=(13.2, H))
+    ax.axvspan(-PRACTICAL_MARGIN, PRACTICAL_MARGIN, color=BAND, zorder=0)
+    ax.axvline(0, color="#333", linewidth=0.9, zorder=1)
+
+    lo = min([v for r in prem for v in r["scene_deltas"].values()] + [0.0])
+    hi = max([v for r in prem for v in r["scene_deltas"].values()] + [0.0])
+    ax.set_xlim(min(-0.35, lo - 0.08), max(0.55, hi + 0.08))
+
+    ylabels, host_bounds, prev_host = [], [], None
+    for i, r in enumerate(prem):
+        y = n - 1 - i
+        if r["host"] != prev_host:
+            host_bounds.append((y + 0.5, r["host"]))
+            prev_host = r["host"]
+        ylabels.append(r["qt"].replace("_", " "))
+        gated = r["verdict"] == VERDICT_NOT_LICENSED
+        c = VERDICT_COLOR[r["verdict"]]
+        # The scene deltas are drawn whether or not the row is graded (see the
+        # function above); a gated row's ticks are lighter, not absent.
+        for v in r["scene_deltas"].values():
+            ax.plot([v], [y], marker="|", markersize=9, color=SCENE_MARK,
+                    alpha=0.35 if gated else 0.75, zorder=3, linestyle="none")
+        win = r["verdict"] == VERDICT_CONSISTENT
+        ax.plot([r["mean"]], [y], marker="o" if win else "D",
+                markersize=8 if win else 6,
+                markerfacecolor=c if win else "white", markeredgecolor=c,
+                markeredgewidth=1.6, zorder=4, linestyle="none")
+
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(list(reversed(ylabels)), fontsize=8.5)
+    ax.set_ylim(-0.8, n - 0.2)
+    ax.set_xlabel("Scene-paired AC delta:  best observed derived view  -  "
+                  f"{CEILING} ceiling\n(per-question deltas averaged within scene, "
+                  "then over the scene values)", fontsize=9)
+    ax.grid(axis="x", linestyle=":", alpha=0.45, zorder=0)
+    ax.set_axisbelow(True)
+    x0 = ax.get_xlim()[0]
+    for ybound, host in host_bounds:
+        ax.axhline(ybound, color="#c9ccd1", linewidth=0.9)
+        ax.text(x0 + 0.015, ybound - 0.42, host.upper(), fontsize=8.5,
+                fontweight="bold", color="#4a5058", va="top")
+
+    # Annotation columns, placed in axes-fraction x so they track the axes box.
+    COL_REP, COL_TOK, COL_VERD = 1.04, 1.42, 1.62
+    trans = ax.get_yaxis_transform()
+    for x, label in ((COL_REP, "best observed derived view\n(of k in scope)"),
+                     (COL_TOK, "prompt\ntokens"),
+                     (COL_VERD, "verdict under the declared rule")):
+        ax.text(x, n - 0.35, label, transform=trans, fontsize=7.4, fontweight="bold",
+                va="bottom", ha="left", color="#4a5058")
+    for i, r in enumerate(prem):
+        y = n - 1 - i
+        gated = r["verdict"] == VERDICT_NOT_LICENSED
+        body = "#8a9099" if gated else "#2a2e33"
+        ax.text(COL_REP, y, f"{r['rep']}  (of {r['k']})", transform=trans,
+                fontsize=7.2, va="center", ha="left", color=body)
+        ax.text(COL_TOK, y, f"{r['tok_ratio']:.1f}x fewer" if r["tok_ratio"] else "-",
+                transform=trans, fontsize=7.2, va="center", ha="left", color=body)
+        label = r["verdict"] + (f"  ({r['ineligible']})" if gated else "")
+        ax.text(COL_VERD, y, label, transform=trans, fontsize=7.2, va="center",
+                ha="left", color=VERDICT_COLOR[r["verdict"]],
+                fontweight="bold" if r["verdict"] == VERDICT_CONSISTENT else "normal")
+
+    graded = [r for r in prem if r["verdict"] != VERDICT_NOT_LICENSED]
+    wins = sum(1 for r in graded if r["verdict"] == VERDICT_CONSISTENT)
+    pos = sum(1 for r in graded if r["verdict"] != VERDICT_CONSISTENT and r["mean"] > 0)
+    flat, gated_n = len(graded) - wins - pos, len(prem) - len(graded)
+    fig.suptitle(f"Does a compact derived view beat the full-information "
+                 f"{CEILING} ceiling?", fontsize=13.5, fontweight="bold",
+                 x=0.035, ha="left", y=1 - 0.26 / H)
+    # A directory where nothing is gradeable is a result, not an empty figure, and
+    # "0 of 0 cells reach a consistent advantage" states it as though the derived
+    # views had been tried and lost. They were never comparable: the ceiling is the
+    # member that failed.
+    if graded:
+        caption = (f"{wins} of {len(graded)} graded host x question-type cells reach a "
+                   f"CONSISTENT ADVANTAGE over {CEILING} under the declared rule.\n"
+                   f"{pos} more have a positive mean the rule does not license as a "
+                   f"win; {flat} {'is' if flat == 1 else 'are'} negative or flat; "
+                   f"{gated_n} {'is' if gated_n == 1 else 'are'} drawn with scene "
+                   f"deltas but {VERDICT_NOT_LICENSED} (the gate is on the row).")
+    else:
+        caption = (f"No cell here can be graded against {CEILING}: the ceiling itself "
+                   f"fails the coverage gate on every one of the {gated_n} cells "
+                   f"below.\nThe derived views are drawn with their scene deltas, and "
+                   f"the gate that withheld each grade is printed on its row. This is "
+                   f"a fact about the ceiling, not about the views beside it.")
+    fig.text(0.035, 1 - 0.60 / H, caption,
+             fontsize=9.2, color="#4a5058", va="top", ha="left")
+
+    handles = [
+        Line2D([], [], marker="o", linestyle="none", markersize=8,
+               markerfacecolor=VERDICT_COLOR[VERDICT_CONSISTENT],
+               markeredgecolor=VERDICT_COLOR[VERDICT_CONSISTENT],
+               label=f"consistent advantage (|mean| >= {PRACTICAL_MARGIN:.2f}, no "
+                     f"scene reversed, >= {MIN_SCENES_SHOWING} scenes showing)"),
+        Line2D([], [], marker="D", linestyle="none", markersize=6,
+               markerfacecolor="white", markeredgecolor=VERDICT_COLOR[VERDICT_DIRECTIONAL],
+               label="directional / mixed / no separation - NOT a win, whatever the sign"),
+        Line2D([], [], marker="D", linestyle="none", markersize=6,
+               markerfacecolor="white", markeredgecolor=VERDICT_COLOR[VERDICT_NOT_LICENSED],
+               label=f"{VERDICT_NOT_LICENSED} - deltas shown, grade withheld"),
+        Line2D([], [], marker="|", linestyle="none", markersize=9, color=SCENE_MARK,
+               label="individual scene delta (the unit of replication)"),
+        Patch(facecolor=BAND, label=f"+-{PRACTICAL_MARGIN:.2f} practical margin"),
+    ]
+    # Anchored a fixed 0.95in below the axes, clear of the two-line x label.
+    ax.legend(handles=handles, loc="upper left",
+              bbox_to_anchor=(0.0, -0.95 / axes_h), fontsize=7.6, frameon=False, ncol=2)
+
+    held = "; ".join(f"{k} ({v})" for k, v in CEILING_PREMIUM_EXCLUDED.items())
+    fig.text(0.035, 0.12 / H,
+             "The winning view is selected POST-HOC per cell from the k in-scope "
+             "candidates - an oracle choice on the same data, not a pre-declared "
+             "representation.\n"
+             "'x fewer' is a PROMPT-TOKEN ratio (input only; excludes completions; no "
+             "monetary cost is computed anywhere in this study).\n"
+             f"Held out of the candidate pool: {held}.\n"
+             f"responder: {responder}  |  judge: {judge}",
+             fontsize=7, color="#8a9099", va="bottom", ha="left")
+
+    # Explicit margins rather than tight_layout: the annotation columns live outside
+    # the axes box, where tight_layout cannot see them and fights the reserved space.
+    fig.subplots_adjust(left=0.145, right=0.545,
+                        top=1 - TOP_IN / H, bottom=BOTTOM_IN / H)
+    fig.savefig(out_dir / "ceiling_premium.png", dpi=170, bbox_inches="tight")
+    plt.close(fig)
+    print(f"plot -> {out_dir / 'ceiling_premium.png'}")
+    return {"ceiling_premium.png"}
+
+
+_VERDICT_ORDER = {VERDICT_CONSISTENT: 0, VERDICT_DIRECTIONAL: 1, VERDICT_MIXED: 2,
+                  VERDICT_NO_SEPARATION: 3, VERDICT_NOT_LICENSED: 4}
+# The right-hand annotation is ONE text object per row, not two columns. Two columns
+# at fixed axes-fraction offsets overprinted each other: tight_layout sizes the axes
+# box around the longest y-label, so the inches a fixed fraction buys change with the
+# panel, and a gap that clears at one host's label width does not at another's.
+# Concatenating makes the collision impossible instead of tuning it away.
+_COL_NOTE, _SEPARATION_RECT_RIGHT = 1.005, 0.82
+
+
+def _plot_paired_separation(prs: list, out_dir: Path,
+                            responder: str, judge: str) -> set[str]:
+    """paired_separation.png -- report.md's separation table, drawn.
+
+    One row per `report.Paired`, faceted by host, and within a host split into two
+    BLOCKS: the graded comparisons, then the `not licensed` ones on a shaded ground
+    below a rule. The split is the point of the figure on 3RScan, where json_mini
+    overflows a dense scene: every `json_mini - X` row there is gated on coverage
+    while the relations_* rows beside them are at full coverage on all three scenes.
+    Sorted together they interleave, and a reader scanning marks would take a gated
+    row for a graded one. Separated, the licensed axis reads as the licensed axis.
+
+    Gated rows keep their scene deltas and their mean marker -- they are the evidence
+    the gate exists to qualify, not to hide -- and they are excluded from the graded
+    counts in every heading.
+
+    Nothing is recomputed here: the Paired objects arrive fully decided, and the
+    figure only chooses positions and colours.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    if not prs:
+        return set()
+    hosts = sorted({p.host for p in prs})
+
+    def blocks(host):
+        rows = [p for p in prs if p.host == host]
+        key = lambda p: (p.axis_id, _VERDICT_ORDER.get(p.verdict, 9), -abs(p.mean))
+        return (sorted([p for p in rows if p.verdict != VERDICT_NOT_LICENSED], key=key),
+                sorted([p for p in rows if p.verdict == VERDICT_NOT_LICENSED], key=key))
+
+    per_host = {h: blocks(h) for h in hosts}
+    # +1 slot for the blank row that carries the block divider, where both blocks exist
+    slots = {h: len(g) + len(u) + (1 if g and u else 0) for h, (g, u) in per_host.items()}
+
+    # Height in inches, and the title/legend/footnote bands reserved in inches too --
+    # as fractions they hold at 63 rows and collapse at 7, where the same fraction is
+    # a tenth of an inch and the footnote lands on the x label.
+    H = 0.34 * sum(slots.values()) + 2.6 * len(hosts)
+    fig, axes = plt.subplots(
+        len(hosts), 1, squeeze=False, figsize=(13.6, H),
+        gridspec_kw=dict(height_ratios=[max(slots[h], 1) for h in hosts]))
+
+    for hi, h in enumerate(hosts):
+        ax = axes[hi][0]
+        graded, gated = per_host[h]
+        ordered = graded + gated
+        ys, cursor = [], slots[h] - 1
+        for i, _p in enumerate(ordered):
+            if i == len(graded) and graded and gated:
+                cursor -= 1                     # the blank divider slot
+            ys.append(cursor)
+            cursor -= 1
+
+        lim = max(0.55, max(abs(v) for p in ordered for v in p.scene_deltas.values()) + 0.06)
+        if gated:   # shade the gated block before anything is drawn on it
+            ax.axhspan(min(ys[len(graded):]) - 0.5, max(ys[len(graded):]) + 0.5,
+                       color=GATED_BG, zorder=0)
+        ax.axvspan(-PRACTICAL_MARGIN, PRACTICAL_MARGIN, color=BAND, zorder=1)
+        ax.axvline(0, color="#333", linewidth=0.9, zorder=2)
+
+        labels, prev_axis = [], None
+        for i, (p, y) in enumerate(zip(ordered, ys)):
+            # Reset at the block boundary so the gated block labels its own axes
+            # rather than inheriting the last label from the graded block above it.
+            if i == len(graded):
+                prev_axis = None
+            if p.axis_id != prev_axis:
+                ax.axhline(y + 0.5, color="#c9ccd1", linewidth=0.8, zorder=2)
+                ax.text(-lim * 0.985, y + 0.42, p.axis_id, fontsize=7.4,
+                        fontweight="bold", color="#4a5058", va="top", zorder=5)
+                prev_axis = p.axis_id
+            labels.append(f"{p.qt}:  {p.rep_b} - {p.rep_a}")
+            c = VERDICT_COLOR[p.verdict]
+            gated_row = p.verdict == VERDICT_NOT_LICENSED
+            for v in p.scene_deltas.values():
+                ax.plot([v], [y], marker="|", markersize=8, color=SCENE_MARK,
+                        alpha=0.4 if gated_row else 0.7, zorder=4, linestyle="none")
+            win = p.verdict == VERDICT_CONSISTENT
+            ax.plot([p.mean], [y], marker="o" if win else "D",
+                    markersize=7 if win else 5.5,
+                    markerfacecolor=c if win else "white", markeredgecolor=c,
+                    markeredgewidth=1.5, zorder=5, linestyle="none")
+            # Support first, then why the row is qualified. `n sc` is the scene count:
+            # the deltas are a mean over THOSE scenes, and a gated row typically has
+            # fewer of them than the graded rows above it -- which is the whole story
+            # on 3RScan, so it is on the row rather than in the caption.
+            tag = f"n_q={p.n_questions}" + (f", fs={p.n_factsets}" if p.n_factsets else "")
+            tag += f", {len(p.scene_deltas)} sc"
+            note_color, weight = "#8a9099", "normal"
+            if p.capped:
+                tag += "   CAPPED"
+                note_color, weight = VERDICT_COLOR[VERDICT_DIRECTIONAL], "bold"
+            elif p.ineligible:
+                tag += f"   {p.ineligible}"
+            ax.text(_COL_NOTE, y, tag, transform=ax.get_yaxis_transform(),
+                    fontsize=6.4, va="center", ha="left", color=note_color,
+                    fontweight=weight)
+
+        if graded and gated:
+            div = ys[len(graded)] + 1.0
+            ax.axhline(div, color="#6b7280", linewidth=1.3, linestyle="-", zorder=6)
+            ax.text(-lim * 0.985, div - 0.08,
+                    f"{VERDICT_NOT_LICENSED.upper()} - gates failed; deltas shown, "
+                    "grade withheld, never ranked",
+                    fontsize=7, fontweight="bold", color="#6b7280", va="top", zorder=6)
+
+        ax.set_yticks(ys)
+        ax.set_yticklabels(labels, fontsize=7.2, fontfamily="monospace")
+        for tick, p in zip(ax.get_yticklabels(), ordered):
+            if p.verdict == VERDICT_NOT_LICENSED:
+                tick.set_color("#8a9099")
+        ax.set_ylim(-0.7, slots[h] - 0.3)
+        ax.set_xlim(-lim, lim)
+        ax.grid(axis="x", linestyle=":", alpha=0.45, zorder=0)
+        ax.set_axisbelow(True)
+        ax.set_title(f"host: {h}   ({len(graded)} graded, {len(gated)} "
+                     f"{VERDICT_NOT_LICENSED})", fontsize=10, fontweight="bold",
+                     loc="left")
+        if hi == len(hosts) - 1:
+            ax.set_xlabel("Mean of the scene-level AC deltas   (rep_b - rep_a; > 0 = "
+                          "the second-named representation scored higher)", fontsize=9)
+
+    fig.suptitle("Every comparison report.md makes, decided the same way",
+                 fontsize=13, fontweight="bold", x=0.05, ha="left", y=1 - 0.22 / H)
+    handles = [
+        Line2D([], [], marker="o", linestyle="none", markersize=7,
+               markerfacecolor=VERDICT_COLOR[VERDICT_CONSISTENT],
+               markeredgecolor=VERDICT_COLOR[VERDICT_CONSISTENT], label=VERDICT_CONSISTENT),
+    ] + [
+        Line2D([], [], marker="D", linestyle="none", markersize=5.5,
+               markerfacecolor="white", markeredgecolor=VERDICT_COLOR[v], label=v)
+        for v in (VERDICT_DIRECTIONAL, VERDICT_MIXED, VERDICT_NO_SEPARATION,
+                  VERDICT_NOT_LICENSED)
+    ] + [
+        Line2D([], [], marker="|", linestyle="none", markersize=8, color=SCENE_MARK,
+               label="individual scene delta"),
+        Patch(facecolor=BAND, label=f"+-{PRACTICAL_MARGIN:.2f} practical margin"),
+        Patch(facecolor=GATED_BG, label=f"{VERDICT_NOT_LICENSED} block"),
+    ]
+    # On the FIGURE, not on the first axes: anchored to a panel it drifts with that
+    # panel's height, which varies with how many comparisons the first host has.
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.45, 1 - 0.42 / H),
+               fontsize=7.4, frameon=False, ncol=4)
+    fig.text(0.05, 0.14 / H,
+             "No confidence intervals: the scene ticks are the entire replication this "
+             "design carries, and overlap is never a tie rule (thesis 4.6).\n"
+             "CAPPED = a declared confound downgraded an otherwise-consistent result; "
+             "it never promotes and never rescues.\n"
+             f"responder: {responder}  |  judge: {judge}",
+             fontsize=7, color="#8a9099", va="bottom", ha="left")
+    fig.tight_layout(rect=(0.0, 0.70 / H, _SEPARATION_RECT_RIGHT, 1 - 1.00 / H))
+    fig.savefig(out_dir / "paired_separation.png", dpi=170, bbox_inches="tight")
+    plt.close(fig)
+    print(f"plot -> {out_dir / 'paired_separation.png'}")
+    return {"paired_separation.png"}
+
+
 def plot_aggregate(aggregate_path: Path) -> None:
     import matplotlib.pyplot as plt
     import numpy as np
@@ -720,6 +1174,19 @@ def plot_aggregate(aggregate_path: Path) -> None:
         plt.close(fig)
         print(f"plot -> {out_dir / 'axis_contrasts.png'}")
 
+    # -- Charts 5-6: the two graded figures --
+    # Drawn last because they depend on nothing above them and on all of report.py:
+    # `ceiling_premium` grades the headline claim (a compact derived view against the
+    # json_mini ceiling) and `paired_separation` draws the separation table itself.
+    # Both carry the responder and judge in-figure -- a verdict is a verdict OF a
+    # responder graded BY a judge, and these two figures travel out of their directory.
+    responder = ", ".join(sorted({r.get("responder") or "" for r in rows} - {""})) or "?"
+    judge = ", ".join(sorted({r.get("judge") or "" for r in rows} - {""})) or "?"
+    graded_figs = _plot_ceiling_premium(ceiling_premium_rows(rows), out_dir,
+                                        responder, judge)
+    graded_figs |= _plot_paired_separation(_paired_rows(rows, pairs=_load_pairs()),
+                                           out_dir, responder, judge)
+
     # retire charts that the scope-aware set replaces / that mislead, plus the old
     # single combined axis card and any per-axis card whose axis lost its data.
     stale = ["ac_comparison.png", "faithfulness_comparison.png", "ac_delta.png",
@@ -734,6 +1201,11 @@ def plot_aggregate(aggregate_path: Path) -> None:
     for pattern in ("ac_by_axis_*.png", "value_of_spatial_structure_*.png",
                     "ac_heatmap_*.png"):
         stale += [p.name for p in out_dir.glob(pattern) if p.name not in written]
+    # ...and either graded figure that this run had nothing to draw. A stale verdict
+    # figure is worse than a missing one: it survives under the correct filename and
+    # is read as current.
+    stale += [n for n in ("ceiling_premium.png", "paired_separation.png")
+              if n not in graded_figs]
     for name in stale:
         p = out_dir / name
         if p.exists():
