@@ -13,7 +13,14 @@ Design rules enforced here (thesis 4.6 `sec:meth-analysis`; METHODOLOGY 3.5/3.7)
 - Axis cards are floor/ceiling-anchored and ladder-ordered (evaluation/axes.py).
 - A cell with coverage < MIN_COVERAGE is flagged and marked not rank-eligible
   (its AC is conditioned on the surviving subset). A cell with n < SMALL_N is
-  flagged screening-only.
+  flagged screening-only. Where such a cell would enter a comparison or an
+  ordering, it is printed as `not licensed` with the reason rather than as a
+  number, and never sorted to the top of a block.
+- Every difference between two representations -- the separation table and the
+  `vs floor` columns alike -- is computed over the questions BOTH members
+  answered (`paired_deltas`). Two cell means are never subtracted: the floor is
+  exempt from the scope filter and answers everything, so that subtraction would
+  difference one rep's surviving questions against the other's whole set.
 - Combos and the `synthesis` candidate get their own tables, never mixed into a
   pole card.
 
@@ -244,18 +251,22 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
     reads as an axis count and contradicts the design chapter.
     """
     cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == axis.host])
+    # Question-matched, from the one pairing primitive -- NOT this cell's mean minus
+    # the floor cell's mean, which would difference two different question sets
+    # wherever a rep answered fewer questions than the floor did.
+    lifts = {(p.qt, p.rep_b): p for p in floor_lifts(rows, axis.host)}
     body: list[str] = []
     for qt in axis.probe_types:
         reps = _axis_reps(axis, qt, cells)
         if not reps:
             continue
         floor = cells.get((FLOOR, qt))
-        floor_ac = floor.ac_mean if floor and floor.n_scored else None
+        has_floor = bool(floor and floor.n_scored)
         trows = []
         for rep in reps:
             c = cells[(rep, qt)]
-            dfloor = ("" if floor_ac is None or c.n_scored == 0
-                      else f"{c.ac_mean - floor_ac:+.2f}")
+            dfloor = ("+0.00" if rep == FLOOR and has_floor
+                      else _lift_str(lifts.get((qt, rep))))
             trows.append([rep, rep_role(rep), str(c.n), f"{c.coverage * 100:.0f}",
                           _ac_str(c), _range_str(c), dfloor])
         body.append(f"**{qt}** (host: {axis.host})")
@@ -278,11 +289,25 @@ def _planning_section(rows: list[dict]) -> list[str]:
     Split per host dataset (never pooled): planning's floor/ceiling meaning differs
     by dataset (e.g. 3RScan planning needs the raw relation channel, not just
     inventory -- QA_DESIGN 5), so a pooled `all` row would silently average across
-    incompatible scopes."""
+    incompatible scopes.
 
-    def order(cells, rep):  # floor first, poles by AC desc, ceiling last
-        rank = {"floor": 0, "ceiling": 2}.get(rep_role(rep), 1)
-        return (rank, -cells[(rep, "planning")].ac_mean)
+    No filtering is needed here any more: the multi-view combos this table once had
+    to exclude by name were purged from the results tree on 2026-08-12, so every rep
+    reaching this point is part of the design."""
+
+    def order(cells, rep):
+        """Floor first, then the poles, then the ceiling -- and within the poles the
+        rank-eligible cells by AC descending, with the sub-threshold ones beneath
+        them rather than interleaved.
+
+        Row order is a ranking whether or not the word appears: a reader takes the
+        top pole for the best one. A cell below MIN_COVERAGE must therefore not be
+        able to claim that position on an AC its own coverage gate says cannot be
+        compared against a full-coverage cell.
+        """
+        c = cells[(rep, "planning")]
+        block = {"floor": 0, "ceiling": 2}.get(rep_role(rep), 1)
+        return (block, 0 if c.rank_eligible else 1, -c.ac_mean)
 
     out: list[str] = []
     for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
@@ -290,13 +315,14 @@ def _planning_section(rows: list[dict]) -> list[str]:
         reps = sorted({rep for (rep, qt) in cells if qt == "planning"})
         if not reps:
             continue
+        lifts = {(p.qt, p.rep_b): p for p in floor_lifts(rows, ds)}
         floor = cells.get((FLOOR, "planning"))
-        floor_ac = floor.ac_mean if floor and floor.n_scored else None
+        has_floor = bool(floor and floor.n_scored)
         trows = []
         for rep in sorted(reps, key=lambda r: order(cells, r)):
             c = cells[(rep, "planning")]
-            dfloor = ("" if floor_ac is None or c.n_scored == 0
-                      else f"{c.ac_mean - floor_ac:+.2f}")
+            dfloor = ("+0.00" if rep == FLOOR and has_floor
+                      else _lift_str(lifts.get(("planning", rep))))
             trows.append([rep, rep_role(rep), str(c.n), f"{c.coverage * 100:.0f}",
                           _ac_str(c), _range_str(c), dfloor])
         out += [f"## Planning / real-world utility (separate probe, host: {ds})",
@@ -344,6 +370,11 @@ class Paired:
     # overstates the support; this is the honest denominator. 0 where no fact-set
     # map joins (every unpaired question type). Display only -- no verdict reads it.
     n_factsets: int = 0
+    # The individual paired differences behind `scene_deltas`, scene-major. Display
+    # only: the verdict reads the SCENE values, never these. Carried so a chart can
+    # draw the per-question points of a comparison without recomputing them -- a
+    # recomputation is where a second, subtly different matching rule gets in.
+    q_deltas: tuple[float, ...] = ()
 
     @property
     def mean(self) -> float:
@@ -449,6 +480,63 @@ def _q_means(host_rows: list[dict]) -> tuple[dict[tuple[str, str], float], dict[
     return {k: statistics.mean(v) for k, v in ac.items()}, scene_of
 
 
+def paired_deltas(q_mean: dict[tuple[str, str], float], scene_of: dict[str, str],
+                  qids, rep_a: str, rep_b: str) -> dict[str, list[tuple[float, str]]]:
+    """scene_id -> [(AC(rep_b) - AC(rep_a), question_id)] over the questions BOTH
+    members answered, questions in sorted order.
+
+    THE pairing primitive. Every difference this repo reports comes through here --
+    the separation table, the `vs floor` columns, and the lift chart in plots.py --
+    so that no two of them can disagree about which questions a delta was taken
+    over.
+
+    A question either member did not answer is DROPPED, never zero-filled. That is
+    the whole point: a difference of two cell MEANS is a difference between one
+    rep's surviving questions and the other's, and where a rep overflows the context
+    window on the hard half of a type those are not the same set. The subtraction
+    then silently reads `easy questions only, minus everything` as an effect of the
+    representation. Dropping is also not free -- it can leave too few pairs to grade
+    -- which is what the SMALL_N gate at each call site is for.
+
+    Sorted rather than set-ordered so the summation order (and therefore the last
+    bit of every mean) is reproducible: `qids` is a set of strings, and CPython
+    randomizes string hashing per process, so the unsorted form varied run to run.
+    Every figure is printed to 3 decimals, so this fixes an invisible instability
+    rather than changing any reported number.
+    """
+    by_scene: dict[str, list[tuple[float, str]]] = collections.defaultdict(list)
+    for q in sorted(qids):
+        if (rep_a, q) in q_mean and (rep_b, q) in q_mean:
+            by_scene[scene_of[q]].append((q_mean[(rep_b, q)] - q_mean[(rep_a, q)], q))
+    return by_scene
+
+
+def _summarise(by_scene: dict[str, list[tuple[float, str]]]):
+    """(scene_deltas, n_questions, q_deltas) from `paired_deltas` output."""
+    scene_deltas = {s: statistics.mean([d for d, _ in items])
+                    for s, items in sorted(by_scene.items())}
+    n_q = sum(len(v) for v in by_scene.values())
+    q_deltas = tuple(d for _, items in sorted(by_scene.items()) for d, _ in items)
+    return scene_deltas, n_q, q_deltas
+
+
+def _gates(cells: dict[tuple[str, str], Cell], qt: str, reps: tuple[str, ...],
+           n_q: int, unit: str = "paired questions") -> str:
+    """Why this comparison is not rank-eligible, or "".
+
+    Applied to the COMPARISON rather than to either cell alone: a pair is only as
+    licensed as its weaker member, and the paired question count -- not either
+    cell's n -- is its real support. Shared by every caller so `not licensed` means
+    exactly one thing across the whole report.
+    """
+    reasons = [f"{rep} coverage {cells[(rep, qt)].coverage * 100:.0f}%"
+               for rep in reps
+               if (rep, qt) in cells and not cells[(rep, qt)].rank_eligible]
+    if n_q < SMALL_N:
+        reasons.append(f"only {n_q} {unit}")
+    return "; ".join(reasons)
+
+
 def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
                  lift_confound: bool = False,
                  pairs: dict[tuple[str, str], str] | None = None) -> list[Paired]:
@@ -493,29 +581,13 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
                     if any(r["question_id"] == q and (r["question_type"] or "unknown") == qt
                            for r in host_rows)}
             for rep_a, rep_b in _paired_pairs(axis, qt, cells):
-                by_scene: dict[str, list[float]] = collections.defaultdict(list)
-                factsets: set[tuple[str, str]] = set()
-                for q in qids:
-                    if (rep_a, q) in q_mean and (rep_b, q) in q_mean:
-                        by_scene[scene_of[q]].append(q_mean[(rep_b, q)] - q_mean[(rep_a, q)])
-                        if q in fs_of:
-                            factsets.add(fs_of[q])
+                by_scene = paired_deltas(q_mean, scene_of, qids, rep_a, rep_b)
                 if not by_scene:
                     continue
-                scene_deltas = {s: statistics.mean(v) for s, v in sorted(by_scene.items())}
-                n_q = sum(len(v) for v in by_scene.values())
-
-                # Rank-eligibility gates, applied to the comparison rather than
-                # to either cell alone: a pair is only as licensed as its weaker
-                # member, and the paired question count is its real support.
-                reasons = []
-                for rep in (rep_a, rep_b):
-                    c = cells.get((rep, qt))
-                    if c and not c.rank_eligible:
-                        reasons.append(f"{rep} coverage {c.coverage * 100:.0f}%")
-                if n_q < SMALL_N:
-                    reasons.append(f"only {n_q} paired questions")
-                ineligible = "; ".join(reasons)
+                factsets = {fs_of[q] for items in by_scene.values()
+                            for _, q in items if q in fs_of}
+                scene_deltas, n_q, q_deltas = _summarise(by_scene)
+                ineligible = _gates(cells, qt, (rep_a, rep_b), n_q)
                 confound = "" if lift_confound else axis.confound_for(rep_a, rep_b)
                 verdict = _verdict(scene_deltas, confound, ineligible)
                 # The cap fired only where it changed the grade: the same pair
@@ -527,8 +599,87 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
                                   n_q, verdict, confound, capped, ineligible,
                                   ca.tokens_mean if ca else None,
                                   cb.tokens_mean if cb else None,
-                                  len(factsets)))
+                                  len(factsets), q_deltas))
     return out
+
+
+# --- the floor comparison ---------------------------------------------------
+# `_paired_pairs` deliberately never pairs a rung against the floor: a floor
+# comparison is not the design decision an axis isolates, so it does not belong in
+# the separation table. But it is still a difference between two representations,
+# and it is the headline of the spatial-encoding axis ("what does adding structure
+# buy over a no-information control?"), so it gets the same treatment here rather
+# than a second, weaker one of its own.
+FLOOR_LIFT_ID = "floor"
+
+
+def floor_lifts(rows: list[dict], host: str) -> list[Paired]:
+    """Every representation against the `inventory` floor on one host, question-matched.
+
+    Same pairing primitive, same eligibility gates and same verdict scale as
+    `_paired_rows`. Both the `vs floor` columns below and
+    `plots.value_of_spatial_structure` read this one function, so a lift cannot
+    carry two different numbers in two artifacts describing the same run.
+
+    What this replaces is a subtraction of two cell means. That is wrong here more
+    often than anywhere else in the report, because the floor is the one rep that is
+    deliberately exempted from the scope filter (runner.py) and therefore answers
+    every question of every type, while the reps it is subtracted from routinely do
+    not -- the JSON views overflow the window on dense scenes and lose exactly the
+    questions with the most content in them. `mean(survivors) - mean(everything)`
+    then reads the missing questions as an effect of the representation.
+
+    Every type the floor has data on is returned, not only the control types where
+    inventory is out of scope: the axis cards print `vs floor` on content types too,
+    where inventory is a legitimate compact format rather than a no-information
+    control. Restricting to the control types is the CHART's job, and it says so in
+    its title.
+    """
+    host_rows = [r for r in rows if dataset_of(r["scene_id"]) == host]
+    if not host_rows:
+        return []
+    cells = _cells(host_rows)
+    q_mean, scene_of = _q_means(host_rows)
+    qids_by_type: dict[str, set[str]] = collections.defaultdict(set)
+    for r in host_rows:
+        qids_by_type[r["question_type"] or "unknown"].add(r["question_id"])
+
+    out: list[Paired] = []
+    for qt in sorted(qids_by_type):
+        if (FLOOR, qt) not in cells:
+            continue
+        reps = sorted({rep for (rep, t) in cells
+                       if t == qt and rep != FLOOR and in_scope(rep, qt)})
+        for rep in reps:
+            by_scene = paired_deltas(q_mean, scene_of, qids_by_type[qt], FLOOR, rep)
+            if not by_scene:
+                continue
+            scene_deltas, n_q, q_deltas = _summarise(by_scene)
+            ineligible = _gates(cells, qt, (FLOOR, rep), n_q)
+            ca, cb = cells.get((FLOOR, qt)), cells.get((rep, qt))
+            out.append(Paired(FLOOR_LIFT_ID, host, qt, FLOOR, rep, scene_deltas, n_q,
+                              _verdict(scene_deltas, "", ineligible), "", False,
+                              ineligible,
+                              ca.tokens_mean if ca else None,
+                              cb.tokens_mean if cb else None,
+                              0, q_deltas))
+    return out
+
+
+def _lift_str(p: Paired | None) -> str:
+    """The `vs floor` cell: a question-MATCHED delta, or an explicit `not licensed`.
+
+    A sub-threshold cell prints the reason instead of a number rather than
+    alongside it. A number a reader must remember not to use is a number that gets
+    used -- and unlike the AC column (where `0.70* (cov 38%)` still describes the
+    surviving answers honestly) a lift is a comparison, and this one is not
+    licensed to be made.
+    """
+    if p is None:
+        return ""
+    if p.verdict == VERDICT_NOT_LICENSED:
+        return f"{VERDICT_NOT_LICENSED} ({p.ineligible})"
+    return f"{p.mean:+.2f}"
 
 
 def _paired_section(rows: list[dict], pairs=None) -> list[str]:
@@ -744,14 +895,7 @@ def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> lis
 
                 scene_deltas = {s: statistics.mean(v) for s, v in sorted(by_scene.items())}
                 n_f = sum(len(v) for v in by_scene.values())
-                reasons = []
-                for rep in (rep_a, rep_b):
-                    c = cells.get((rep, qt))
-                    if c and not c.rank_eligible:
-                        reasons.append(f"{rep} coverage {c.coverage * 100:.0f}%")
-                if n_f < SMALL_N:
-                    reasons.append(f"only {n_f} matched fact-sets")
-                ineligible = "; ".join(reasons)
+                ineligible = _gates(cells, qt, (rep_a, rep_b), n_f, "matched fact-sets")
                 verdict = _verdict(scene_deltas, "", ineligible)
 
                 def _m(d):  # mean over scene means, same unit of replication
@@ -1130,31 +1274,11 @@ def _small_n_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
             + _table(["rep", "type", "n", "AC"], trows) + [""])
 
 
-def _combo_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
-    """Multi-view combos vs their best single component vs the json_mini ceiling -- the
-    'do two orthogonal views reach the ceiling' question, kept out of the pole cards."""
-    combos = sorted({rep for (rep, _) in cells if "+" in rep})
-    if not combos:
-        return []
-    trows = []
-    for combo in combos:
-        parts = combo.split("+")
-        qts = sorted({qt for (rep, qt) in cells if rep == combo})
-        for qt in qts:
-            c = cells[(combo, qt)]
-            comp = [(p, cells[(p, qt)].ac_mean) for p in parts
-                    if (p, qt) in cells and cells[(p, qt)].n_scored]
-            best = max(comp, key=lambda x: x[1]) if comp else None
-            best_s = f"{best[0]} {best[1]:.2f}" if best else "n/a"
-            jc = cells.get((CEILING, qt))
-            json_s = _ac_str(jc) if jc else "n/a"
-            dbest = (f"{c.ac_mean - best[1]:+.2f}"
-                     if best and c.n_scored else "")
-            trows.append([combo, qt, str(c.n), _ac_str(c), best_s, json_s, dbest])
-    return (["## Multi-view combinations",
-             f"_Each combo vs its best single component and the {CEILING} ceiling._", ""]
-            + _table(["combo", "type", "n", "AC", "best single", f"{CEILING} AC", "vs best"], trows)
-            + [""])
+# The multi-view-combination section that used to sit here was deleted on
+# 2026-08-12 along with the rows it printed. It rendered an ungraded
+# difference-of-means table for the two concatenated views; those were superseded
+# as a route baseline by `topology_metric` (fact-matched to `navigation` rather
+# than a channel superset of it) and are no longer part of the study.
 
 
 def _candidate_section(rows: list[dict]) -> list[str]:
@@ -1262,7 +1386,6 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
     lines += _planning_section(rows)
     lines += _coverage_section(rows)
     lines += _small_n_section(cells)
-    lines += _combo_section(cells)
     lines += _candidate_section(rows)
     lines += _detail_section(cells)
 

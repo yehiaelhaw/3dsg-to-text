@@ -20,6 +20,7 @@ kept too, so the combined cells can be inspected directly.
 Usage:
   python -m experiments.aggregate_results                       # every model found
   python -m experiments.aggregate_results --models qwen2.5-14b  # one model
+  python -m experiments.aggregate_results --diagnostics         # + latency diagnostic
 """
 from __future__ import annotations
 
@@ -63,7 +64,8 @@ def _pool_rows(scene_dirs: list[Path]) -> tuple[list[str], list[dict]]:
     return (fieldnames or []), rows
 
 
-def _write_group(group_dir: Path, fieldnames: list[str], rows: list[dict]) -> None:
+def _write_group(group_dir: Path, fieldnames: list[str], rows: list[dict],
+                 diagnostics: bool = False) -> None:
     """Write the pooled results.csv + aggregate.csv and render the charts."""
     from evaluation import plots
     from evaluation.results import _write_aggregate_from_csv
@@ -79,7 +81,7 @@ def _write_group(group_dir: Path, fieldnames: list[str], rows: list[dict]) -> No
 
     _write_aggregate_from_csv(detail_path, aggregate_path)
     plots.plot_aggregate(aggregate_path)
-    plots.plot_per_question(detail_path)
+    plots.plot_per_question(detail_path, diagnostics=diagnostics)
 
     # Numeric report (coverage/rank-eligibility, small-n register, axis cards). For
     # the cross-dataset 'all' group the axis cards self-restrict to each axis's host
@@ -88,7 +90,7 @@ def _write_group(group_dir: Path, fieldnames: list[str], rows: list[dict]) -> No
     write_report(detail_path, aggregate_path)
 
 
-def aggregate_model(model_dir: Path) -> None:
+def aggregate_model(model_dir: Path, diagnostics: bool = False) -> None:
     # Fail closed before pooling: a retired representation surviving in the inputs
     # would be pooled into every mean and chart as an extra rep group, and nothing
     # about the output would look wrong (no filename embeds a rep name). Scoped to
@@ -116,12 +118,16 @@ def aggregate_model(model_dir: Path) -> None:
         if not rows:
             print("  (no rows)")
             continue
-        _write_group(model_dir / AGG_DIRNAME / group, fieldnames, rows)
+        _write_group(model_dir / AGG_DIRNAME / group, fieldnames, rows, diagnostics)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Pool per-scene results into cross-scene plots.")
     ap.add_argument("--models", help="comma-separated model dir names (default: all under results/)")
+    ap.add_argument("--diagnostics", action="store_true",
+                    help="also draw the operational latency diagnostic. Off by default: "
+                         "latency is confounded by batch composition and GPU contention, "
+                         "so it is not a result and not the cost axis (prompt tokens are).")
     args = ap.parse_args()
 
     if not OUTPUT_ROOT.exists():
@@ -138,7 +144,7 @@ def main() -> None:
         model_dirs = [d for d in model_dirs if d.name in wanted]
 
     for model_dir in model_dirs:
-        aggregate_model(model_dir)
+        aggregate_model(model_dir, diagnostics=args.diagnostics)
 
 
 if __name__ == "__main__":
