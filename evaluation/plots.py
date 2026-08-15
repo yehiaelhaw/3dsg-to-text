@@ -1055,8 +1055,12 @@ def _plot_paired_separation(prs: list, out_dir: Path,
                      f"{VERDICT_NOT_LICENSED})", fontsize=10, fontweight="bold",
                      loc="left")
         if hi == len(hosts) - 1:
+            # The row label above is written `rep_b - rep_a`, so a positive mean is
+            # rep_b's -- the name printed FIRST. Saying "second-named" inverts every
+            # sign in the figure for a reader who takes the axis at its word.
             ax.set_xlabel("Mean of the scene-level AC deltas   (rep_b - rep_a; > 0 = "
-                          "the second-named representation scored higher)", fontsize=9)
+                          "the representation named first in the row scored higher)",
+                          fontsize=9)
 
     fig.suptitle("Every comparison report.md makes, decided the same way",
                  fontsize=13, fontweight="bold", x=0.05, ha="left", y=1 - 0.22 / H)
