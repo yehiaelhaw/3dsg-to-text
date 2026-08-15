@@ -73,6 +73,27 @@ def iter_records(config: EvalConfig) -> Iterator[EvalRecord]:
 # Phase 1: generation (responder only)
 # --------------------------------------------------------------------------- #
 
+def _select_types(questions, types, source="dataset"):
+    """Narrow `questions` to `types` (None = keep all). Fails closed on empty.
+
+    A run restricted to no questions is always a mistake -- a typo'd type name, or
+    a host that has none of that family -- and it would otherwise look like a
+    successful zero-cell run. Raising costs nothing and is checked before the
+    responder is ever called.
+    """
+    if not types:
+        return questions
+    wanted = set(types)
+    kept = [q for q in questions if q.question_type in wanted]
+    if not kept:
+        have = sorted({q.question_type for q in questions if q.question_type})
+        raise ValueError(
+            f"question_types={sorted(wanted)} matched no question in {source} "
+            f"(available: {', '.join(have) or 'none'})"
+        )
+    return kept
+
+
 def generate_responses(config: EvalConfig) -> Path:
     """Run the responder over every in-scope cell, streaming to responses.jsonl.
 
@@ -101,7 +122,10 @@ def generate_responses(config: EvalConfig) -> Path:
         print(f"  ctx guard: {'estimated (len//4) — ' + why if why else 'exact token count'}"
               f"  (limit {_ctx_limit(num_ctx)} = num_ctx {num_ctx} - reserve {_CTX_RESERVE})")
 
-    questions = dataset.load(config.dataset_path, config.question_ids)
+    questions = _select_types(
+        dataset.load(config.dataset_path, config.question_ids),
+        config.question_types, config.dataset_path,
+    )
 
     # Fail-closed pre-pass (final runs): abort before any LLM call if a rep or
     # question type would fall through to scope's fail-open defaults.

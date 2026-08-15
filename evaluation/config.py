@@ -27,6 +27,13 @@ class EvalConfig:
     repetitions:        int                 = 1
     representations:    Optional[list[str]] = None   # None → auto-discover
     question_ids:       Optional[list[str]] = None   # None → all questions
+    # Restrict generation to these question types. None → every type the reps are
+    # in scope for. This is a *run-cost* control, not a scope declaration: scope.py
+    # still decides what a rep CAN answer, and being in scope is not a reason to
+    # spend a cell. Used to run only the types a reported exhibit reads (e.g.
+    # route+direction for the navigation/topology_metric pair) and leave the rest
+    # of that rep's in-scope surface as an optional diagnostic.
+    question_types:     Optional[list[str]] = None
 
     # Skip (rep × question) cells the rep cannot answer (scope.in_scope). On by
     # default: it only removes structurally-meaningless cells that plots masked

@@ -8,6 +8,11 @@ a different judge instead (e.g. Gemini for final numbers) -- no regeneration, no
 responder VRAM. Runs are resumable (resume=True), so a crash -- or a
 --models/--scenes subset -- can be re-run without redoing finished cells.
 
+--types narrows a run to the question types a reported comparison actually reads.
+It filters GENERATION; the scoring phase judges whatever the cache holds, which is
+exactly the filtered set when generation was filtered (and the resume set skips
+anything already judged). Being in scope is not a reason to spend a cell.
+
 Usage:
   python -m experiments.run_experiments                          # full matrix
   python -m experiments.run_experiments --models qwen2.5-14b     # one model, all scenes
@@ -15,6 +20,9 @@ Usage:
   python -m experiments.run_experiments --list                   # print matrix, run nothing
   python -m experiments.run_experiments --models qwen2.5-14b --scenes Brinnon \\
       --score-only --judge-backend gemini --judge-model gemini-2.5-flash --faithfulness
+  python -m experiments.run_experiments --models qwen2.5-14b \\
+      --scenes procthor_train1 --reps topology_metric --types route,direction \\
+      --generate-only                            # headline cells only, no diagnostics
 """
 from __future__ import annotations
 
@@ -51,7 +59,8 @@ def _select(items, names, kind, key):
 
 
 def build_config(profile, scene, *, judge_backend=None, judge_model=None,
-                  score_only=False, compute_faithfulness=False, representations=None):
+                  score_only=False, compute_faithfulness=False, representations=None,
+                  question_types=None):
     """One EvalConfig for a (model x scene) cell. Imports lazily so --list is cheap.
 
     judge_backend/judge_model default to the fixed gemma2:9b screening judge;
@@ -61,6 +70,10 @@ def build_config(profile, scene, *, judge_backend=None, judge_model=None,
     representations overrides the scene's rep set (from --reps) for subset runs --
     e.g. a second responder on headline cells only, or refilling one purged rep.
     scenes.py stays the source of truth for what a FULL run covers.
+
+    question_types (from --types) narrows generation to the types a reported
+    comparison actually reads. Being IN SCOPE is not a reason to spend a cell:
+    scope.py says what a rep can answer, this says what the argument needs.
     """
     from evaluation.config import EvalConfig
     return EvalConfig(
@@ -75,6 +88,7 @@ def build_config(profile, scene, *, judge_backend=None, judge_model=None,
         # temperature=0.0 is a reasonable determinism default for any judge backend.
         judge_options=JUDGE_OPTIONS,
         representations=representations or scene.representations,
+        question_types=question_types,
         # One draw per cell: the (rep x type) group mean already averages over many
         # independent questions, so a repeat is pseudo-replication, not new signal.
         repetitions=1,
@@ -99,6 +113,10 @@ def main():
                                     "rep set of every selected scene (subset runs, e.g. "
                                     "a second responder on headline cells only; resume "
                                     "still skips finished cells)")
+    ap.add_argument("--types", help="comma-separated question types to generate "
+                                     "(default: every in-scope type). Narrows a run to "
+                                     "the cells a reported comparison reads -- in-scope "
+                                     "is not the same as required")
     ap.add_argument("--list", action="store_true", help="print the matrix and exit")
     ap.add_argument("--generate-only", action="store_true",
                      help="run responder generation only, skip judging "
@@ -125,6 +143,8 @@ def main():
     scenes = _select(SCENES, args.scenes, "scene", lambda s: s.scene_id)
     reps = ([r.strip() for r in args.reps.split(",") if r.strip()]
             if args.reps else None)
+    qtypes = ([t.strip() for t in args.types.split(",") if t.strip()]
+              if args.types else None)
     combos = list(product(models, scenes))
 
     print(f"matrix: {len(models)} model(s) x {len(scenes)} scene(s) = {len(combos)} run(s)")
@@ -138,7 +158,8 @@ def main():
         from evaluation.runner import generate_responses
         for i, (prof, scene) in enumerate(combos, 1):
             print(f"\n=== [{i}/{len(combos)}] {prof.name} x {scene.scene_id} (generate only) ===")
-            generate_responses(build_config(prof, scene, representations=reps))
+            generate_responses(build_config(prof, scene, representations=reps,
+                                            question_types=qtypes))
         return
 
     from evaluation.results import save
@@ -154,7 +175,7 @@ def main():
             prof, scene,
             judge_backend=args.judge_backend, judge_model=args.judge_model,
             score_only=args.score_only, compute_faithfulness=args.faithfulness,
-            representations=reps,
+            representations=reps, question_types=qtypes,
         )
         save(iter_records(cfg), cfg)
 
