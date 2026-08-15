@@ -101,6 +101,15 @@ REP_CAPS: dict[str, set[str]] = {
     "topology_edges_only": {"connectivity"},
     "graph_digest":     {"connectivity"},
     "room_tree":        {"connectivity"},
+    # The door graph with per-edge metric, in locative framing -- the matched
+    # counterpart to `navigation` on ProcTHOR route/direction. Its channel set is
+    # deliberately IDENTICAL to navigation's: it carries `metric_edges` (distance
+    # and bearing along connections) and NOT `metric`, because it says nothing
+    # about pairs that are not directly connected, and NOT `inventory`, because it
+    # prints no objects. Any addition here would un-match the pair -- the whole
+    # point of the view is that the two sides differ in figure-ground assignment
+    # and framing, not in what they know.
+    "topology_metric":  {"connectivity", "metric_edges"},
     "prose":            {"inventory", "connectivity", "object_relations",
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
     "metric_relations": {"inventory", "metric", "metric_edges"},
