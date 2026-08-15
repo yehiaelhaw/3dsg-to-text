@@ -33,9 +33,10 @@ class EvalConfig:
     # anyway. Set False to force the full cross product.
     scope_filter:       bool                = True
     # Fail-closed guard for final scored runs: before generating, verify every
-    # representation (each "+" part of a combo) has a REP_CAPS entry and every
-    # question type a TYPE_NEEDS entry (scope.validate_declared); an undeclared
-    # name aborts the run instead of silently running fail-open. Leave False
+    # representation (each "+" part of a combo, and the assembled name too) has a
+    # REP_CAPS entry and is not retired, and every question type a TYPE_NEEDS entry
+    # (scope.validate_declared); an undeclared or retired name aborts the run
+    # instead of silently running fail-open. Leave False
     # for exploratory runs; set True for any run whose numbers will be reported.
     strict_scope:       bool                = False
     # faithfulness is the secondary metric and costs an extra judge call per

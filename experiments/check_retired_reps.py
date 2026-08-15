@@ -80,6 +80,20 @@ def _files(root: Path, scope: str) -> list[Path]:
     return out
 
 
+def _retired_names(rep: str, retired: set[str]) -> list[str]:
+    """Which retired names this `representation` value hits.
+
+    Two ways to hit: any "+"-part is retired (the `json` -> json_pretty/json_mini
+    case, where the retired thing is a single view), or the whole assembled name is
+    retired (the purged concatenations, whose parts are both still active -- a
+    part-only check waves those through and reports a clean tree that is not).
+    """
+    hits = [part for part in rep.split("+") if part in retired]
+    if "+" in rep and rep in retired:
+        hits.append(rep)
+    return hits
+
+
 def _hits_csv(path: Path, retired: set[str]) -> dict[str, int]:
     """{retired name: row count} in this CSV's `representation` column."""
     counts: dict[str, int] = {}
@@ -89,10 +103,11 @@ def _hits_csv(path: Path, retired: set[str]) -> dict[str, int]:
             return counts
         for row in reader:
             rep = (row.get("representation") or "").strip()
-            # A combo ("a+b") is retired if any part is.
-            for part in rep.split("+"):
-                if part in retired:
-                    counts[part] = counts.get(part, 0) + 1
+            # A combo ("a+b") is retired if any part is, OR if the assembled name
+            # itself is retired -- the purged concatenations are made of parts that
+            # are still active, so a part-only check would miss them entirely.
+            for name in _retired_names(rep, retired):
+                counts[name] = counts.get(name, 0) + 1
     return counts
 
 
@@ -115,9 +130,8 @@ def _hits_jsonl(path: Path, retired: set[str]) -> dict[str, int]:
             except json.JSONDecodeError:
                 continue
             rep = (rec.get("representation") or "").strip()
-            for part in rep.split("+"):
-                if part in retired:
-                    counts[part] = counts.get(part, 0) + 1
+            for name in _retired_names(rep, retired):
+                counts[name] = counts.get(name, 0) + 1
     return counts
 
 

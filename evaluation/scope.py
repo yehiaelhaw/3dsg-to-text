@@ -90,6 +90,17 @@ ALL_CAPS = {"inventory", "connectivity", "metric", "metric_edges", "object_relat
 RETIRED_REPS: dict[str, str] = {
     "json": "split into 'json_pretty' (historical pretty serialization) and "
             "'json_mini' (the minified ceiling) on 2026-08-09",
+    # Whole-name entries, not parts: both parts of each concatenation are active
+    # single views, so only the assembled name is retired. Checkers match the full
+    # representation string as well as its "+"-parts for exactly this case.
+    "topology+metric_relations":
+        "retired 2026-08-11 and purged 2026-08-12; superseded as the ProcTHOR route "
+        "baseline by 'topology_metric', which carries {connectivity, metric_edges} "
+        "and is fact-matched to 'navigation' instead of being a channel superset",
+    "graph_digest+metric_relations":
+        "retired 2026-08-11 and purged 2026-08-12; the 'can salient views match the "
+        "ceiling?' question it probed belongs to 'synthesis', a curated single "
+        "document rather than a concatenation",
 }
 
 REP_CAPS: dict[str, set[str]] = {
@@ -238,12 +249,19 @@ def validate_declared(reps: set[str], qtypes: set[str | None]) -> None:
     """Fail-closed check for final runs: raise if any representation part or
     question type would fall through to the fail-open defaults.
 
-    A combo ("a+b") is checked part-by-part. A missing/None question type counts
-    as undeclared: fail-open never filters it, so in a strict run every question
-    must carry a type with a TYPE_NEEDS entry.
+    A combo ("a+b") is checked part-by-part AND under its full assembled name --
+    the retired concatenations are built from parts that are themselves active, so
+    a part-only check would wave them straight through. A missing/None question
+    type counts as undeclared: fail-open never filters it, so in a strict run every
+    question must carry a type with a TYPE_NEEDS entry.
     """
     problems: list[str] = []
     for rep in sorted(reps):
+        if "+" in rep and rep in RETIRED_REPS:
+            problems.append(
+                f"representation {rep!r} is RETIRED: {RETIRED_REPS[rep]}. "
+                f"Name the replacement explicitly -- there is no alias, on purpose"
+            )
         for part in rep.split("+"):
             if part in RETIRED_REPS:
                 problems.append(
