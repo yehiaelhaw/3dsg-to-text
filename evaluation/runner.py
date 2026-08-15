@@ -144,7 +144,7 @@ def generate_responses(config: EvalConfig) -> Path:
     done = _cached_keys(path)
 
     print(f"PHASE 1/2  generate -> {path}  (responder: {responder_tag})")
-    n_new = n_skip = n_ctx = 0
+    n_new = n_skip = n_ctx = n_err = 0
 
     with path.open("a", encoding="utf-8") as fh:
         for question in questions:
@@ -172,6 +172,7 @@ def generate_responses(config: EvalConfig) -> Path:
                     rec = _gen_dict(question, representation, 0, responder_tag,
                                     raw_answer="", error=str(exc))
                     _write(fh, rec)
+                    n_err += 1
                     print(f"  ERR   {question.id} | {representation} | {exc}")
                     continue
 
@@ -191,6 +192,7 @@ def generate_responses(config: EvalConfig) -> Path:
                         n_ctx += 1
                         print(f"  CTX!  {question.id} | {representation} | rep{repetition} | prompt {rec['prompt_tokens']} tok, budget {_ctx_limit(num_ctx)}")
                     else:
+                        n_err += 1
                         print(f"  ERR   {question.id} | {representation} | rep{repetition}")
 
     # Free the responder's VRAM before the judge loads (Phase 2) -- but ONLY when
@@ -200,7 +202,20 @@ def generate_responses(config: EvalConfig) -> Path:
     # first prompt -- whose load time then leaks into that cell's latency_ms.
     if _responder_judge_colocated(config):
         responder.unload()
-    print(f"PHASE 1/2  done — {n_new} generated, {n_ctx} context-exceeded, {n_skip} already cached\n")
+    print(f"PHASE 1/2  done — {n_new} generated, {n_err} errored, "
+          f"{n_ctx} context-exceeded, {n_skip} already cached\n")
+    # A phase where EVERY attempt errored must not exit 0. It did until
+    # 2026-08-13, so the 2026-08-12 topology_metric run reported "[ok]" and
+    # "FILL COMPLETE" for three responders whose model was not on the host and
+    # which produced 234 errors and zero rows -- indistinguishable from a clean
+    # run to any caller reading the exit code. Errors alongside successes stay
+    # non-fatal (resume re-attempts them); a total wipeout is a setup fault.
+    if n_err and not n_new and not n_ctx:
+        raise RuntimeError(
+            f"generation produced no rows: all {n_err} attempted cells errored "
+            f"(responder {responder_tag}). Check the model is pulled on the "
+            f"configured host, then rerun -- cached cells are skipped."
+        )
     return path
 
 
