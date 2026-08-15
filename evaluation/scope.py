@@ -36,10 +36,22 @@ from __future__ import annotations
 # views do NOT all carry the same granularity despite linearizing the same edge
 # set (relations_tree and relations_digest are lossy derived presentations, the
 # object-level analogs of graph_digest/room_tree on the structure-presentation axis):
-#   - "object_relations_raw": every individual triple is stated (support,
-#     proximity, directional, comparative) -- arbitrary specific-pair lookups
-#     are answerable. relations_flat/subject/predicate carry this; relations_tree
-#     and relations_digest do not (see below).
+#   - "object_relations_raw": individual triples are stated (support, proximity,
+#     directional, comparative) -- arbitrary specific-pair lookups are answerable.
+#     relations_flat/subject/predicate carry this; relations_tree and
+#     relations_digest do not (see below). Exact for relations_flat (one line per
+#     edge) and relations_predicate (its clique/symmetric collapses drop no
+#     membership). BOUNDED for relations_subject, and for prose/synthesis which
+#     reuse the same renderer: they cap each subject's comparative and
+#     shared-attribute lists at 3 + a "(+N more)" count, leaving 109/42/424 triples
+#     unprinted on 02b33dfb/7f30f36c/d7d40d62. Shared-attribute membership survives
+#     that cap (the full clique is recoverable by unioning the printed per-object
+#     lines -- verified for all 14 cliques); comparative "... than" edges cut in both
+#     directions do not (0/4/118 triples genuinely absent). No evaluated question's
+#     key facts were found to depend on one of those, which is an absence of
+#     demonstrated impact rather than a proof of none. The declaration is left as
+#     scored -- the run it describes is frozen -- but read it as "spatial edges in
+#     full, attribute edges under a per-object bound", not as "every triple".
 #   - "object_relations_support": the support/containment sub-graph specifically,
 #     drawn *exhaustively* -- relations_tree's entire content (every parent/child
 #     edge, so any support/containment question is answerable, not just curated
@@ -47,15 +59,22 @@ from __future__ import annotations
 #   - "object_relations_derived": relations_digest's precomputed summary content
 #     -- deepest-nesting depth + the single deepest chain (guaranteed correct,
 #     since it is explicitly "deepest first"), the printed top-N receptacle
-#     counts, full proximity-cluster membership, full shared-attribute-clique
-#     membership, and the relation-type census. This is NOT a general "digest
-#     can answer any support question" flag: relations_digest's chain list is a
-#     curated top-N, not an exhaustive enumeration (e.g. on 3rscan_02b33dfb it
-#     omits several real 2-hop chains like basket[26]->bath cabinet[16]), so
-#     arbitrary non-highlighted support facts stay under object_relations_raw
-#     only. Any new question relying on relations_digest for a specific fact
-#     must still be verified against the actual printed text before being
-#     admitted, same as always (CLAUDE.md "Writing a QA dataset for a scene").
+#     counts, the top 8 proximity clusters by size together with the total cluster
+#     count stated in that block's header, full shared-attribute-clique
+#     membership, and the relation-type census. Cluster membership beyond the
+#     printed 8 is NOT carried: 7f30f36c has 18 clusters and prints 8, so the
+#     header's total is the reliable part there and the unprinted memberships are
+#     not. (The live cluster questions on that scene target clusters inside the
+#     printed 8, so no scoring error is demonstrated -- but the channel should not
+#     be read as promising full membership.) This is NOT a general "digest can
+#     answer any support question" flag either: relations_digest's chain list is a
+#     curated top-N capped at 8, not an exhaustive enumeration (the scenes hold
+#     12/51/18; e.g. on 3rscan_02b33dfb it omits several real 2-hop chains like
+#     basket[26]->bath cabinet[16]), so arbitrary non-highlighted support facts
+#     stay under object_relations_raw only. Any new question relying on
+#     relations_digest for a specific fact must still be verified against the
+#     actual printed text before being admitted, same as always (CLAUDE.md
+#     "Writing a QA dataset for a scene").
 
 # Every channel there is. Defined before REP_CAPS so the full-information views can
 # reference it instead of restating the list: "identical content ⇒ identical
@@ -87,7 +106,9 @@ REP_CAPS: dict[str, set[str]] = {
     "metric_relations": {"inventory", "metric", "metric_edges"},
     "navigation":       {"connectivity", "metric_edges"},
     # relation-linearization family: five presentations of one object-relation graph.
-    # flat/subject/predicate state every triple, so they carry all three tiers.
+    # flat/predicate print the edge set in full; subject prints it under a per-object
+    # attribute cap (see the "object_relations_raw" note above). All three are declared
+    # at the three tiers, as scored.
     "relations_flat":      {"object_relations", "object_relations_raw", "object_relations_support", "object_relations_derived"},
     "relations_subject":   {"object_relations", "object_relations_raw", "object_relations_support", "object_relations_derived"},
     "relations_predicate": {"object_relations", "object_relations_raw", "object_relations_support", "object_relations_derived"},

@@ -15,6 +15,19 @@ It is a lossy summary by construction (it cannot answer a query whose fact it di
 pre-compute), which is exactly its axis role: raw edges (`relations_flat`) vs derived
 structure (here), the object-level mirror of `topology` vs `graph_digest`.
 
+Three of those sections are display-capped, and the caps are part of what the
+responder saw in every reported run -- not a later change. At most 8 support chains
+are printed, deepest first, where the evaluated scenes hold 12 / 51 / 18; at most 5
+receptacles, ranked by load; at most 8 proximity clusters, largest first, where
+7f30f36c holds 18. Only the cluster block states its true total (in its header); the
+chain and receptacle blocks do not, and no block marks the entries it left out. So
+the number of chains printed here must not be read as the number in the scene. The
+"deepest first" / "carry the most" / largest-first orderings are what keep the top of
+each list trustworthy: the deepest chain and the heaviest receptacle are guaranteed
+present even though the tail is not. `evaluation/scope.py` narrows the digest's
+declared channel accordingly, and questions typed against it are authored from the
+printed file rather than from the underlying graph.
+
 Runs anywhere object relations are annotated; refuses on scenes that carry none.
 """
 

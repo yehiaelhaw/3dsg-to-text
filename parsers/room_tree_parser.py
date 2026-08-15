@@ -27,10 +27,19 @@ Layout: each connected component is rooted at its graph center and drawn as an
 indented tree (the `tree`-command shape: each room listed under the room it connects
 up to, with branch glyphs and indentation carrying the connection). Deterministic;
 children ordered by id. The indented form never collides and stays bounded in width
-no matter how wide or deep the graph is. A scene with no cycles (the common ProcTHOR
-case) renders as a single faithful tree. Any connection that would close a loop is
-omitted from the drawing and listed afterwards as a back-edge, so the tree never
-implies a false adjacency nor hides a real one.
+no matter how wide or deep the graph is. A scene with no cycles renders as a single
+faithful tree. A connection that would close a loop is intended to be omitted from
+the drawing and listed afterwards as a back-edge, so that the tree implies no false
+adjacency and hides no real one.
+
+Validated on tree-structured connectivity only. All three evaluated ProcTHOR scenes
+are acyclic (10 rooms, 9 connections each), so every shipped drawing is a lossless
+spanning tree -- and so the back-edge path above has never actually run. It should
+not be described as exercised or as robust on arbitrary graphs: `_center` peels leaf
+layers until one or two nodes remain, and a component containing a cycle can reach a
+state with no leaf left to peel, at which point the loop makes no further progress.
+A latent limitation of the frozen implementation, untriggered by the evaluated
+scenes; left as-is because those scenes are the ones the reported results come from.
 
 Runs only where a room connection graph exists (ProcTHOR); refuses elsewhere.
 """
@@ -86,6 +95,11 @@ def _center(adj: dict[str, set[str]], comp: list[str]) -> str:
 
     Rooting at the center keeps the drawn tree shallow and balanced; ties break to
     the higher-degree room (the hub), then by id, so the layout is deterministic.
+
+    Assumes an acyclic component, which is what every evaluated ProcTHOR scene
+    supplies. The peel does not terminate on a component holding a cycle: once the
+    tree fringe is consumed no node has induced degree <= 1, so the layer is empty
+    and the remaining count stops falling. Never reached by the evaluated scenes.
     """
     comp_set = set(comp)
     induced = lambda n: len(adj[n] & comp_set)

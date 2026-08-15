@@ -53,8 +53,11 @@ SCENES: list[Scene] = [
 
     # 3RScan (relation-linearization axis): auto-discover the 9 single files. No
     # combos -- concatenating two relations_* views would mix poles of the same
-    # axis. The trio spans the
-    # density gradient (02b33dfb 355 rels < d7d40d62 < 7f30f36c 3971 rels).
+    # axis. Relation density rises across the trio, but not evenly: after the
+    # label-inferable `same object type` filter applied at load the counts are
+    # 02b33dfb 321, d7d40d62 1501, 7f30f36c 1541 -- one comparatively sparse scene
+    # and two substantially denser ones that sit close together. (The 355 / 3971
+    # figures this comment used to quote were pre-filter, and overstated the spread.)
     Scene("3rscan_02b33dfb", _qa("3rscan_02b33dfb"), None),
     Scene("3rscan_d7d40d62", _qa("3rscan_d7d40d62"), None),
     Scene("3rscan_7f30f36c", _qa("3rscan_7f30f36c"), None),

@@ -2,10 +2,23 @@
 
 Each object is stated once, with all of its outgoing relations gathered under it:
 ``chair [5]: standing on floor [1]; close by table [7], lamp [3].`` This is the
-node-centric pole of the relation-linearization axis. It carries the *same edges* as
-`relations_flat` and `relations_predicate`; what differs is the grouping key (here,
-the subject), so a delta against those isolates whether node-local grouping aids
-reasoning.
+node-centric pole of the relation-linearization axis. It draws on the same source
+edge set as `relations_flat` and `relations_predicate`, and the grouping key (here,
+the subject) is the intended difference, so a delta against those largely isolates
+whether node-local grouping aids reasoning.
+
+It is NOT, however, a complete restatement of that edge set, so do not describe the
+pair as content-identical. The `attr_cap` below prints only the first 3 objects of
+each comparative/shared-attribute predicate per subject, with a ``(+N more)`` count
+standing in for the rest: 109 / 42 / 424 triples go unprinted on
+02b33dfb / 7f30f36c / d7d40d62. Two different consequences, worth keeping apart:
+shared-attribute (``same ...``) membership survives the cap, because each member
+prints up to 3 others and the printed fragments stay connected within the group, so
+the full clique is recoverable by unioning lines (checked for all 14 cliques across
+the three scenes); comparative (``... than``) edges truncated in *both* directions
+are simply absent from the document (0 / 4 / 118 triples). No evaluated question's
+key facts were found to turn on one of the absent comparative edges -- an absence of
+demonstrated impact, not a proof of none.
 
 It is the de-prosed twin of `prose`'s "Spatial relations by room:" section -- same
 content and ordering, but stripped of the room headers and the "is" narration, so a

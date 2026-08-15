@@ -9,7 +9,12 @@ reasoning LLMs are weakest at. This parser pre-computes those facts instead:
   * reachability groups (connected components),
   * hub rooms (highest connection degree),
   * bottleneck rooms (articulation points) and what they cut off,
-  * multi-step distances (shortest-path connection counts, with the route).
+  * multi-step distances, printed as the shortest-path route itself ("Kitchen [2] ->
+    LivingRoom [3] -> ..."). The hop count is implicit in that chain rather than
+    printed as a number: the section header names the quantity ("connections to
+    cross") and the route makes it countable, but no numeric count is emitted per
+    line. Describe this as routes from which the number of connections can be
+    determined, not as stated hop counts.
 
 It opens a new evaluation axis — *raw adjacency* (`topology`) vs *derived structure*
 (here) — orthogonal to the format axis (`topology` vs `prose`). It is deliberately

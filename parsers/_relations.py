@@ -2,11 +2,15 @@
 
 The five `relations_*` views (`relations_flat`, `relations_subject`,
 `relations_predicate`, `relations_tree`, `relations_digest`) are all
-linearizations of the *same* object-relation graph (`Building.object_relations`)
--- so any score delta between them is attributable to the *presentation* of one
-fixed edge set, not to different content. This module holds the one backbone they
-share: label resolution, a dataset-agnostic predicate classifier, and the support
-forest used by the drawn-tree and digest views.
+linearizations of one common object-relation graph (`Building.object_relations`),
+so a score delta between them is a delta over a shared source graph rather than
+over separately-sourced content. That is weaker than "one fixed printed edge set",
+and deliberately so: `relations_tree` and `relations_digest` are avowedly lossy,
+and `relations_subject` applies a bounded per-object cap to attribute predicates
+(see its own docstring), so only `relations_flat` and `relations_predicate` print
+the edge set in full. This module holds the one backbone they share: label
+resolution, a dataset-agnostic predicate classifier, and the support forest used
+by the drawn-tree and digest views.
 
 Dataset-agnostic by design: predicates are bucketed by *structure*, not by a
 hard-coded per-dataset vocabulary. 3DSSG (3RScan) supplies a dense ~40-predicate
