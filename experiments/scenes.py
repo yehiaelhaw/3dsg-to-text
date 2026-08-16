@@ -11,11 +11,35 @@ No scene declares an "a+b" combo any more, and the two that once existed are nam
 in scope.RETIRED_REPS, so declaring one again aborts the run (see the retirement
 note below the ProcTHOR list). The loader still parses the syntax; that path is now
 unexercised by the study.
+
+Each Scene also carries a `role` -- the pool it may enter when results are POOLED.
+It is a property of the study design, not of the data, so it lives here and not in a
+directory name: `aggregate_results.py` reads it, `axes.dataset_of()` never sees it,
+and a non-primary scene keeps its ordinary `3rscan_*` directory so it still resolves
+to its host dataset. See docs/3RSCAN_SCENE_SELECTION.md S7.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
+
+# --- scene roles -----------------------------------------------------------
+# PRIMARY   -- carries the confirmatory experiment. Every axis card, paired table,
+#              verdict, headline count and thesis figure is computed over these and
+#              only these.
+# STRESS    -- kept to demonstrate an OPERATIONAL limit (a representation that cannot
+#              fit the responder context at all). Reported as token fit/overflow only,
+#              never as accuracy.
+# SENSITIVITY -- kept so that "how much does the verdict set depend on which scenes
+#              were chosen?" can be answered from already-cached results, in its own
+#              section, outside the primary verdicts.
+#
+# The two non-primary roles are distinguished for the reader; the pooling layer treats
+# them identically, because the only property that matters there is `!= PRIMARY`.
+PRIMARY = "primary"
+STRESS = "stress"
+SENSITIVITY = "sensitivity"
+ROLES = (PRIMARY, STRESS, SENSITIVITY)
 
 
 @dataclass(frozen=True)
@@ -23,6 +47,13 @@ class Scene:
     scene_id: str                                  # == scene_contexts/<scene_id>/ dir
     dataset_path: str
     representations: Optional[list[str]] = None    # None -> auto-discover singles
+    role: str = PRIMARY                            # primary | stress | sensitivity
+
+    def __post_init__(self) -> None:
+        if self.role not in ROLES:
+            raise ValueError(
+                f"{self.scene_id}: unknown scene role {self.role!r} "
+                f"(expected one of {', '.join(ROLES)})")
 
 
 def _qa(scene_id: str) -> str:
@@ -81,16 +112,34 @@ SCENES: list[Scene] = [
     Scene("procthor_train232", _qa("procthor_train232"), _PROCTHOR_REPS),
     Scene("procthor_train314", _qa("procthor_train314"), _PROCTHOR_REPS),
 
-    # 3RScan (relation-linearization axis): auto-discover the 9 single files. No
+    # 3RScan (relation-linearization axis): auto-discover the single files. No
     # combos -- concatenating two relations_* views would mix poles of the same
-    # axis. Relation density rises across the trio, but not evenly: after the
-    # label-inferable `same object type` filter applied at load the counts are
-    # 02b33dfb 321, d7d40d62 1501, 7f30f36c 1541 -- one comparatively sparse scene
-    # and two substantially denser ones that sit close together. (The 355 / 3971
-    # figures this comment used to quote were pre-filter, and overstated the spread.)
-    Scene("3rscan_02b33dfb", _qa("3rscan_02b33dfb"), None),
-    Scene("3rscan_d7d40d62", _qa("3rscan_d7d40d62"), None),
-    Scene("3rscan_7f30f36c", _qa("3rscan_7f30f36c"), None),
+    # axis.
+    #
+    # The primary trio is an even sparse -> medium -> dense gradient in post-filter
+    # relation count (321 -> 647 -> 1304; consecutive ratios 2.016x / 2.015x), selected
+    # under the frozen pre-response gates in docs/3RSCAN_SCENE_SELECTION.md. It
+    # replaced the old trio, whose two dense scenes sat close together (1501 vs 1541)
+    # and whose json_mini ceiling could not be scored on either of them.
+    #
+    # Medium scene amended 2026-08-16 (docs/3RSCAN_SCENE_SELECTION.md S2.1, still
+    # pre-responder): 38770ca1 -> 1d2f8518. 38770ca1's door-state relations were
+    # internally contradictory (all 7 door pairs asserted both "more open" and "more
+    # closed" between the same pair) -- rank 13/1335 worst in the corpus under the new
+    # G5 gate. 1d2f8518 is the G1-G5/P1-P4 argmin of the medium band, zero
+    # contradictions, confirmed by mechanical re-run, not by any responder result.
+    Scene("3rscan_02b33dfb", _qa("3rscan_02b33dfb"), None, role=PRIMARY),
+    Scene("3rscan_1d2f8518", _qa("3rscan_1d2f8518"), None, role=PRIMARY),
+    Scene("3rscan_0cac762f", _qa("3rscan_0cac762f"), None, role=PRIMARY),
+
+    # Non-primary, kept for the two reporting artifacts defined in
+    # docs/3RSCAN_SCENE_SELECTION.md S6. Both fail G1 (json_mini context headroom):
+    # 7f30f36c overflows the window outright (32,907 / 36,783 tokens against a 32,512
+    # budget), d7d40d62 fits with 2,202 tokens = 6.7% of num_ctx, under the 12% bar.
+    # They keep their ordinary 3rscan_* ids on purpose -- role is carried here, never
+    # in a directory name, so axes.dataset_of() still resolves them to the 3rscan host.
+    Scene("3rscan_7f30f36c", _qa("3rscan_7f30f36c"), None, role=STRESS),
+    Scene("3rscan_d7d40d62", _qa("3rscan_d7d40d62"), None, role=SENSITIVITY),
 
     # Gibson (spatial-encoding / reference-frame axes): auto-discover the 6 single
     # files. No door graph, so no
@@ -100,3 +149,33 @@ SCENES: list[Scene] = [
     Scene("Thrall", _qa("Thrall"), None),
     Scene("Donaldson", _qa("Donaldson"), None),
 ]
+
+BY_ID: dict[str, Scene] = {s.scene_id: s for s in SCENES}
+PRIMARY_SCENE_IDS: frozenset[str] = frozenset(
+    s.scene_id for s in SCENES if s.role == PRIMARY)
+
+
+class UnregisteredScene(KeyError):
+    """A scene id with no entry in SCENES.
+
+    Raised rather than defaulted, because every default is wrong here: treating an
+    unknown scene as primary lets a stress scene into the headline numbers the moment
+    someone forgets to register it, and treating it as non-primary silently drops a
+    real scene out of the aggregate. Both failures are invisible in the output.
+    """
+
+
+def role_of(scene_id: str) -> str:
+    """Declared role of a registered scene. Fails closed on an unknown id."""
+    try:
+        return BY_ID[scene_id].role
+    except KeyError:
+        raise UnregisteredScene(
+            f"{scene_id!r} is not in experiments/scenes.py. Register it with an "
+            f"explicit role ({', '.join(ROLES)}) before it can be pooled."
+        ) from None
+
+
+def is_primary(scene_id: str) -> bool:
+    """True iff this scene may enter a pooled primary aggregate."""
+    return role_of(scene_id) == PRIMARY
