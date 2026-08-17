@@ -100,6 +100,27 @@ MODEL_PROFILES: list[ModelProfile] = [
     ModelProfile("mistral-nemo-12b_screening", "ollama", "mistral-nemo:12b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
 
+    # --- judge-tier validation (2026-08-17): NOT new responder points. Same
+    # backend/model/options as mistral-nemo-12b above -- these exist only to
+    # re-judge that profile's already-generated responses.jsonl (duplicated
+    # verbatim into each directory below) under a different judge, via
+    # --score-only. Neither follows the bare/`_screening` naming convention
+    # above, because neither is a confirmatory RESULT directory: both are
+    # diagnostics for evaluation/results.py's judge-agreement analysis
+    # (project_judge_tier_disagreement memory) and are never read by
+    # aggregate_results.py or cited as a study result.
+    #   _gemini2 -- same judge (gemini-2.5-flash), second draw, temperature 0.
+    #               Isolates same-judge non-determinism: any verdict that
+    #               moves here moves for reasons that have nothing to do with
+    #               which judge was used.
+    #   _gpt41   -- different vendor (openai gpt-4.1), tier-matched to
+    #               gemini-2.5-flash on cost/capability. Isolates cross-vendor
+    #               judge disagreement.
+    ModelProfile("mistral-nemo-12b_gemini2", "ollama", "mistral-nemo:12b",
+                 {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
+    ModelProfile("mistral-nemo-12b_gpt41", "ollama", "mistral-nemo:12b",
+                 {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
+
     # --- reasoning family (branch ablation): nonzero floor; r1 degrades at 0 ---
     ModelProfile("deepseek-r1-14b_screening", "ollama", "deepseek-r1:14b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0.6}),
