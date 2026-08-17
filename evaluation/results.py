@@ -36,6 +36,13 @@ def _compact_for_resume(path: Path) -> None:
       2. real error rows are dropped -- they are exactly the rows the resumed
          run is about to re-attempt (and re-append if they fail again).
     Context-exceeded sentinels are terminal (fail-closed by design) and kept.
+
+    Fails loudly rather than compacting if the header doesn't match CSV_COLUMNS:
+    DictReader treats whatever is in row 1 as the fieldnames unconditionally, so
+    a file that has already lost its header (observed on
+    qwen2.5-7b_screening/3rscan_0cac762f, 2026-08-16 -- interrupted mid-run)
+    would otherwise have its first data row silently adopted as the header and
+    rewritten that way, cementing the corruption on every subsequent resume.
     """
     with path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
@@ -43,6 +50,13 @@ def _compact_for_resume(path: Path) -> None:
         rows = list(reader)
     if not rows:
         return
+    if fieldnames != CSV_COLUMNS:
+        raise ValueError(
+            f"{path}: header does not match the expected CSV_COLUMNS "
+            f"(found {fieldnames!r}) -- refusing to compact a file whose schema "
+            "looks corrupted rather than silently entrenching it; repair the "
+            "header manually before resuming."
+        )
     last: dict[tuple[str, str, str], dict] = {}
     for r in rows:
         last[(r["question_id"], r["representation"], r["repetition"])] = r
