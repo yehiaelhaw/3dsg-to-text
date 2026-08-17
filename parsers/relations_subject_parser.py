@@ -10,13 +10,13 @@ whether node-local grouping aids reasoning.
 It is NOT, however, a complete restatement of that edge set, so do not describe the
 pair as content-identical. The `attr_cap` below prints only the first 3 objects of
 each comparative/shared-attribute predicate per subject, with a ``(+N more)`` count
-standing in for the rest: 109 / 42 / 424 triples go unprinted on
-02b33dfb / 7f30f36c / d7d40d62. Two different consequences, worth keeping apart:
+standing in for the rest: 109 / 146 / 414 triples go unprinted on the current primary
+trio, 02b33dfb / 1d2f8518 / 0cac762f. Two different consequences, worth keeping apart:
 shared-attribute (``same ...``) membership survives the cap, because each member
 prints up to 3 others and the printed fragments stay connected within the group, so
-the full clique is recoverable by unioning lines (checked for all 14 cliques across
+the full clique is recoverable by unioning lines (checked for all 29 cliques across
 the three scenes); comparative (``... than``) edges truncated in *both* directions
-are simply absent from the document (0 / 4 / 118 triples). No evaluated question's
+are simply absent from the document (0 / 12 / 117 triples). No evaluated question's
 key facts were found to turn on one of the absent comparative edges -- an absence of
 demonstrated impact, not a proof of none.
 

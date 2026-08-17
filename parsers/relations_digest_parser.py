@@ -17,9 +17,11 @@ structure (here), the object-level mirror of `topology` vs `graph_digest`.
 
 Three of those sections are display-capped, and the caps are part of what the
 responder saw in every reported run -- not a later change. At most 8 support chains
-are printed, deepest first, where the evaluated scenes hold 12 / 51 / 18; at most 5
-receptacles, ranked by load; at most 8 proximity clusters, largest first, where
-7f30f36c holds 18. Only the cluster block states its true total (in its header); the
+are printed, deepest first, where the current primary trio (02b33dfb / 1d2f8518 /
+0cac762f) holds 12 / 19 / 35, exceeding the cap on every scene; at most 5
+receptacles, ranked by load; at most 8 proximity clusters, largest first, where the
+same trio holds 3 / 6 / 13 -- only 0cac762f exceeds the cap. Only the cluster block
+states its true total (in its header); the
 chain and receptacle blocks do not, and no block marks the entries it left out. So
 the number of chains printed here must not be read as the number in the scene. The
 "deepest first" / "carry the most" / largest-first orderings are what keep the top of
