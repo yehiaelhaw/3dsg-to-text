@@ -727,6 +727,40 @@ def _paired_section(rows: list[dict], pairs=None) -> list[str]:
 STYLES = ("natural", "constructed")
 
 
+def _recut_rows(rows: list[dict]) -> dict[tuple[str, str, str, str], dict[str, "Paired"]]:
+    """(axis_id, qt, rep_a, rep_b) -> {style: Paired}, the vocabulary re-cut's raw data.
+
+    Factored out of `_recut_section` so a caller other than the markdown table (the
+    thesis-figure renderer) can read the same natural/constructed split without
+    reimplementing the style-filtering and cap-lifting logic. Returns {} exactly
+    where `_recut_section` would render nothing: no style tag in `rows`, no
+    vocabulary-coupled axis, or no comparison the cap actually fires on.
+    """
+    if not any((r.get("question_style") or "") for r in rows):
+        return {}   # results.csv predates the tag; nothing to re-cut
+    coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
+    if not coupled:
+        return {}
+
+    # The cap is lifted on `natural` only (see _paired_rows) -- there the coupling
+    # is resolved by construction. On `constructed` it stands: that subset is where
+    # the pole's own vocabulary is in the question, so its verdict is exactly the
+    # reading the cap exists to distrust.
+    by_style = {s: _paired_rows(rows, style=s, axes=coupled,
+                                lift_confound=(s == "natural")) for s in STYLES}
+    keyed: dict[tuple[str, str, str, str], dict[str, Paired]] = collections.defaultdict(dict)
+    for s in STYLES:
+        for p in by_style[s]:
+            # Only the comparisons the cap actually fires on. An anchor comparison
+            # against the floor or ceiling carries no vocabulary confound, so it has
+            # nothing for the re-cut to resolve and would only pad the table.
+            axis = AXIS_BY_ID[p.axis_id]
+            if not axis.confound_for(p.rep_a, p.rep_b):
+                continue
+            keyed[(p.axis_id, p.qt, p.rep_a, p.rep_b)][s] = p
+    return keyed
+
+
 def _recut_section(rows: list[dict]) -> list[str]:
     """The vocabulary-coupling re-cut -- the remedy the declared confound points at.
 
@@ -758,28 +792,7 @@ def _recut_section(rows: list[dict]) -> list[str]:
     halves question by question, because its rows compare SETS; `_matched_section`
     below does that.
     """
-    if not any((r.get("question_style") or "") for r in rows):
-        return []   # results.csv predates the tag; nothing to re-cut
-    coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
-    if not coupled:
-        return []
-
-    # The cap is lifted on `natural` only (see _paired_rows) -- there the coupling
-    # is resolved by construction. On `constructed` it stands: that subset is where
-    # the pole's own vocabulary is in the question, so its verdict is exactly the
-    # reading the cap exists to distrust.
-    by_style = {s: _paired_rows(rows, style=s, axes=coupled,
-                                lift_confound=(s == "natural")) for s in STYLES}
-    keyed: dict[tuple[str, str, str, str], dict[str, Paired]] = collections.defaultdict(dict)
-    for s in STYLES:
-        for p in by_style[s]:
-            # Only the comparisons the cap actually fires on. An anchor comparison
-            # against the floor or ceiling carries no vocabulary confound, so it has
-            # nothing for the re-cut to resolve and would only pad the table.
-            axis = AXIS_BY_ID[p.axis_id]
-            if not axis.confound_for(p.rep_a, p.rep_b):
-                continue
-            keyed[(p.axis_id, p.qt, p.rep_a, p.rep_b)][s] = p
+    keyed = _recut_rows(rows)
     if not keyed:
         return []
 
@@ -813,38 +826,16 @@ def _recut_section(rows: list[dict]) -> list[str]:
                       "n_q", "verdict"], trows) + [""])
 
 
-def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[str]:
-    """The matched within-fact-set comparison -- what the balanced corpus buys.
+def _matched_rows(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[dict]:
+    """The matched within-fact-set comparison's raw numbers, one dict per comparison.
 
-    The re-cut above compares a natural SUBSET against a constructed SUBSET, so any
-    difference between them mixes the register manipulation with whatever else the
-    two sets of facts differ in. On the scoped types the corpus removes that: each
-    information request is authored twice, once in each register, over the same key
-    facts and with the same expected answer. Differencing the two within a fact-set
-    cancels fact selection exactly, leaving the wording:
-
-        d_nat(f) = AC(rep_b, natural f)     - AC(rep_a, natural f)
-        d_con(f) = AC(rep_b, constructed f) - AC(rep_a, constructed f)
-        m(f)     = d_con(f) - d_nat(f)
-
-    averaged within each host scene and then over the scene values, which is the
-    same unit of replication as every other table here.
-
-    Only the comparisons the cap actually fires on are walked, exactly as in the
-    re-cut: an anchor comparison against the floor or the ceiling carries no
-    vocabulary confound, so it has nothing to resolve and would only pad the table.
-
-    A fact-set missing any of its four cells is DROPPED, not zero-filled -- mirroring
-    the membership test in `_paired_rows`. Zero-filling would read a context overflow
-    on one member as `wording made no difference here`, which is the one conclusion
-    the missing data cannot support.
-
-    No confound is passed to `_verdict`. The coupling is the estimand in this table,
-    not a threat to it, so capping would grade down the very quantity the cap exists
-    to point at -- the same reasoning that lifts the cap on the natural half of the
-    re-cut. The gates are otherwise untouched: SMALL_N applies to the fact-set count
-    (the real number of independent requests), and each rep still has to clear its
-    coverage threshold.
+    Factored out of `_matched_section` so a caller other than the markdown table
+    (the thesis-figure renderer) can read `d_natural`, `d_constructed`, the matched
+    `mean` (= d_constructed - d_natural) and `scene_deltas` without recomputing them
+    -- the whole point being that a figure and report.md's table are one
+    computation, not two independently maintained ones. See `_matched_section`'s
+    docstring for the method; this function differs from it only in returning data
+    instead of formatted strings.
     """
     if not pairs:
         return []
@@ -852,7 +843,7 @@ def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> lis
     if not coupled:
         return []
 
-    trows: list[list[str]] = []
+    out: list[dict] = []
     for axis in coupled:
         host_rows = [r for r in rows if dataset_of(r["scene_id"]) == axis.host]
         if not host_rows:
@@ -901,17 +892,63 @@ def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> lis
                 def _m(d):  # mean over scene means, same unit of replication
                     return statistics.mean([statistics.mean(v) for v in d.values()])
 
-                trows.append([
-                    axis.id, qt, f"`{rep_b}` - `{rep_a}`",
-                    f"{_m(nat_d):+.3f}", f"{_m(con_d):+.3f}",
-                    " / ".join(f"{v:+.3f}" for v in scene_deltas.values()),
-                    f"{statistics.mean(list(scene_deltas.values())):+.3f}",
-                    str(n_f),
-                    verdict + (f" ({ineligible})" if ineligible else ""),
-                ])
+                out.append({
+                    "axis_id": axis.id, "qt": qt, "rep_a": rep_a, "rep_b": rep_b,
+                    "d_natural": _m(nat_d), "d_constructed": _m(con_d),
+                    "scene_deltas": scene_deltas,
+                    "mean": statistics.mean(list(scene_deltas.values())),
+                    "n_factsets": n_f, "verdict": verdict, "ineligible": ineligible,
+                })
+    return out
 
-    if not trows:
+
+def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[str]:
+    """The matched within-fact-set comparison -- what the balanced corpus buys.
+
+    The re-cut above compares a natural SUBSET against a constructed SUBSET, so any
+    difference between them mixes the register manipulation with whatever else the
+    two sets of facts differ in. On the scoped types the corpus removes that: each
+    information request is authored twice, once in each register, over the same key
+    facts and with the same expected answer. Differencing the two within a fact-set
+    cancels fact selection exactly, leaving the wording:
+
+        d_nat(f) = AC(rep_b, natural f)     - AC(rep_a, natural f)
+        d_con(f) = AC(rep_b, constructed f) - AC(rep_a, constructed f)
+        m(f)     = d_con(f) - d_nat(f)
+
+    averaged within each host scene and then over the scene values, which is the
+    same unit of replication as every other table here.
+
+    Only the comparisons the cap actually fires on are walked, exactly as in the
+    re-cut: an anchor comparison against the floor or the ceiling carries no
+    vocabulary confound, so it has nothing to resolve and would only pad the table.
+
+    A fact-set missing any of its four cells is DROPPED, not zero-filled -- mirroring
+    the membership test in `_paired_rows`. Zero-filling would read a context overflow
+    on one member as `wording made no difference here`, which is the one conclusion
+    the missing data cannot support.
+
+    No confound is passed to `_verdict`. The coupling is the estimand in this table,
+    not a threat to it, so capping would grade down the very quantity the cap exists
+    to point at -- the same reasoning that lifts the cap on the natural half of the
+    re-cut. The gates are otherwise untouched: SMALL_N applies to the fact-set count
+    (the real number of independent requests), and each rep still has to clear its
+    coverage threshold.
+    """
+    rows_ = _matched_rows(rows, pairs)
+    if not rows_:
         return []
+
+    trows: list[list[str]] = []
+    for r in rows_:
+        trows.append([
+            r["axis_id"], r["qt"], f"`{r['rep_b']}` - `{r['rep_a']}`",
+            f"{r['d_natural']:+.3f}", f"{r['d_constructed']:+.3f}",
+            " / ".join(f"{v:+.3f}" for v in r["scene_deltas"].values()),
+            f"{r['mean']:+.3f}", str(r["n_factsets"]),
+            r["verdict"] + (f" ({r['ineligible']})" if r["ineligible"] else ""),
+        ])
+
     return (["## Matched fact-sets: does the lead depend on wording? (thesis 4.6)",
              "_Each scoped information request is authored twice, once `natural` and once "
              "`constructed`, over the same key facts and with the same expected answer. "

@@ -57,7 +57,7 @@ from evaluation.axes import (
     VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
     VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED, dataset_of,
 )
-from evaluation.report import _load_pairs, _paired_rows
+from evaluation.report import _load_pairs, _matched_rows, _paired_rows, _recut_rows
 from evaluation.plots import (
     BAND, CEILING_PREMIUM_EXCLUDED, SCENE_MARK, VERDICT_COLOR, ceiling_premium_rows,
 )
@@ -405,6 +405,199 @@ def render_f2(prs: list, out: Path) -> None:
     _save(fig, out)
 
 
+# --- vocabulary-sensitivity: natural/constructed and the matched estimate ---
+
+# The three comparisons thesis 6.8 discusses, in the order the prose reads them
+# (3RScan relation_structure, relation_aggregate, then ProcTHOR connectivity): the
+# recut/matched keys, fixed rather than discovered, so the figure cannot silently
+# gain or drop a row if a future results.csv adds an unrelated vocabulary-coupled
+# pair -- a caller adding one there has to update this tuple too, in the same diff.
+_VOCAB_KEYS = [
+    ("relation_linearization", "relation_structure", "relations_flat", "relations_digest"),
+    ("relation_linearization", "relation_aggregate", "relations_flat", "relations_digest"),
+    ("structure_presentation", "connectivity", "topology_edges_only", "graph_digest"),
+]
+
+
+def vocab_sensitivity_rows(rows: list[dict], pairs: dict) -> list[dict]:
+    """Assemble `_VOCAB_KEYS` from `_recut_rows` (natural/constructed) and
+    `_matched_rows` (the within-request constructed-minus-natural estimate) into
+    the three-row-per-comparison structure `render_vocab_sensitivity` draws.
+
+    Returns [] for any key missing either half rather than a partial group: a
+    group with no matched row would draw the representation-effect points beside
+    an unexplained gap, and a group with no natural/constructed points has nothing
+    for the matched estimate to be read against.
+    """
+    recut = _recut_rows(rows)
+    matched = {(r["axis_id"], r["qt"], r["rep_a"], r["rep_b"]): r
+               for r in _matched_rows(rows, pairs)}
+    out = []
+    for key in _VOCAB_KEYS:
+        styles = recut.get(key)
+        m = matched.get(key)
+        if not styles or "natural" not in styles or "constructed" not in styles or m is None:
+            continue
+        out.append({"key": key, "natural": styles["natural"],
+                    "constructed": styles["constructed"], "matched": m})
+    return out
+
+
+# Grayscale-safe shape per verdict for this figure's natural/constructed rows
+# (the "rep" marker). `not licensed` never reaches this figure -- vocab_sensitivity_rows
+# only assembles a group when both the recut and the matched estimate exist -- so it
+# has no entry here; a lookup miss falls back to the diamond `mixed` already uses.
+_VOCAB_REP_MARKER = {
+    VERDICT_CONSISTENT:    "o",   # filled circle
+    VERDICT_DIRECTIONAL:   "^",   # hollow triangle
+    VERDICT_MIXED:         "D",   # hollow diamond
+    VERDICT_NO_SEPARATION: "p",   # hollow pentagon (not seen in the current data)
+}
+_VOCAB_REP_LABEL = {
+    VERDICT_CONSISTENT:    "consistent advantage",
+    VERDICT_DIRECTIONAL:   "directional",
+    VERDICT_MIXED:         "mixed",
+    VERDICT_NO_SEPARATION: "no practically meaningful separation",
+}
+_VOCAB_KEY_ORDER = (VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
+                    VERDICT_NO_SEPARATION)
+
+
+def render_vocab_sensitivity(groups: list[dict], out: Path) -> None:
+    """Does a derived pole's apparent lead survive when the question is not
+    phrased in its own vocabulary? Three comparisons, three rows each:
+
+      natural       -- the representation-effect delta on naturally-phrased
+                        questions (cap lifted; a user could have asked these
+                        without ever seeing the derived view).
+      constructed   -- the same representation-effect delta on questions whose
+                        vocabulary mirrors the derived pole's own printed output.
+      constructed - natural (matched)
+                    -- a DIFFERENT quantity: the within-request difference
+                        BETWEEN those two representation effects, isolating the
+                        wording manipulation from which facts each half asks
+                        about. Drawn as a square, never a circle/diamond, so it
+                        cannot be misread as a third representation-effect point
+                        -- see thesis_figures.py's module docstring on this
+                        figure's one job.
+
+    All three rows share one x-axis (an AC delta), which is exactly the
+    juxtaposition the section needs: whether the natural/constructed gap is
+    bigger than sampling noise is the reading, and splitting them across panels
+    would hide that. The row label states which quantity each one is; nothing on
+    this axis is unlabeled.
+
+    Marker SHAPE, not colour, carries the natural/constructed rows' verdict:
+    filled circle for consistent advantage, hollow triangle for directional,
+    hollow diamond for mixed (`_VOCAB_REP_MARKER`) -- this figure's other two
+    graded figures (F1/F2) use a filled-circle/hollow-diamond win/other split
+    that is legible in colour but collapses directional and mixed together in
+    grayscale; a reader relying on shape alone must still be able to tell them
+    apart here. The matched row keeps its square regardless of verdict --
+    changing ITS shape would destroy the one cue that stops it being read as a
+    fourth representation-effect point -- and instead carries its verdict the
+    same way every other row does: filled means consistent advantage, hollow
+    means it is not, a convention stated once in the caption rather than
+    re-encoded per shape.
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    ROW, HDR = 0.19, 0.30
+    n_rows = 3 * len(groups)
+    body = ROW * n_rows + HDR * len(groups)
+    LEGEND_IN, XLABEL_IN, TOP_IN = 0.54, 0.40, 0.06
+    H = body + LEGEND_IN + XLABEL_IN + TOP_IN
+    fig, ax = plt.subplots(figsize=(TEXTWIDTH_IN, H))
+
+    all_deltas = [v for g in groups for part in ("natural", "constructed") for v in g[part].scene_deltas.values()]
+    all_deltas += [v for g in groups for v in g["matched"]["scene_deltas"].values()]
+    lim = max(0.20, max(abs(v) for v in all_deltas) + 0.05)
+    ax.axvspan(-PRACTICAL_MARGIN, PRACTICAL_MARGIN, color=BAND, zorder=0)
+    ax.axvline(0, color="#333", linewidth=0.8, zorder=1)
+
+    LEFT = 0.335
+    cursor = n_rows + len(groups) - 1
+    yticks, ylabels = [], []
+    for g in groups:
+        axis_id, qt, rep_a, rep_b = g["key"]
+        ax_def = _AXIS[axis_id]
+        ax.axhline(cursor + 0.5, color="#c9ccd1", linewidth=0.7, zorder=2)
+        head = (f"{ax_def.label.upper()}   ({HOST_LABEL[ax_def.host]} · "
+                f"{qt.replace('_', ' ')})   {_strip(rep_b, axis_id)} {MINUS} {_strip(rep_a, axis_id)}")
+        ax.text((0.015 - LEFT) / (0.965 - LEFT), cursor + 0.42, head,
+                transform=ax.get_yaxis_transform(), fontsize=6.8, fontweight="bold",
+                color="#4a5058", va="top", zorder=6)
+        cursor -= 1
+        for part, label, marker in (("natural", "natural", "rep"),
+                                    ("constructed", "constructed", "rep"),
+                                    ("matched", "constructed − natural (matched)", "sq")):
+            p = g[part]
+            verdict = p.verdict if marker == "rep" else p["verdict"]
+            deltas = p.scene_deltas if marker == "rep" else p["scene_deltas"]
+            mean = p.mean if marker == "rep" else p["mean"]
+            c = VERDICT_COLOR[verdict]
+            win = verdict == VERDICT_CONSISTENT
+            for v in deltas.values():
+                ax.plot([v], [cursor], marker="|", markersize=6, color=SCENE_MARK,
+                        alpha=0.7, zorder=4, linestyle="none")
+            if marker == "sq":
+                mk = "s"
+                ms = 5.6 if win else 4.6
+            else:
+                mk = _VOCAB_REP_MARKER.get(verdict, "D")
+                ms = 5.6 if win else 4.6
+            ax.plot([mean], [cursor], marker=mk, markersize=ms,
+                    markerfacecolor=c if win else "white", markeredgecolor=c,
+                    markeredgewidth=1.15, zorder=5, linestyle="none")
+            yticks.append(cursor)
+            style = "italic" if marker == "sq" else "normal"
+            ylabels.append((label, style))
+            cursor -= 1
+
+    ax.set_yticks(yticks)
+    ax.set_yticklabels([lbl for lbl, _ in ylabels], fontsize=7.2)
+    for tick, (_, style) in zip(ax.get_yticklabels(), ylabels):
+        tick.set_fontstyle(style)
+    ax.set_ylim(-0.7, n_rows + len(groups) - 0.3)
+    ax.set_xlim(-lim, lim)
+    ax.set_xlabel("AC delta -- see row label for the quantity", fontsize=8)
+    ax.grid(axis="x", linestyle=":", alpha=0.45, zorder=0)
+    ax.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+
+    # Shape legend covers the natural/constructed rows only: the matched square's
+    # shape is fixed regardless of its own verdict (that fixedness is the point), so
+    # its fill is explained by one line below rather than by a shape per verdict.
+    rep_verdicts_present = {g["natural"].verdict for g in groups} | {g["constructed"].verdict for g in groups}
+    handles = []
+    for v in _VOCAB_KEY_ORDER:
+        if v not in rep_verdicts_present:
+            continue
+        win = v == VERDICT_CONSISTENT
+        handles.append(Line2D([], [], marker=_VOCAB_REP_MARKER[v], linestyle="none",
+                              markersize=5.6 if win else 4.6,
+                              markerfacecolor=VERDICT_COLOR[v] if win else "white",
+                              markeredgecolor=VERDICT_COLOR[v], markeredgewidth=1.15,
+                              label=_VOCAB_REP_LABEL[v]))
+    handles += [
+        Line2D([], [], marker="|", linestyle="none", markersize=6, color=SCENE_MARK,
+               label="individual scene delta"),
+        Patch(facecolor=BAND, label=f"±{PRACTICAL_MARGIN:.2f} practical margin"),
+        Line2D([], [], marker="s", linestyle="none", markersize=5.2,
+               markerfacecolor="white", markeredgecolor="#4a5058", markeredgewidth=1.15,
+               label="matched estimate (square; different quantity, see caption)"),
+    ]
+    fig.legend(handles=handles, loc="lower left", bbox_to_anchor=(0.015, 0.004),
+               fontsize=6.6, frameon=False, ncol=2, handletextpad=0.5,
+               columnspacing=1.0)
+    fig.subplots_adjust(left=LEFT, right=0.965, top=1 - TOP_IN / H,
+                        bottom=(LEGEND_IN + XLABEL_IN) / H)
+    _save(fig, out)
+
+
 # --- the cost/quality scatter -----------------------------------------------
 
 HOST_MARK = {"procthor": "o", "gibson": "^", "3rscan": "s"}
@@ -429,6 +622,14 @@ CQ_NUDGE = {
     # x ~ 14: set logic and aggregation, likewise
     ("gibson", "set_logic"):     (-7, 0),
     ("gibson", "aggregation"):   (7, 0),
+    # "direction" is long enough at x ~ 25 that a right-pointing default offset
+    # ran its label past the right edge of the axes.
+    ("procthor", "direction"):   (-7, 0),
+    # 3RScan aggregation (x~4.44) sits close enough to connectivity's leftward
+    # label (x~7.93, nudged -7) that their two rightward/leftward text runs
+    # overlapped ("aggregationconnectivity"). Moving this one above its own
+    # marker, rather than sideways, clears the row instead of narrowing it.
+    ("3rscan", "aggregation"):   (0, 8),
 }
 
 
@@ -454,15 +655,29 @@ def render_cost_quality(prem: list[dict], out: Path) -> None:
                 markerfacecolor=c if win else "white", markeredgecolor=c,
                 markeredgewidth=1.2, linestyle="none", zorder=5)
         dx, dy = CQ_NUDGE.get((r["host"], r["qt"]), (6, 0))
+        # dx == 0 means the label sits directly above/below its marker (used once,
+        # for 3RScan aggregation), so it is centered rather than left/right-anchored;
+        # |dy| <= 2 is the pre-existing same-row micro-nudge and keeps its old
+        # vertically-centered anchor rather than snapping to bottom/top for a shift
+        # that small.
+        ha = "center" if dx == 0 else ("left" if dx > 0 else "right")
+        va = "center" if abs(dy) <= 2 else ("bottom" if dy > 0 else "top")
         ax.annotate(r["qt"].replace("_", " "), (r["tok_ratio"], r["mean"]),
                     textcoords="offset points", xytext=(dx, dy),
-                    ha="left" if dx > 0 else "right", va="center",
+                    ha=ha, va=va,
                     fontsize=7, color="#3a3f45", zorder=6)
 
     ax.set_xscale("log")
-    ax.set_xlim(3.2, 34)
-    ax.set_xticks([4, 5, 6, 8, 10, 15, 20, 25])
-    ax.set_xticklabels([f"{v}×" for v in (4, 5, 6, 8, 10, 15, 20, 25)])
+    # Lower bound follows the data rather than a fixed 3.2x: 3RScan object_relation
+    # (~1.41x) and planning (~2.67x) are both below that floor and were being
+    # silently clipped out of the visible axes despite being drawn and counted as
+    # plotted. A 15% margin below the minimum keeps the low end from touching the
+    # frame without re-tuning every time the data moves.
+    lo = min(r["tok_ratio"] for r in pts)
+    ax.set_xlim(lo * 0.85, 34)
+    ticks = [1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([f"{v}×" for v in ticks])
     ax.minorticks_off()
     ax.set_ylim(-0.10, 0.95)
     ax.set_xlabel("Prompt-token reduction vs the json_mini ceiling  "
@@ -476,7 +691,7 @@ def render_cost_quality(prem: list[dict], out: Path) -> None:
     handles = [
         Line2D([], [], marker=HOST_MARK[h], linestyle="none", markersize=5.5,
                markerfacecolor="#4a5058", markeredgecolor="#4a5058",
-               label=HOST_LABEL[h]) for h in ("procthor", "gibson")
+               label=HOST_LABEL[h]) for h in ("procthor", "gibson", "3rscan")
     ] + [
         Line2D([], [], marker="o", linestyle="none", markersize=6.0,
                markerfacecolor=VERDICT_COLOR[VERDICT_CONSISTENT],
@@ -785,6 +1000,8 @@ def main(argv=None) -> int:
     rows = load_rows(a.results)
     prem, f2, cat = f1_rows(rows), f2_rows(rows), catalogue_rows(rows)
     print(caption_facts(prem, f2, cat))
+    vocab = vocab_sensitivity_rows(rows, _load_pairs())
+    print("vocab sensitivity groups : %d of %d expected" % (len(vocab), len(_VOCAB_KEYS)))
     if a.facts_only:
         return 0
 
@@ -792,6 +1009,8 @@ def main(argv=None) -> int:
     render_f1(prem, a.figures / "fig_ceiling_premium")
     render_f2(f2, a.figures / "fig_paired_separation")
     render_cost_quality(prem, a.figures / "fig_cost_quality")
+    if vocab:
+        render_vocab_sensitivity(vocab, a.figures / "fig_vocab_sensitivity")
     table_f1(prem, a.tables / "tab_ceiling_premium.tex", "tab:ceiling-premium")
     table_cost_quality(prem, a.tables / "tab_cost_quality.tex", "tab:cost-quality")
     table_catalogue(cat, a.tables / "tab_comparison_catalogue.tex",
