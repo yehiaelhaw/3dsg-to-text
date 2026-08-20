@@ -101,15 +101,27 @@ RETIRED_REPS: dict[str, str] = {
         "retired 2026-08-11 and purged 2026-08-12; the 'can salient views match the "
         "ceiling?' question it probed belongs to 'synthesis', a curated single "
         "document rather than a concatenation",
+    # Structure-presentation naming swap, 2026-08-20: the compositional pattern set
+    # by 'topology_metric' (topology + a channel) made the old pair's naming
+    # backwards -- bare 'topology' silently meant "topology + inventory", while the
+    # connectivity-only pole carried the suffix. Swapped so 'topology' is now the
+    # atomic connectivity representation (formerly 'topology_edges_only') and the
+    # old inventory-carrying 'topology' is 'topology_inventory'. Deliberately NOT
+    # retiring bare 'topology': that string is reused by the new pole, so a
+    # permanent guard entry for it would fail-close on every future run's
+    # legitimate data. This entry only tombstones the name that is truly gone.
+    "topology_edges_only":
+        "renamed to 'topology' on 2026-08-20 as part of a structure-presentation "
+        "naming swap; see 'topology_inventory' for the old bare 'topology'",
 }
 
 REP_CAPS: dict[str, set[str]] = {
     "inventory":        {"inventory"},
-    "topology":         {"inventory", "connectivity"},
-    # topology minus the inventories: the content-matched raw-adjacency pole of the
-    # structure-presentation axis (room_tree/graph_digest are connectivity-only, so
-    # the raw pole is too).
-    "topology_edges_only": {"connectivity"},
+    "topology_inventory": {"inventory", "connectivity"},
+    # topology_inventory minus the inventories: the content-matched raw-adjacency
+    # pole of the structure-presentation axis (room_tree/graph_digest are
+    # connectivity-only, so the raw pole is too).
+    "topology":         {"connectivity"},
     "graph_digest":     {"connectivity"},
     "room_tree":        {"connectivity"},
     # The door graph with per-edge metric, in locative framing -- the matched

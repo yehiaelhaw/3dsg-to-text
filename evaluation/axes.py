@@ -139,7 +139,7 @@ class Axis:
     # own printed output, so the `natural` subset -- questions a user could have
     # asked without ever seeing that output -- is by construction uncoupled and the
     # cap does not apply there. "content": one member simply carries more content
-    # than the other (prose superset of topology), which no question-style split
+    # than the other (prose superset of topology_inventory), which no question-style split
     # addresses, so the cap stands on every subset. Only "vocabulary" axes are
     # re-cut (thesis 4.6 / 6.7 name the two axes with a derived pole).
     confound_kind: str = ""
@@ -174,7 +174,7 @@ class Axis:
 # renderers say so, so the count here never has to be reconciled against that five.
 AXES: list[Axis] = [
     Axis("spatial_encoding", "Spatial encoding", "procthor",
-         ["inventory", "topology", "metric_relations", "json_mini"],
+         ["inventory", "topology_inventory", "metric_relations", "json_mini"],
          ["connectivity", "proximity", "direction"],
          note="ladder is per-type: only in-scope rungs are drawn; inventory is the "
               "spatial-prior floor, not a competitor. See the Spatial encoding "
@@ -190,13 +190,14 @@ AXES: list[Axis] = [
               "spatial-encoding card.",
          kind="companion"),
     Axis("format", "Structured vs. prose presentation", "procthor",
-         ["topology", "prose"],
+         ["topology_inventory", "prose"],
          ["connectivity"],
-         headline_pair=("topology", "prose"),
-         note="prose is a content superset of topology (adds the object-relation "
-              "section) -- not a pure syntax flip; account for the extra content.",
-         confound="prose is a content superset of topology, so the pair is not a "
-                  "pure structured/prose flip",
+         headline_pair=("topology_inventory", "prose"),
+         note="prose is a content superset of topology_inventory (adds the "
+              "object-relation section) -- not a pure syntax flip; account for the "
+              "extra content.",
+         confound="prose is a content superset of topology_inventory, so the pair "
+                  "is not a pure structured/prose flip",
          confound_reps=("prose",),
          confound_kind="content"),
     Axis("reference_frame", "Spatial anchoring", "gibson",
@@ -211,14 +212,14 @@ AXES: list[Axis] = [
          note="pure anchoring isolation only on Gibson; on ProcTHOR navigation also "
               "restricts to doorway moves, so it fuses connectivity (coverage view)."),
     Axis("structure_presentation", "Structure presentation", "procthor",
-         ["topology_edges_only", "room_tree", "graph_digest"],
+         ["topology", "room_tree", "graph_digest"],
          ["connectivity"],
-         headline_pair=("topology_edges_only", "graph_digest"),
+         headline_pair=("topology", "graph_digest"),
          note="same door graph, three content-matched presentations (all "
               "connectivity-only): raw adjacency -> drawn tree -> derived "
-              "structure. Full topology (with inventories) stays on the spatial-"
-              "encoding/format axes; topology vs topology_edges_only reads as a "
-              "distractor-content contrast, not part of this ladder.",
+              "structure. Full topology_inventory (with inventories) stays on the "
+              "spatial-encoding/format axes; topology_inventory vs topology reads "
+              "as a distractor-content contrast, not part of this ladder.",
          confound="question vocabulary mirrors graph_digest's own computed output "
                   "(hub / bottleneck); read the natural/constructed re-cut and the "
                   "matched within-fact-set comparison",

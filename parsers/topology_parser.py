@@ -1,21 +1,18 @@
-"""topology — connectivity-first serialization (structured).
+"""topology — the room adjacency graph alone (structured).
 
-Foregrounds the room adjacency graph and deliberately drops all metric data:
-which room opens into which, and what each room contains, with no coordinates,
-distances, or directions. This is the connectivity rung of the spatial-encoding
-ladder (compare `metric_relations`, which keeps distance but not doors).
+`topology_inventory` minus the per-room inventories: exactly the door graph,
+stated room-by-room, with no object lists, no coordinates, no distances. Same
+room order (degree desc, ties by id), same labels, same "connects to" blocks —
+the only difference from `topology_inventory` is the dropped inventory content.
 
-It is also the structured half of the format axis: per room block, `topology` and
-`prose` carry the *same* facts in the *same* order — rooms degree-first, identical
-connectivity and category inventory — rendered as labelled blocks here, prose
-sentences there. Two admitted departures keep the pair short of a pure syntax flip
-(prose states an explicit per-room object count, and on ProcTHOR adds an
-object-relation section), so read the format axis on `connectivity` questions,
-where the twin part carries the answer. See the format-axis note in
-evaluation/axes.py.
-
-The connectivity-only variant `topology_edges_only` (this parser minus the
-inventories) is the raw-adjacency pole of the structure-presentation axis.
+Axis role: the content-matched raw-adjacency pole of the structure-presentation
+axis. `room_tree` and `graph_digest` are deliberately connectivity-only, so
+the raw pole must be too — otherwise a structure-presentation delta could be caused
+by `topology_inventory`'s inventory content (distractor text + token load) rather
+than by how the same graph is presented. Full `topology_inventory` keeps its
+spatial-encoding and format roles; the
+side pair (`topology_inventory` vs `topology`) additionally reads as a free
+does-irrelevant-content-hurt contrast on connectivity questions.
 
 Runs only where a room connection graph (doors + open-plan passages) exists
 (ProcTHOR); refuses elsewhere (Gibson, 3RScan).
@@ -27,7 +24,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from _base import run_parser, NotApplicable
-from _format import room_label, object_inventory, room_type_summary, sort_key
+from _format import room_label, sort_key
 from utils.capabilities import has_room_connectivity
 from utils.models import Building, Room
 
@@ -43,26 +40,21 @@ def parse(building: Building) -> str:
 
     rooms = building.rooms
     connectivity = building.connectivity
-    total_objects = sum(len(r.objects) for r in rooms.values())
     connection_count = sum(len(v) for v in connectivity.values()) // 2
 
-    # Shared ordering with prose: degree desc, ties by id.
+    # Same ordering as topology_inventory/prose: degree desc, ties by id.
     ordered = sorted(
         rooms.values(),
         key=lambda r: (-_degree(connectivity, rooms, r.id), sort_key(r.id)),
     )
 
-    # -- Head: same facts as prose's head --
-    head = (
-        f"{building.name} — {len(rooms)} rooms, {total_objects} objects, "
-        f"{connection_count} room connections (doorways or open passages)."
-    )
-    type_str = room_type_summary(rooms.values())
-    if type_str:
-        head += f" Room types: {type_str}."
-    lines = [head, ""]
+    # Head matches room_tree's content level: rooms + connections, nothing else.
+    lines = [
+        f"{building.name} — {len(rooms)} rooms, {connection_count} room "
+        f"connections (doorways or open passages).",
+        "",
+    ]
 
-    # -- Per-room blocks: connectivity + contents, same order as prose --
     for room in ordered:
         neighbor_ids = sorted(
             {n for n in connectivity.get(room.id, []) if n in rooms},
@@ -71,10 +63,9 @@ def parse(building: Building) -> str:
         neighbors = ", ".join(room_label(rooms[nid]) for nid in neighbor_ids) or "(none)"
         lines.append(room_label(room))
         lines.append(f"  connects to: {neighbors}")
-        lines.append(f"  contains: {object_inventory(room)}")
 
     return "\n".join(lines).rstrip() + "\n"
 
 
 if __name__ == "__main__":
-    run_parser(parse, "Serialize the room connectivity graph (no metric data)")
+    run_parser(parse, "Serialize the room connectivity graph alone (no inventory, no metric data)")

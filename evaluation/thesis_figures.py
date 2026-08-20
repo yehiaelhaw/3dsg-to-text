@@ -415,7 +415,7 @@ def render_f2(prs: list, out: Path) -> None:
 _VOCAB_KEYS = [
     ("relation_linearization", "relation_structure", "relations_flat", "relations_digest"),
     ("relation_linearization", "relation_aggregate", "relations_flat", "relations_digest"),
-    ("structure_presentation", "connectivity", "topology_edges_only", "graph_digest"),
+    ("structure_presentation", "connectivity", "topology", "graph_digest"),
 ]
 
 

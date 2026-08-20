@@ -4,8 +4,8 @@ Pre-computes the metric relation an LLM would otherwise derive from raw
 coordinates: an in-plane distance and an 8-way compass bearing between rooms.
 This is the *allocentric* metric point on the reference-frame axis (compare
 `navigation`, the egocentric route view of the same geometry) and the metric
-rung of the spatial-encoding ladder (compare `topology`, which keeps only
-connectivity).
+rung of the spatial-encoding ladder (compare `topology_inventory`, which keeps
+only connectivity).
 
 Density is controlled, not exhaustive: instead of every O(n^2) room pair, each
 room lists only its `NEAREST_K` closest same-floor neighbours. Relations are

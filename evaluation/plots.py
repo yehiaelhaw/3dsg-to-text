@@ -217,7 +217,7 @@ REP_COLORS: dict[str, str] = {
                                                  # own hue, clear of inventory's
     "prose":                         "#6a3d9a",  # natural language
     # connectivity / structure (spatial-encoding connectivity, structure presentation)
-    "topology":                      "#1f78b4",
+    "topology_inventory":            "#1f78b4",
     "room_tree":                     "#a6cee3",
     "graph_digest":                  "#08519c",
     # metric / frame (spatial-encoding metric, reference frame)

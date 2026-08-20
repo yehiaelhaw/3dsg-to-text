@@ -13,7 +13,7 @@ facts an LLM is weakest at threading out of a local edge list:
 
 It is a lossy summary by construction (it cannot answer a query whose fact it did not
 pre-compute), which is exactly its axis role: raw edges (`relations_flat`) vs derived
-structure (here), the object-level mirror of `topology` vs `graph_digest`.
+structure (here), the object-level mirror of `topology_inventory` vs `graph_digest`.
 
 Three of those sections are display-capped, and the caps are part of what the
 responder saw in every reported run -- not a later change. At most 8 support chains

@@ -18,7 +18,7 @@ from utils.models import Building, Room
 
 
 def _degree(connectivity: dict | None, rooms: dict, rid: str) -> int:
-    """Distinct doorway-reachable neighbours — matches topology's degree."""
+    """Distinct doorway-reachable neighbours — matches topology_inventory's degree."""
     if not connectivity:
         return 0
     return len({n for n in connectivity.get(rid, []) if n in rooms})
@@ -30,7 +30,7 @@ def _room_line(room: Room, connectivity: dict | None, rooms: dict) -> str:
     parts = [label]
 
     if connectivity:
-        # Same neighbour ordering as topology: degree desc, ties by id.
+        # Same neighbour ordering as topology_inventory: degree desc, ties by id.
         neighbor_ids = sorted(
             {n for n in connectivity.get(room.id, []) if n in rooms},
             key=lambda nid: (-_degree(connectivity, rooms, nid), _id_key(nid)),
@@ -154,7 +154,7 @@ def parse(building: Building) -> str:
 
     lines.append("")
 
-    # -- Body: rooms -- (same ordering as topology: degree desc, ties by id,
+    # -- Body: rooms -- (same ordering as topology_inventory: degree desc, ties by id,
     # then object count as a final tiebreaker for the no-connectivity case)
     def sort_key(r: Room) -> tuple:
         return (-_degree(connectivity, rooms, r.id), _id_key(r.id), -len(r.objects))

@@ -1,7 +1,7 @@
 """Shared formatting helpers for the natural-language parsers.
 
-These keep label and inventory rendering consistent across `prose`, `topology`,
-and `inventory`.
+These keep label and inventory rendering consistent across `prose`,
+`topology_inventory`, and `inventory`.
 """
 
 from collections import Counter, defaultdict

@@ -28,8 +28,8 @@ and derived tier, once each:
     -- wins relation_structure / relation_aggregate on 3RScan. Folded in via
     `relations_digest_parser.object_relations_digest`, byte-identical to the
     standalone `relations_digest` view, appended after prose's raw per-object
-    section the same way graph_digest's global facts sit alongside topology's
-    local adjacency: raw triples (specific-pair lookups) + derived structure
+    section the same way graph_digest's global facts sit alongside
+    topology_inventory's local adjacency: raw triples (specific-pair lookups) + derived structure
     (chain-depth/cluster/census lookups), not a restatement. Added 2026-07-14 --
     until then this section was missing and `synthesis` silently under-performed
     `relations_digest` on both derived-tier types with no way to close the gap;

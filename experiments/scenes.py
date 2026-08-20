@@ -62,8 +62,8 @@ def _qa(scene_id: str) -> str:
 
 # ProcTHOR rep set (shared across its scenes for gradient comparability): the
 # explicit list pins the full structure-presentation ladder
-# (topology_edges_only -> room_tree -> graph_digest; all
-# connectivity-only, so full topology's inventories can't masquerade as a
+# (topology -> room_tree -> graph_digest; all
+# connectivity-only, so full topology_inventory's inventories can't masquerade as a
 # presentation effect). relations_* are deliberately excluded
 # -- relation linearization is near-trivial on ProcTHOR's on-forest (its deep-dive
 # lives on 3RScan). metric_relations_full (the retracted density axis's exhaustive
@@ -71,7 +71,7 @@ def _qa(scene_id: str) -> str:
 # circular (only the exhaustive pole could answer the farthest-pair facts it was
 # scored on).
 _PROCTHOR_REPS = [
-    "inventory", "topology", "topology_edges_only", "room_tree", "graph_digest",
+    "inventory", "topology_inventory", "topology", "room_tree", "graph_digest",
     # json_mini is the ceiling; json_pretty is the same content pretty-printed, kept
     # as the formatting ablation's raw pole (axes.json_formatting). The bare name
     # `json` is retired -- scope.RETIRED_REPS aborts any run that still names it.

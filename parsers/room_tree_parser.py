@@ -2,7 +2,7 @@
 
 The thesis bottleneck is that flattening a graph into a 1D token string loses the
 adjacency a reader takes in at a glance. Every other connectivity view here restates
-*local* adjacency in linear form -- `topology` as a labelled list ("Bedroom [6]
+*local* adjacency in linear form -- `topology_inventory` as a labelled list ("Bedroom [6]
 connects to ..."), `prose` as sentences, `graph_digest` as pre-computed global facts.
 This parser instead *draws* the room graph: each room is listed under a room it
 connects to, with indentation and branch glyphs carrying the connection, so adjacency
@@ -14,12 +14,12 @@ laying rooms out on a grid is ambiguous and lossy -- in favour of the indented
 the tree, not the abandoned map.)
 
 Axis role: it is the drawn middle rung of the structure-presentation axis (F) --
-  topology (raw adjacency list) -> room_tree (adjacency drawn) -> graph_digest
+  topology_inventory (raw adjacency list) -> room_tree (adjacency drawn) -> graph_digest
   (adjacency's consequences stated)
 -- and a third point on the format axis (B): structured list vs natural language vs
 drawn tree. Like `graph_digest` it is deliberately connectivity-only (no metric data,
 no per-room object inventory): the door graph, nothing else, so any score delta
-against `topology`/`graph_digest` is attributable to the *presentation* of the same
+against `topology_inventory`/`graph_digest` is attributable to the *presentation* of the same
 connectivity, not to extra content. It is the room-level analogue of `relations_tree`
 (the object-level support forest drawn the same way).
 

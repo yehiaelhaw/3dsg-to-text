@@ -62,8 +62,8 @@ HOW THE TWO QUESTION FAMILIES MUST BE READ DIFFERENTLY
 WHY THIS PARSER EXISTS
 ----------------------
 The contrast needs a counterpart carrying exactly `navigation`'s channels:
-connectivity AND per-edge metric. No other single view does -- `topology` has no
-metric, `metric_relations` has no connectivity (and its metric is arbitrary-pair,
+connectivity AND per-edge metric. No other single view does -- `topology_inventory`
+has no metric, `metric_relations` has no connectivity (and its metric is arbitrary-pair,
 not edge-restricted). The gap used to be filled by concatenating two views, which
 bought the channels at the price of a strict superset: the concatenation also
 carried object inventories (stated twice, once per part) and metric between
@@ -75,7 +75,7 @@ WHAT IT DELIBERATELY DOES NOT CARRY
 -----------------------------------
 Every omission is an item `navigation` also lacks; including any would hand this
 view an informational advantage and destroy the match:
-  * the scene's total edge count (`topology_edges_only`/`graph_digest` print it);
+  * the scene's total edge count (`topology`/`graph_digest` print it);
   * reachability groups, hubs, bottlenecks, hop counts (`graph_digest`'s tier);
   * any multi-hop path or summed distance -- the search and the addition stay the
     model's work, which is what a route question exists to measure;

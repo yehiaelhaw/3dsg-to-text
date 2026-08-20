@@ -1,6 +1,6 @@
 """graph_digest — derived global structure of the room connectivity graph.
 
-Every other connectivity parser (`topology`, `prose`, `navigation`) states *local*
+Every other connectivity parser (`topology_inventory`, `prose`, `navigation`) states *local*
 adjacency: "Bedroom [6] connects to ...". The reader must then traverse that list to
 answer global questions — which rooms are mutually reachable, which room is a
 bottleneck, how many connections separate two rooms — exactly the transitive-closure
@@ -16,10 +16,11 @@ reasoning LLMs are weakest at. This parser pre-computes those facts instead:
     line. Describe this as routes from which the number of connections can be
     determined, not as stated hop counts.
 
-It opens a new evaluation axis — *raw adjacency* (`topology`) vs *derived structure*
-(here) — orthogonal to the format axis (`topology` vs `prose`). It is deliberately
-metric-free (connection counts, not metres; keeps it on the connectivity rung, not
-the metric one) and carries no per-room object inventory (that is `topology`'s job;
+It opens a new evaluation axis — *raw adjacency* (`topology_inventory`) vs *derived
+structure* (here) — orthogonal to the format axis (`topology_inventory` vs `prose`).
+It is deliberately metric-free (connection counts, not metres; keeps it on the
+connectivity rung, not the metric one) and carries no per-room object inventory
+(that is `topology_inventory`'s job;
 omitting it is what stops this from being a sixth restatement of the same primitives).
 
 Runs only where a room connection graph exists (ProcTHOR); refuses elsewhere.
