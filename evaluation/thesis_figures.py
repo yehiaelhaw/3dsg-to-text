@@ -59,7 +59,8 @@ from evaluation.axes import (
 )
 from evaluation.report import _load_pairs, _matched_rows, _paired_rows, _recut_rows
 from evaluation.plots import (
-    BAND, CEILING_PREMIUM_EXCLUDED, SCENE_MARK, VERDICT_COLOR, ceiling_premium_rows,
+    BAND, CEILING_PREMIUM_EXCLUDED, SCENE_MARK, VERDICT_COLOR, VERDICT_MARKER,
+    ceiling_premium_rows,
 )
 
 # --- page geometry ----------------------------------------------------------
@@ -186,12 +187,13 @@ def _verdict_key(present, win_sz: float, other_sz: float, tick_sz: float) -> lis
     """The legend, keyed to the verdicts THIS figure actually draws.
 
     In the production figures a verdict COLUMN spelled each row's grade out in words
-    beside the marker; those columns are now LaTeX tables, which leaves marker colour
-    as the only in-figure cue and makes an unkeyed colour a distinction the reader can
-    see but not decode. Keying a verdict that does not appear is the opposite failure:
-    `not licensed` (#b0b6bf) and `no practically meaningful separation` (#6b7280) are
-    two greys, and listing the absent one sends a reader hunting for a mark that is
-    not in the figure.
+    beside the marker; those columns are now LaTeX tables, which leaves marker shape
+    and colour (`VERDICT_MARKER`/`VERDICT_COLOR`) as the in-figure cues, and an
+    unkeyed one is a distinction the reader can see but not decode. Keying a verdict
+    that does not appear is the opposite failure: `not licensed` (grey pentagon) and
+    `no practically meaningful separation` (grey hollow circle) are close enough in
+    both channels that listing the absent one sends a reader hunting for a mark that
+    is not in the figure.
     """
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
@@ -202,7 +204,7 @@ def _verdict_key(present, win_sz: float, other_sz: float, tick_sz: float) -> lis
         if v not in seen:
             continue
         win = v == VERDICT_CONSISTENT
-        out.append(Line2D([], [], marker="o" if win else "D", linestyle="none",
+        out.append(Line2D([], [], marker=VERDICT_MARKER[v], linestyle="none",
                           markersize=win_sz if win else other_sz,
                           markerfacecolor=VERDICT_COLOR[v] if win else "white",
                           markeredgecolor=VERDICT_COLOR[v],
@@ -250,7 +252,7 @@ def render_f1(prem: list[dict], out: Path) -> None:
             ax.plot([v], [y], marker="|", markersize=6.5, color=SCENE_MARK,
                     alpha=0.35 if gated else 0.75, zorder=3, linestyle="none")
         win = r["verdict"] == VERDICT_CONSISTENT
-        ax.plot([r["mean"]], [y], marker="o" if win else "D",
+        ax.plot([r["mean"]], [y], marker=VERDICT_MARKER[r["verdict"]],
                 markersize=5.5 if win else 4.2,
                 markerfacecolor=c if win else "white", markeredgecolor=c,
                 markeredgewidth=1.1, zorder=4, linestyle="none")
@@ -363,7 +365,7 @@ def render_f2(prs: list, out: Path) -> None:
                 ax.plot([v], [y], marker="|", markersize=6, color=SCENE_MARK,
                         alpha=0.7, zorder=4, linestyle="none")
             win = p.verdict == VERDICT_CONSISTENT
-            ax.plot([p.mean], [y], marker="o" if win else "D",
+            ax.plot([p.mean], [y], marker=VERDICT_MARKER[p.verdict],
                     markersize=5.2 if win else 4.0,
                     markerfacecolor=c if win else "white", markeredgecolor=c,
                     markeredgewidth=1.1, zorder=5, linestyle="none")
@@ -443,16 +445,12 @@ def vocab_sensitivity_rows(rows: list[dict], pairs: dict) -> list[dict]:
     return out
 
 
-# Grayscale-safe shape per verdict for this figure's natural/constructed rows
-# (the "rep" marker). `not licensed` never reaches this figure -- vocab_sensitivity_rows
-# only assembles a group when both the recut and the matched estimate exist -- so it
-# has no entry here; a lookup miss falls back to the diamond `mixed` already uses.
-_VOCAB_REP_MARKER = {
-    VERDICT_CONSISTENT:    "o",   # filled circle
-    VERDICT_DIRECTIONAL:   "^",   # hollow triangle
-    VERDICT_MIXED:         "D",   # hollow diamond
-    VERDICT_NO_SEPARATION: "p",   # hollow pentagon (not seen in the current data)
-}
+# Shape for every row in this figure -- natural, constructed, and the marker nested
+# inside the matched row's square -- comes from the shared `VERDICT_MARKER`
+# (evaluation/plots.py), the same mapping F1 and F2 draw with. `not licensed` never
+# reaches this figure -- vocab_sensitivity_rows only assembles a group when both the
+# recut and the matched estimate exist -- so its pentagon is never actually drawn
+# here; a lookup miss would fall back to the diamond `mixed` uses.
 _VOCAB_REP_LABEL = {
     VERDICT_CONSISTENT:    "consistent advantage",
     VERDICT_DIRECTIONAL:   "directional",
@@ -476,9 +474,8 @@ def render_vocab_sensitivity(groups: list[dict], out: Path) -> None:
                     -- a DIFFERENT quantity: the within-request difference
                         BETWEEN those two representation effects, isolating the
                         wording manipulation from which facts each half asks
-                        about. Drawn as a square, never a circle/diamond, so it
-                        cannot be misread as a third representation-effect point
-                        -- see thesis_figures.py's module docstring on this
+                        about. The row label alone carries this distinction --
+                        see thesis_figures.py's module docstring on this
                         figure's one job.
 
     All three rows share one x-axis (an AC delta), which is exactly the
@@ -487,18 +484,16 @@ def render_vocab_sensitivity(groups: list[dict], out: Path) -> None:
     would hide that. The row label states which quantity each one is; nothing on
     this axis is unlabeled.
 
-    Marker SHAPE, not colour, carries the natural/constructed rows' verdict:
-    filled circle for consistent advantage, hollow triangle for directional,
-    hollow diamond for mixed (`_VOCAB_REP_MARKER`) -- this figure's other two
-    graded figures (F1/F2) use a filled-circle/hollow-diamond win/other split
-    that is legible in colour but collapses directional and mixed together in
-    grayscale; a reader relying on shape alone must still be able to tell them
-    apart here. The matched row keeps its square regardless of verdict --
-    changing ITS shape would destroy the one cue that stops it being read as a
-    fourth representation-effect point -- and instead carries its verdict the
-    same way every other row does: filled means consistent advantage, hollow
-    means it is not, a convention stated once in the caption rather than
-    re-encoded per shape.
+    Marker SHAPE, not colour, carries every row's verdict, matched row
+    included: filled circle for consistent advantage, hollow triangle for
+    directional, hollow diamond for mixed, hollow circle for no practically
+    meaningful separation (`VERDICT_MARKER`, evaluation/plots.py) -- the same
+    mapping F1 and F2 draw their mean marks with, so a verdict has one shape
+    everywhere in the thesis rather than a figure-local convention a reader
+    has to relearn. The matched row does not get its own enclosure or shape:
+    its row label already states it is a different quantity, so the mark
+    itself is free to spend its one channel on the verdict, exactly like the
+    rows above it.
     """
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
@@ -532,7 +527,7 @@ def render_vocab_sensitivity(groups: list[dict], out: Path) -> None:
         cursor -= 1
         for part, label, marker in (("natural", "natural", "rep"),
                                     ("constructed", "constructed", "rep"),
-                                    ("matched", "constructed − natural (matched)", "sq")):
+                                    ("matched", "constructed − natural", "sq")):
             p = g[part]
             verdict = p.verdict if marker == "rep" else p["verdict"]
             deltas = p.scene_deltas if marker == "rep" else p["scene_deltas"]
@@ -542,12 +537,8 @@ def render_vocab_sensitivity(groups: list[dict], out: Path) -> None:
             for v in deltas.values():
                 ax.plot([v], [cursor], marker="|", markersize=6, color=SCENE_MARK,
                         alpha=0.7, zorder=4, linestyle="none")
-            if marker == "sq":
-                mk = "s"
-                ms = 5.6 if win else 4.6
-            else:
-                mk = _VOCAB_REP_MARKER.get(verdict, "D")
-                ms = 5.6 if win else 4.6
+            mk = VERDICT_MARKER.get(verdict, "D")
+            ms = 5.6 if win else 4.6
             ax.plot([mean], [cursor], marker=mk, markersize=ms,
                     markerfacecolor=c if win else "white", markeredgecolor=c,
                     markeredgewidth=1.15, zorder=5, linestyle="none")
@@ -568,16 +559,19 @@ def render_vocab_sensitivity(groups: list[dict], out: Path) -> None:
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
 
-    # Shape legend covers the natural/constructed rows only: the matched square's
-    # shape is fixed regardless of its own verdict (that fixedness is the point), so
-    # its fill is explained by one line below rather than by a shape per verdict.
-    rep_verdicts_present = {g["natural"].verdict for g in groups} | {g["constructed"].verdict for g in groups}
+    # One shared verdict-shape legend for ALL three rows, matched included -- it uses
+    # the same VERDICT_MARKER/VERDICT_COLOR convention as natural/constructed. The
+    # matched row's own row label ("constructed − natural (matched)") is what tells a
+    # reader it is a different quantity, so no separate legend entry is needed here.
+    rep_verdicts_present = ({g["natural"].verdict for g in groups}
+                             | {g["constructed"].verdict for g in groups}
+                             | {g["matched"]["verdict"] for g in groups})
     handles = []
     for v in _VOCAB_KEY_ORDER:
         if v not in rep_verdicts_present:
             continue
         win = v == VERDICT_CONSISTENT
-        handles.append(Line2D([], [], marker=_VOCAB_REP_MARKER[v], linestyle="none",
+        handles.append(Line2D([], [], marker=VERDICT_MARKER[v], linestyle="none",
                               markersize=5.6 if win else 4.6,
                               markerfacecolor=VERDICT_COLOR[v] if win else "white",
                               markeredgecolor=VERDICT_COLOR[v], markeredgewidth=1.15,
@@ -586,9 +580,6 @@ def render_vocab_sensitivity(groups: list[dict], out: Path) -> None:
         Line2D([], [], marker="|", linestyle="none", markersize=6, color=SCENE_MARK,
                label="individual scene delta"),
         Patch(facecolor=BAND, label=f"±{PRACTICAL_MARGIN:.2f} practical margin"),
-        Line2D([], [], marker="s", linestyle="none", markersize=5.2,
-               markerfacecolor="white", markeredgecolor="#4a5058", markeredgewidth=1.15,
-               label="matched estimate (square; different quantity, see caption)"),
     ]
     fig.legend(handles=handles, loc="lower left", bbox_to_anchor=(0.015, 0.004),
                fontsize=6.6, frameon=False, ncol=2, handletextpad=0.5,

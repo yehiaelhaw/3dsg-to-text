@@ -689,6 +689,21 @@ VERDICT_COLOR = {
     VERDICT_NO_SEPARATION: "#6b7280",   # null
     VERDICT_NOT_LICENSED:  "#b0b6bf",   # gates failed -- drawn, never ranked
 }
+
+# Marker SHAPE per verdict, shared by every thesis figure that draws a verdict mark
+# (thesis_figures.py: F1, F2, and the vocabulary-sensitivity rep points), so colour is
+# never the only cue separating two verdict classes in grayscale. `consistent
+# advantage` and `no practically meaningful separation` share the circle -- fill state
+# (filled/hollow), not shape, tells them apart, the same convention every entry here
+# already uses for win vs. not-win. `not licensed` gets its own shape because it is a
+# different concept (a gate failure, never ranked) and would otherwise read as `mixed`.
+VERDICT_MARKER = {
+    VERDICT_CONSISTENT:    "o",   # filled circle
+    VERDICT_DIRECTIONAL:   "^",   # hollow triangle
+    VERDICT_MIXED:         "D",   # hollow diamond
+    VERDICT_NO_SEPARATION: "o",   # hollow circle
+    VERDICT_NOT_LICENSED:  "p",   # hollow pentagon
+}
 BAND = "#e8eaed"        # the +-PRACTICAL_MARGIN region
 SCENE_MARK = "#4a5058"  # the individual scene deltas
 GATED_BG = "#f5f6f7"    # backs the `not licensed` block in the separation forest
