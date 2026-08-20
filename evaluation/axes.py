@@ -189,26 +189,26 @@ AXES: list[Axis] = [
               "needs its own card rather than being folded into the main "
               "spatial-encoding card.",
          kind="companion"),
-    Axis("format", "Format", "procthor",
+    Axis("format", "Structured vs. prose presentation", "procthor",
          ["topology", "prose"],
          ["connectivity"],
          headline_pair=("topology", "prose"),
          note="prose is a content superset of topology (adds the object-relation "
               "section) -- not a pure syntax flip; account for the extra content.",
          confound="prose is a content superset of topology, so the pair is not a "
-                  "pure format flip",
+                  "pure structured/prose flip",
          confound_reps=("prose",),
          confound_kind="content"),
-    Axis("reference_frame", "Reference frame", "gibson",
+    Axis("reference_frame", "Spatial anchoring", "gibson",
          ["metric_relations", "navigation"],
          # direction only. `route` used to be declared here and was dead: all 12
          # route questions are ProcTHOR's (Gibson has no door graph, which is
          # exactly why this axis is hosted here), so the entry named a probe this
          # axis can never be read on. The ProcTHOR route result is a separate
-         # exhibit below and is deliberately NOT a reference-frame reading.
+         # exhibit below and is deliberately NOT a spatial-anchoring reading.
          ["direction"],
          headline_pair=("metric_relations", "navigation"),
-         note="pure-frame isolation only on Gibson; on ProcTHOR navigation also "
+         note="pure anchoring isolation only on Gibson; on ProcTHOR navigation also "
               "restricts to doorway moves, so it fuses connectivity (coverage view)."),
     Axis("structure_presentation", "Structure presentation", "procthor",
          ["topology_edges_only", "room_tree", "graph_digest"],
@@ -224,7 +224,7 @@ AXES: list[Axis] = [
                   "matched within-fact-set comparison",
          confound_reps=("graph_digest",),
          confound_kind="vocabulary"),
-    Axis("relation_linearization", "Relation linearization", "3rscan",
+    Axis("relation_linearization", "Relation organization", "3rscan",
          ["relations_flat", "relations_subject", "relations_predicate",
           "relations_tree", "relations_digest"],
          ["object_relation", "relation_structure", "relation_aggregate"],
@@ -233,7 +233,7 @@ AXES: list[Axis] = [
               "(near-trivial on ProcTHOR's on-forest). relations_tree/relations_digest "
               "are lossy derived presentations (narrower scope.py channels), so "
               "object_relation/relation_structure/relation_aggregate are read as one "
-              "relation-linearization probe family, not three separate axes.",
+              "relation-organization probe family, not three separate axes.",
          confound="question vocabulary mirrors relations_digest's own computed "
                   "output (chain depth / clusters); read the natural/constructed "
                   "re-cut and the matched within-fact-set comparison",
