@@ -299,14 +299,25 @@ AXES: list[Axis] = [
     #   facts are phrased from the heading room, which navigation prints directly
     #   and topology_metric states as the converse -- the reversal IS task-relevant
     #   here (equal information, unequal work), but it is NOT IDENTIFIED: it arrives
-    #   bundled with the same layout and lexical-framing differences as route, whose
-    #   contributions could run in either direction and cannot be separated from it.
-    #   Not a bound on the inversion's cost in either direction.
+    #   bundled with the lexical-framing register, whose contribution could run in
+    #   either direction and cannot be separated from it. Not a bound on the
+    #   inversion's cost in either direction.
     #
-    # Neither route nor direction should be called presentation-only or
-    # layout-only -- the manipulation bundles figure-ground assignment, block
-    # layout, and lexical register ("you can walk to" is an action, "is ... of" is
-    # a location), and this design cannot decompose them.
+    # BLOCK LAYOUT WAS AN UNRELATED CONFOUND UNTIL 2026-08-21 and has since been
+    # removed: navigation used to join a room's neighbours into one semicolon-
+    # joined sentence, while topology_metric used a header line plus one indented
+    # clause per neighbour. A design review found that structural mismatch had
+    # nothing to do with the framing being studied, so navigation_parser.py was
+    # rewritten to use the SAME block shape -- identical header text ("X --
+    # connected rooms:"), one indented line per neighbour, same room and neighbour
+    # order -- verified structurally (not just fact-for-fact) by
+    # tests/test_framing_layout_isolation.py. On `route`, where no key fact
+    # depends on a bearing, the pair is now a clean isolating contrast of framing
+    # register alone. On `direction`, the residual bundle is figure-ground
+    # assignment plus register -- layout is no longer part of it. Neither reading
+    # should be called presentation-only or layout-only in the OTHER sense either
+    # -- the figure-ground reversal and the lexical register are still bundled
+    # together on `direction`, and this design cannot decompose those two.
     #
     # TERMINOLOGY: never egocentric/allocentric. Both poles print world-frame
     # compass bearings and no ProcTHOR room carries a facing, so there is no
@@ -329,16 +340,20 @@ AXES: list[Axis] = [
          ["route", "direction", "connectivity"],
          headline_pair=("topology_metric", "navigation"),
          kind="axis",
-         note="A FACT-MATCHED framing contrast over one-hop doorway adjacency, proven "
-              "fact-for-fact (not inferred from REP_CAPS) by "
-              "tests/test_topology_metric_equivalence.py: same rooms, same edge set, "
-              "same per-edge distances, converse bearings, no route printed on either "
-              "side, and length-matched to within ~8% on the rendered pre-question "
-              "prompt. Read `connectivity` first -- the only well-powered type and a "
-              "post-hoc (2026-08-13) power check on `route`/`direction` -- then read "
-              "those two through it, each under its OWN interpretation (route: framing "
-              "only, no bearing in any key fact; direction: the figure-ground reversal "
-              "is task-relevant but not identified, bundled with layout/register). "
+         note="A FACT-MATCHED, LAYOUT-MATCHED framing contrast over one-hop doorway "
+              "adjacency, proven fact-for-fact (not inferred from REP_CAPS) by "
+              "tests/test_topology_metric_equivalence.py and structurally by "
+              "tests/test_framing_layout_isolation.py: same rooms, same edge set, "
+              "same per-edge distances, converse bearings, identical header text and "
+              "block shape, no route printed on either side, ~12-13% longer on "
+              "navigation due to register wording alone (measured 2026-08-21, up from "
+              "an ~8% figure under the pre-layout-fix joined-line rendering). Read "
+              "`connectivity` first -- the only well-powered type and a post-hoc "
+              "(2026-08-13) power check on `route`/`direction` -- then read those two "
+              "through it, each under its OWN interpretation (route: a clean isolating "
+              "contrast of framing register, no bearing in any key fact; direction: "
+              "the figure-ground reversal is task-relevant but not identified, bundled "
+              "with framing register -- layout is matched, not part of the bundle). "
               "Never egocentric/allocentric -- see the full note above. This card's "
               "Gibson companion is `framing_gibson`."),
     Axis("framing_gibson", "Relational vs. navigational framing (Gibson companion)",
@@ -348,15 +363,20 @@ AXES: list[Axis] = [
          headline_pair=("metric_framing", "navigation"),
          kind="companion",
          note="The Gibson realization of the framing axis, over K-nearest-neighbour "
-              "room geometry rather than doorway adjacency. Fact-matched by an "
-              "independently-derived equivalence test "
+              "room geometry rather than doorway adjacency. Fact-matched AND "
+              "layout-matched by an independently-derived equivalence test "
               "(tests/test_metric_framing_equivalence.py: both poles checked against "
               "K-NN geometry recomputed fresh from source room positions, not just "
               "against each other -- Gibson has no door graph to serve as independent "
               "ground truth the way ProcTHOR's does, so this is a milder but different "
               "caveat than the content mismatch this companion replaces, not the same "
-              "one). Same framing bundle as the ProcTHOR axis (figure-ground + "
-              "register); same terminology discipline (never egocentric/allocentric). "
+              "one) and structurally by tests/test_framing_layout_isolation.py: "
+              "identical header text and block shape, same room and neighbour order. "
+              "Length-matched to within ~1% (measured 2026-08-21) -- tighter than the "
+              "ProcTHOR pair, whose longer 'you can walk to' clause adds more overhead "
+              "than this pair's shorter proximity wording. Same residual bundle as the "
+              "ProcTHOR axis's `direction` reading (figure-ground + register, layout "
+              "matched); same terminology discipline (never egocentric/allocentric). "
               "`direction` is the only in-scope type on this host -- no door graph "
               "means no connectivity/route questions exist here -- so there is no "
               "power check available for this reading and 12 questions total is its "

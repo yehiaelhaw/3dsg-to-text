@@ -3,11 +3,14 @@
 
 The Gibson realization of the "relational vs. navigational framing" axis
 (compare `topology_metric`, its ProcTHOR sibling on the door graph). Both
-views state the SAME K-nearest-neighbour room geometry; they differ in which
-room is the located figure and which is the reference ground, and in the
-framing register:
+views state the SAME K-nearest-neighbour room geometry, in the SAME block
+layout (identical header text, one indented clause per neighbour, nearest
+first, same room order -- see tests/test_framing_layout_isolation.py); they
+differ only in which room is the located figure and which is the reference
+ground, and in the framing register:
 
-    navigation:      From Bedroom [6], nearest rooms: Bathroom [7] (2.9 m north-east); ...
+    navigation:      Bedroom [6] -- nearest neighbours:
+                       Bathroom [7], 2.9 m north-east away.
     metric_framing:  Bedroom [6] -- nearest neighbours:
                        is 2.9 m south-west of Bathroom [7].
 

@@ -1,10 +1,13 @@
 """topology_metric — the door graph with per-edge metric, in locative (map) framing.
 
 The matched counterpart to `navigation`. Both views state the SAME edge set with
-the SAME distances; they differ in which room is the located figure and which is
-the reference ground, and in the framing verb:
+the SAME distances, in the SAME block layout (identical header text, one
+indented clause per neighbour, nearest first, same room order -- see
+tests/test_framing_layout_isolation.py); they differ only in which room is the
+located figure and which is the reference ground, and in the framing verb:
 
-    navigation:       From Bedroom [6] you can walk to: Bathroom [7] (2.9 m north-east); ...
+    navigation:       Bedroom [6] — connected rooms:
+                        you can walk to Bathroom [7], 2.9 m north-east.
     topology_metric:  Bedroom [6] — connected rooms:
                         is 2.9 m south-west of Bathroom [7].
 
@@ -48,21 +51,22 @@ HOW THE TWO QUESTION FAMILIES MUST BE READ DIFFERENTLY
 ------------------------------------------------------
   * `route` -- an audit of all 12 ProcTHOR route stems found NO bearing in any
     key fact: routes need the edge set, the per-edge distances and room labels
-    only. So on route this pair is a fact-matched test of FRAMING over identical
-    task-relevant facts, and a route delta must NOT be attributed to the
-    figure-ground reversal, which the task does not read. Nor should it be called
-    a presentation- or layout-only effect: the manipulation bundles figure-ground
-    assignment, block layout and lexical/semantic register ("you can walk to" is
-    an action, "is ... of" is a location), and this design cannot decompose them.
+    only. Block layout is matched by construction (same header text, same
+    per-neighbour line shape, same room and neighbour order -- see
+    tests/test_framing_layout_isolation.py), so on route the ONLY remaining
+    difference between the two texts is the framing register itself
+    ("you can walk to B, D bearing." vs "is D bearing of B."). This is
+    therefore a clean isolating contrast of framing register, and a route
+    delta should be read as such.
   * `direction` -- all 12 ProcTHOR direction stems ask about a DIRECTLY CONNECTED
     pair, so both doorway-restricted views can answer every one, and the key
     facts are phrased from the heading room. There the reversal IS task-relevant:
     this view must invert the printed relation to answer. That is a reasoning
     asymmetry over equal information, and it is the clean matched contrast --
-    but it is NOT identified: the inversion arrives inside the same bundle as
-    the layout and lexical-framing differences, and since those could help or
-    hurt, a direction delta reflects the bundled manipulation and is not a bound
-    on the inversion's own cost in either direction.
+    but it is NOT identified: the inversion arrives bundled with the framing
+    register (layout is matched, see route above), and since register could
+    help or hurt, a direction delta reflects that two-factor bundle and is not
+    a bound on the inversion's own cost in either direction.
 
 WHY THIS PARSER EXISTS
 ----------------------
