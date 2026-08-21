@@ -133,6 +133,12 @@ REP_CAPS: dict[str, set[str]] = {
     # point of the view is that the two sides differ in figure-ground assignment
     # and framing, not in what they know.
     "topology_metric":  {"connectivity", "metric_edges"},
+    # The content-matched prose pole of the format axis: `topology_inventory`'s
+    # facts (inventory + connectivity only, nothing else), rendered as sentences.
+    # Channel set is deliberately IDENTICAL to topology_inventory's -- the two
+    # differ only in rendering, never in what they know. See
+    # parsers/narrative_parser.py and tests/test_format_axis_equivalence.py.
+    "narrative":        {"inventory", "connectivity"},
     "prose":            {"inventory", "connectivity", "object_relations",
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
     "metric_relations": {"inventory", "metric", "metric_edges"},

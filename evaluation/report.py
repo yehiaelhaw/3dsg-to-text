@@ -774,13 +774,15 @@ def _recut_section(rows: list[dict]) -> list[str]:
 
     Only the comparisons the cap actually fires on are walked: axes whose confound
     is a `vocabulary` one (the two with a derived pole), and within them only the
-    pairs touching that pole. The format axis's content superset is deliberately absent --
-    it is a real confound, but no question-style split addresses it, so re-cutting
-    it would imply a remedy that does not exist. The ordinary gates apply unchanged
-    to each subset: a split that lands under SMALL_N reads `not licensed`, which is
-    the honest outcome for a subset too thin to rank, not a reason to pool it back
-    together. Rows are ordered so a comparison's two styles sit adjacent -- that
-    adjacency is the argument.
+    pairs touching that pole. No axis currently declares a `content` confound --
+    that kind is for a superset no question-style split could address, and the
+    format axis's original example (`prose`'s content superset of
+    `topology_inventory`) was retired in favour of `narrative`, a content-matched
+    pole built to remove the confound rather than qualify it. The ordinary gates
+    apply unchanged to each subset: a split that lands under SMALL_N reads `not
+    licensed`, which is the honest outcome for a subset too thin to rank, not a
+    reason to pool it back together. Rows are ordered so a comparison's two
+    styles sit adjacent -- that adjacency is the argument.
 
     On the scoped types the two halves are balanced by construction: every
     information request is authored in both registers, so each half holds exactly one
@@ -820,8 +822,9 @@ def _recut_section(rows: list[dict]) -> list[str]:
              "against each other; that adjacency is the argument. The cap is lifted on "
              "`natural` (a question a user could have asked without seeing the derived view "
              "cannot be mirroring it) and stands on `constructed`. Gates apply per subset, "
-             "so a thin split reads `not licensed` rather than being pooled back. The format "
-             "axis's content superset is not re-cut: no style split addresses it._", ""]
+             "so a thin split reads `not licensed` rather than being pooled back. Only "
+             "vocabulary-coupled axes appear here; no axis currently declares a content "
+             "confound (a superset no style split could address)._", ""]
             + _table(["axis", "type", "comparison", "style", "scene deltas", "mean",
                       "n_q", "verdict"], trows) + [""])
 

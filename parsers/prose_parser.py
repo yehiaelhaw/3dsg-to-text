@@ -24,7 +24,15 @@ def _degree(connectivity: dict | None, rooms: dict, rid: str) -> int:
     return len({n for n in connectivity.get(rid, []) if n in rooms})
 
 
-def _room_line(room: Room, connectivity: dict | None, rooms: dict) -> str:
+def _room_line(room: Room, connectivity: dict | None, rooms: dict,
+               show_count: bool = True) -> str:
+    """One room as a sentence. `show_count` prints the explicit object tally.
+
+    The tally is prose's own (`contains 22 objects: ...`); `topology_inventory`
+    states only the list. `narrative` passes False so the format pair is a pure
+    rendering flip -- see parsers/narrative_parser.py. The default keeps `prose`
+    and `synthesis` byte-identical.
+    """
     label = _room_label(room)
     obj_str = _object_inventory(room)
     parts = [label]
@@ -39,8 +47,11 @@ def _room_line(room: Room, connectivity: dict | None, rooms: dict) -> str:
             neighbor_labels = [_room_label(rooms[nid]) for nid in neighbor_ids]
             parts.append(f"connects to {', '.join(neighbor_labels)}")
 
-    n = len(room.objects)
-    parts.append(f"contains {n} object{'s' if n != 1 else ''}: {obj_str}")
+    if show_count:
+        n = len(room.objects)
+        parts.append(f"contains {n} object{'s' if n != 1 else ''}: {obj_str}")
+    else:
+        parts.append(f"contains: {obj_str}")
     return "; ".join(parts) + "."
 
 

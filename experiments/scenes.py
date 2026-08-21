@@ -81,6 +81,12 @@ _PROCTHOR_REPS = [
     # channels {connectivity, metric_edges} -- proven fact-for-fact, not just by
     # REP_CAPS, in evaluation/tests/test_topology_metric_equivalence.py.
     "topology_metric",
+    # The content-matched counterpart to topology_inventory on the format axis:
+    # its facts rendered as prose sentences instead of labelled blocks. Carries
+    # exactly topology_inventory's channels {inventory, connectivity} -- proven
+    # fact-for-fact in evaluation/tests/test_format_axis_equivalence.py. `prose`
+    # (above) was the original partner but is a content superset, not a twin.
+    "narrative",
 ]
 
 # COMBOS ARE RETIRED AND PURGED (retired 2026-08-11, rows deleted 2026-08-12).

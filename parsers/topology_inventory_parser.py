@@ -6,13 +6,15 @@ distances, or directions. This is the connectivity rung of the spatial-encoding
 ladder (compare `metric_relations`, which keeps distance but not doors).
 
 It is also the structured half of the format axis: per room block,
-`topology_inventory` and `prose` carry the *same* facts in the *same* order —
-rooms degree-first, identical connectivity and category inventory — rendered as
-labelled blocks here, prose sentences there. Two admitted departures keep the pair
-short of a pure syntax flip (prose states an explicit per-room object count, and
-on ProcTHOR adds an object-relation section), so read the format axis on
-`connectivity` questions, where the twin part carries the answer. See the
-format-axis note in evaluation/axes.py.
+`topology_inventory` and `narrative` (parsers/narrative_parser.py) carry the
+*same* facts in the *same* order — rooms degree-first, identical connectivity
+and category inventory — rendered as labelled blocks here, prose sentences
+there. The pair is a pure rendering flip, asserted by
+tests/test_format_axis_equivalence.py rather than claimed in prose.
+(`prose` was the original partner; it is a content superset -- an explicit
+per-room object count, plus an object-relation section on ProcTHOR -- which is
+why `narrative` exists as a separate, matched pole. See the format-axis note in
+evaluation/axes.py.)
 
 The connectivity-only variant `topology` (this parser minus the inventories) is
 the raw-adjacency pole of the structure-presentation axis.

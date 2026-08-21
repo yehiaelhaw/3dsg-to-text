@@ -216,6 +216,10 @@ REP_COLORS: dict[str, str] = {
                                                  # a lighter grey of the ceiling's
                                                  # own hue, clear of inventory's
     "prose":                         "#6a3d9a",  # natural language
+    # narrative's the content-matched sibling of prose (format axis, replacing
+    # prose there): the paired light purple of prose's dark one, so the two read
+    # as a family while staying visually distinct.
+    "narrative":                     "#cab2d6",
     # connectivity / structure (spatial-encoding connectivity, structure presentation)
     "topology_inventory":            "#1f78b4",
     "room_tree":                     "#a6cee3",

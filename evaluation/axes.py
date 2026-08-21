@@ -130,18 +130,23 @@ class Axis:
     # discovered in the results, and it caps the verdict at CAPPED_VERDICT
     # however consistent the scene values are. Empty string = none declared.
     confound: str = ""
-    # Which reps the confound attaches to. Empty tuple = the whole axis (the
-    # format pair's content superset); otherwise only pairs touching one of
-    # these reps are capped (the derived poles' vocabulary coupling).
+    # Which reps the confound attaches to. Empty tuple = the whole axis;
+    # otherwise only pairs touching one of these reps are capped (the derived
+    # poles' vocabulary coupling -- currently the only kind any axis declares).
     confound_reps: tuple[str, ...] = ()
     # What KIND of confound, which decides whether the natural/constructed re-cut
     # can resolve it. "vocabulary": the question's wording mirrors a derived pole's
     # own printed output, so the `natural` subset -- questions a user could have
     # asked without ever seeing that output -- is by construction uncoupled and the
     # cap does not apply there. "content": one member simply carries more content
-    # than the other (prose superset of topology_inventory), which no question-style split
-    # addresses, so the cap stands on every subset. Only "vocabulary" axes are
-    # re-cut (thesis 4.6 / 6.7 name the two axes with a derived pole).
+    # than the other, which no question-style split addresses, so the cap would
+    # stand on every subset. No axis currently declares "content" -- the format
+    # axis's `prose` superset (the original example) was retired in favour of
+    # `narrative`, a content-matched pole built to remove the confound rather than
+    # qualify it. The value is kept because the distinction is still the reason
+    # only "vocabulary" axes are re-cut (thesis 4.6 / 6.7 name the two axes with a
+    # derived pole); it documents what a future non-vocabulary confound would look
+    # like, not a case in hand.
     confound_kind: str = ""
 
     def confound_for(self, rep_a: str, rep_b: str) -> str:
@@ -149,8 +154,8 @@ class Axis:
 
         Only the axis's OWN contrast can be capped. A comparison against the
         floor or the ceiling is an anchor comparison, not the design decision
-        this axis isolates, so neither the format pair's content superset nor a
-        derived pole's vocabulary coupling is a confound there.
+        this axis isolates, so a derived pole's vocabulary coupling is not a
+        confound there.
         """
         if not self.confound:
             return ""
@@ -190,16 +195,19 @@ AXES: list[Axis] = [
               "spatial-encoding card.",
          kind="companion"),
     Axis("format", "Structured vs. prose presentation", "procthor",
-         ["topology_inventory", "prose"],
+         ["topology_inventory", "narrative"],
          ["connectivity"],
-         headline_pair=("topology_inventory", "prose"),
-         note="prose is a content superset of topology_inventory (adds the "
-              "object-relation section) -- not a pure syntax flip; account for the "
-              "extra content.",
-         confound="prose is a content superset of topology_inventory, so the pair "
-                  "is not a pure structured/prose flip",
-         confound_reps=("prose",),
-         confound_kind="content"),
+         headline_pair=("topology_inventory", "narrative"),
+         note="narrative carries exactly topology_inventory's facts (inventory + "
+              "connectivity, same rooms, same order) rendered as sentences instead "
+              "of labelled blocks -- a pure rendering flip, asserted by "
+              "tests/test_format_axis_equivalence.py rather than claimed in prose. "
+              "(`prose`, the original partner, was a content superset -- an "
+              "explicit per-room object count plus an object-relation section on "
+              "ProcTHOR -- which is why this axis now reads narrative instead; "
+              "prose keeps its readings elsewhere: the Gibson content_verbosity "
+              "exhibit, the relation-linearization family, planning, and as the "
+              "synthesis backbone.)"),
     Axis("reference_frame", "Spatial anchoring", "gibson",
          ["metric_relations", "navigation"],
          # direction only. `route` used to be declared here and was dead: all 12
