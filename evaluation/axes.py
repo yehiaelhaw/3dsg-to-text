@@ -208,17 +208,24 @@ AXES: list[Axis] = [
               "prose keeps its readings elsewhere: the Gibson content_verbosity "
               "exhibit, the relation-linearization family, planning, and as the "
               "synthesis backbone.)"),
-    Axis("reference_frame", "Spatial anchoring", "gibson",
-         ["metric_relations", "navigation"],
-         # direction only. `route` used to be declared here and was dead: all 12
-         # route questions are ProcTHOR's (Gibson has no door graph, which is
-         # exactly why this axis is hosted here), so the entry named a probe this
-         # axis can never be read on. The ProcTHOR route result is a separate
-         # exhibit below and is deliberately NOT a spatial-anchoring reading.
-         ["direction"],
-         headline_pair=("metric_relations", "navigation"),
-         note="pure anchoring isolation only on Gibson; on ProcTHOR navigation also "
-              "restricts to doorway moves, so it fuses connectivity (coverage view)."),
+    # RETIRED (2026-08-21): this slot used to hold "Spatial anchoring", pairing
+    # `metric_relations` directly against `navigation` on Gibson under the premise
+    # that the two differ only in anchoring/frame. A design review found that
+    # false: `metric_relations` additionally carries a per-room object inventory
+    # and room-type census `navigation` lacks entirely (~1.43x length mismatch on
+    # the primary scenes), so the pair was never fact-matched -- see
+    # metric_relations_parser.py's docstring for the corrected account.
+    # `metric_relations` itself is unchanged and unretired: it keeps its
+    # spatial-encoding role (`metric_rung` above) and is not in scope.RETIRED_REPS.
+    # This is a PAIRING retirement, not a representation retirement.
+    #
+    # The replacement pairing is `metric_framing` (metric_framing_parser.py, a
+    # new, purpose-built view carrying none of `metric_relations`'s extra content)
+    # against `navigation`, proven fact-for-fact by
+    # tests/test_metric_framing_equivalence.py. It is no longer a standalone axis:
+    # it is now the Gibson companion (`framing_gibson`, below) of the promoted
+    # "Relational vs. navigational framing" axis (`framing`, further down), whose
+    # primary reading was always the stronger, better-powered ProcTHOR pair.
     Axis("structure_presentation", "Structure presentation", "procthor",
          ["topology", "room_tree", "graph_digest"],
          ["connectivity"],
@@ -248,102 +255,115 @@ AXES: list[Axis] = [
                   "re-cut and the matched within-fact-set comparison",
          confound_reps=("relations_digest",),
          confound_kind="vocabulary"),
-    # --- exhibits: graded results the five axes do not cover ------------------
+    # --- the framing axis (promoted 2026-08-21 from three separate ProcTHOR
+    # exhibits, consolidated into one formal axis) -----------------------------
     # NAMING: this used to be "route_presentation", which invited the reading that
     # one pole prints routes. NEITHER DOES. Both print the same one-hop doorway
     # adjacency and nothing else -- no path, no hop count, no summed distance. What
     # differs is the FRAMING of that adjacency: navigational/action-oriented ("from
     # X you can walk to Y, 2.9 m north-east") vs relational/locative ("X is 2.9 m
-    # south-west of Y"). "route" survives only as the question type it is read on.
-    Axis("route_framing", "Navigational vs relational framing (route)", "procthor",
+    # south-west of Y").
+    #
+    # This entry is one of the five representation axes of thesis 4.2 (kind="axis"),
+    # occupying the slot the retired Gibson-only "Spatial anchoring" axis used to
+    # hold (see the retirement comment above) -- promoted because the ProcTHOR pair
+    # is fact-matched (proven, not inferred: tests/test_topology_metric_equivalence.py)
+    # and well-powered on its best-read type (connectivity, below), where the old
+    # Gibson pair was neither. It reads on three question-type families, each
+    # requiring a DIFFERENT interpretation of the same two texts -- read
+    # `connectivity` FIRST, as the power check on the other two, not as one more
+    # independent replication of them:
+    #
+    # connectivity -- the only well-powered type in this design: 18 connectivity
+    #   stems per scene (54 total, 27 fact-sets) against 4 per scene for route and
+    #   direction. A connectivity stem asks only which rooms are joined; both poles
+    #   print the same edge set in the same order, so neither the figure-ground
+    #   assignment nor the per-edge metric is task-relevant here -- the framing
+    #   manipulation has no channel to act through. NO SEPARATION is therefore the
+    #   expected and uninteresting outcome, and it is what five of the six responder
+    #   directories show. A separation here would NOT strengthen the route/direction
+    #   readings below; it would mean the manipulation is doing something not
+    #   attributed to it, and would need explaining before either is quoted.
+    #   DECLARED POST-HOC on 2026-08-13, after route/direction cells already existed
+    #   and were sitting unread (topology_metric carries the connectivity channel,
+    #   so they were always in scope) -- disclose that wherever this reading is
+    #   quoted; it is a power check on exhibits already run, not a preregistered
+    #   contrast.
+    # route -- an audit of all 12 ProcTHOR route stems found NO bearing in any key
+    #   fact: routes need the edge set, the per-edge distances and room labels only.
+    #   So on route this pair is a fact-matched test of FRAMING over identical
+    #   task-relevant facts, and a route delta must NOT be attributed to the
+    #   figure-ground reversal, which the task does not read.
+    # direction -- all 12 ProcTHOR direction stems ask about a DIRECTLY CONNECTED
+    #   pair, so both doorway-restricted poles can answer every one, and the key
+    #   facts are phrased from the heading room, which navigation prints directly
+    #   and topology_metric states as the converse -- the reversal IS task-relevant
+    #   here (equal information, unequal work), but it is NOT IDENTIFIED: it arrives
+    #   bundled with the same layout and lexical-framing differences as route, whose
+    #   contributions could run in either direction and cannot be separated from it.
+    #   Not a bound on the inversion's cost in either direction.
+    #
+    # Neither route nor direction should be called presentation-only or
+    # layout-only -- the manipulation bundles figure-ground assignment, block
+    # layout, and lexical register ("you can walk to" is an action, "is ... of" is
+    # a location), and this design cannot decompose them.
+    #
+    # TERMINOLOGY: never egocentric/allocentric. Both poles print world-frame
+    # compass bearings and no ProcTHOR room carries a facing, so there is no
+    # observer orientation to be egocentric about; what differs is figure-ground
+    # assignment (which room is the subject of a converse-equivalent binary
+    # relation) plus framing register.
+    #
+    # AXIS_PAIRS/axis_contrasts.png draws ONE bar for this axis, averaged over all
+    # three probe types (the same pooling relation_linearization's three types
+    # already receive) -- that pooled number is not how to read this axis; use the
+    # per-type table on this card, in the order above.
+    #
+    # Supersedes an earlier concatenated ProcTHOR route baseline that was a strict
+    # channel superset of navigation -- it also carried object inventories and
+    # unconnected-pair metric, and ran 4.5x navigation on the same measure, so its
+    # delta was confounded twice over. That baseline was excluded from the analysis
+    # and its rows removed from the results tree.
+    Axis("framing", "Relational vs. navigational framing", "procthor",
          ["topology_metric", "navigation"],
-         ["route"],
+         ["route", "direction", "connectivity"],
          headline_pair=("topology_metric", "navigation"),
-         kind="exhibit",
-         note="A FACT-MATCHED framing contrast over one-hop doorway adjacency. "
-              "Neither pole prints a route: both are doorway-restricted, carry exactly "
-              "{connectivity, metric_edges}, and state the same rooms, the same edge "
-              "set and the same per-edge distances in the same order, so the multi-hop "
-              "search and the addition a route question asks for stay the model's work "
-              "on BOTH sides. Fact-for-fact equality is asserted by "
-              "tests/test_topology_metric_equivalence.py, not inferred from REP_CAPS, "
-              "and the pair is approximately length-matched too (topology_metric is "
-              "1.076-1.082x navigation across the three scenes on the rendered "
-              "pre-question prompt -- representation-side cost including the "
-              "chat/system wrapping, excluding the question, which is identical for "
-              "both), so a delta is not a context-length effect. WHAT DIFFERS is not "
-              "one thing: which room is the "
-              "located figure, the block layout, AND the lexical/semantic framing "
-              "(traversal 'you can walk to' vs locative 'is ... of'). Report it as a "
-              "framing contrast, not as presentation-only or layout-only -- the "
-              "manipulation is a bundle and this design cannot decompose it. DO NOT "
-              "attribute a route delta to the figure-ground reversal specifically: an "
-              "audit of all 12 route stems found no bearing in any key fact, so the "
-              "task never reads the direction. Not a reference-frame result: see the "
-              "terminology note on relation_direction, and the reference-frame axis "
-              "stays on Gibson. (Supersedes an earlier concatenated baseline that was a "
-              "strict channel superset of navigation -- it also carried object "
-              "inventories and unconnected-pair metric, and ran 4.5x navigation on the "
-              "same measure, so its delta was confounded twice over. That baseline was "
-              "excluded from the analysis and its rows removed from the results tree.)"),
-    Axis("relation_direction", "Relation direction (direct neighbours)", "procthor",
-         ["topology_metric", "navigation"],
+         kind="axis",
+         note="A FACT-MATCHED framing contrast over one-hop doorway adjacency, proven "
+              "fact-for-fact (not inferred from REP_CAPS) by "
+              "tests/test_topology_metric_equivalence.py: same rooms, same edge set, "
+              "same per-edge distances, converse bearings, no route printed on either "
+              "side, and length-matched to within ~8% on the rendered pre-question "
+              "prompt. Read `connectivity` first -- the only well-powered type and a "
+              "post-hoc (2026-08-13) power check on `route`/`direction` -- then read "
+              "those two through it, each under its OWN interpretation (route: framing "
+              "only, no bearing in any key fact; direction: the figure-ground reversal "
+              "is task-relevant but not identified, bundled with layout/register). "
+              "Never egocentric/allocentric -- see the full note above. This card's "
+              "Gibson companion is `framing_gibson`."),
+    Axis("framing_gibson", "Relational vs. navigational framing (Gibson companion)",
+         "gibson",
+         ["metric_framing", "navigation"],
          ["direction"],
-         headline_pair=("topology_metric", "navigation"),
-         kind="exhibit",
-         note="The same matched pair read on the family where the relation's direction "
-              "IS task-relevant. All 12 ProcTHOR direction stems ask about a directly "
-              "connected pair, so both doorway-restricted poles can answer every one, "
-              "and the key facts are phrased from the heading room -- which navigation "
-              "prints directly and topology_metric states as the converse, so the "
-              "latter must invert it. Equal information, unequal work: that is the "
-              "contrast. NOT IDENTIFIED, though: it is the same two texts as "
-              "route_framing, so the inversion arrives bundled with the layout and "
-              "lexical-framing differences, whose contributions could run in either "
-              "direction and cannot be separated from it here. A direction delta "
-              "reflects the bundled manipulation. It is NOT a bound on the cost of the "
-              "inversion in either direction -- calling it an upper bound would assume "
-              "the other components can only help, which nothing here establishes. "
-              "TERMINOLOGY: this is NOT an "
-              "egocentric/allocentric flip. Both "
-              "poles print world-frame compass bearings and no ProcTHOR room carries a "
-              "facing, so there is no observer orientation to be egocentric about; "
-              "what differs is figure-ground assignment (which room is the subject of "
-              "a converse-equivalent binary relation) plus framing register. Report it "
-              "under that description. The reference-frame axis remains Gibson's, and "
-              "this exhibit is not a second reading of it."),
-    # --- power check on the matched pair --------------------------------------
-    # DECLARED POST-HOC (2026-08-13), after these cells were generated and judged.
-    # Unlike json_formatting below, this entry CANNOT claim its outcome was
-    # unreadable in advance, and it is not offered as independent confirmation of
-    # anything. It exists because route_framing and relation_direction turned out
-    # too thin to carry a verdict alone -- 12 stems over 3 scenes is 4 per scene,
-    # so one answer changing hands moves a scene delta by 0.125, the same size as
-    # the effects those two exhibits grade. The connectivity cells were already
-    # generated (topology_metric carries the connectivity channel, so they are in
-    # scope) and were sitting unread. Disclose the post-hoc declaration wherever
-    # this card is quoted.
-    Axis("adjacency_framing", "Framing on plain adjacency (power check)", "procthor",
-         ["topology_metric", "navigation"],
-         ["connectivity"],
-         headline_pair=("topology_metric", "navigation"),
-         kind="exhibit",
-         note="The SAME matched pair as route_framing and relation_direction, read on "
-              "the only well-powered type in this design: 18 connectivity stems per "
-              "scene (54 total, 27 fact-sets) against 4 per scene for route and "
-              "direction. Its job is to say how much of those two exhibits' spread is "
-              "sampling noise, so read it FIRST and read them through it. WHAT IT "
-              "TESTS: a connectivity stem asks only which rooms are joined. Both poles "
-              "print the same edge set in the same order, so neither the figure-ground "
-              "assignment nor the per-edge metric is task-relevant here -- the framing "
-              "manipulation has no channel to act through. NO SEPARATION is therefore "
-              "the expected and uninteresting outcome, and it is what five of the six "
-              "responder directories show. A separation here would NOT strengthen the "
-              "other two exhibits; it would mean the manipulation is doing something "
-              "they do not attribute to it, and would need explaining before either is "
-              "quoted. DECLARED POST-HOC on 2026-08-13, after the cells existed: this "
-              "card is a power check on exhibits already run, not a preregistered "
-              "contrast, and must be cited as such."),
+         headline_pair=("metric_framing", "navigation"),
+         kind="companion",
+         note="The Gibson realization of the framing axis, over K-nearest-neighbour "
+              "room geometry rather than doorway adjacency. Fact-matched by an "
+              "independently-derived equivalence test "
+              "(tests/test_metric_framing_equivalence.py: both poles checked against "
+              "K-NN geometry recomputed fresh from source room positions, not just "
+              "against each other -- Gibson has no door graph to serve as independent "
+              "ground truth the way ProcTHOR's does, so this is a milder but different "
+              "caveat than the content mismatch this companion replaces, not the same "
+              "one). Same framing bundle as the ProcTHOR axis (figure-ground + "
+              "register); same terminology discipline (never egocentric/allocentric). "
+              "`direction` is the only in-scope type on this host -- no door graph "
+              "means no connectivity/route questions exist here -- so there is no "
+              "power check available for this reading and 12 questions total is its "
+              "ceiling, not a choice. Supersedes the retired `metric_relations` vs "
+              "`navigation` pairing (see the retirement comment above `framing`, "
+              "up-file) -- `metric_relations` is unretired and keeps its unrelated "
+              "spatial-encoding role."),
     Axis("content_verbosity", "Verbosity on content questions", "gibson",
          ["prose"],
          ["containment", "aggregation", "set_logic"],

@@ -25,10 +25,15 @@ here is therefore NOT a coordinate-frame transform. It is exactly two things:
 
 Calling that an egocentric/allocentric flip would overclaim: reversing the
 argument order of a symmetric-invertible relation is not a change of reference
-frame. `metric_relations` vs `navigation` on Gibson has the same property (see
-the note in Chapter 4 conceding that rooms have no facing); the difference is
-only that this pair is doorway-restricted on both sides, so it is matched where
-the ProcTHOR combo baseline it replaces was not.
+frame. `metric_framing` vs `navigation` on Gibson has the same property (see
+metric_framing_parser.py's identical note) -- that pair is the Gibson companion
+to this one, matched fact-for-fact by tests/test_metric_framing_equivalence.py.
+(An earlier design paired `metric_relations` directly with `navigation` on
+Gibson on this same "pure frame flip" premise; that pairing has been retired
+because `metric_relations` additionally carries a per-room object inventory and
+room-type census `navigation` lacks, so it was not in fact matched.
+`metric_relations` itself is unchanged and still serves the spatial-encoding
+ladder.)
 
 NEITHER VIEW PRINTS A ROUTE
 ---------------------------

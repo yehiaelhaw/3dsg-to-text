@@ -143,6 +143,25 @@ REP_CAPS: dict[str, set[str]] = {
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
     "metric_relations": {"inventory", "metric", "metric_edges"},
     "navigation":       {"connectivity", "metric_edges"},
+    # NOTE: `connectivity` is declared host-invariantly here even though Gibson
+    # has no door graph -- on Gibson this representation actually renders
+    # K-nearest-neighbour proximity, not real doorway adjacency (see
+    # navigation_parser.py's own docstring, "framed honestly as proximity").
+    # Harmless today only because no `connectivity`-typed question is authored
+    # on Gibson, so no in_scope() decision is currently wrong because of it --
+    # a known documentation debt, not fixed here (REP_CAPS has no per-host
+    # axis). Do NOT copy this declaration into a new representation by analogy
+    # for symmetry's sake -- see `metric_framing` below, which declares only
+    # what it actually carries.
+    #
+    # The matched Gibson counterpart to `navigation` on `direction`:
+    # K-nearest-neighbour room geometry, in locative framing. Channel set is
+    # deliberately NARROWER than navigation's declaration above: states
+    # `metric_edges` only, not `connectivity`, since Gibson has no door graph
+    # and this representation makes no claim to carry one. Proven fact-for-fact
+    # against independently recomputed source geometry in
+    # evaluation/tests/test_metric_framing_equivalence.py.
+    "metric_framing":   {"metric_edges"},
     # relation-linearization family: five presentations of one object-relation graph.
     # flat/predicate print the edge set in full; subject prints it under a per-object
     # attribute cap (see the "object_relations_raw" note above). All three are declared

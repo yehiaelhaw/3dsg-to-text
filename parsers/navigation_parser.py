@@ -1,10 +1,14 @@
-"""navigation — egocentric route view.
+"""navigation — the navigational-framing route view.
 
 Describes the scene the way a person moves through it: from each room, where you
-can go and in which direction. It is the *egocentric* point on the
-reference-frame axis — the same geometry `metric_relations` states as an
-allocentric map ("A is 3 m north of B") is restated here from a first-person
-vantage ("From A: B is 3 m north"). It is also the only single non-`json`
+can go and in which direction. It is the NAVIGATIONAL-framing pole of the
+"relational vs. navigational framing" axis (traversal register: "you can walk
+to", "nearest rooms"). Its matched relational-framing counterpart is
+`topology_metric` on the ProcTHOR door graph, and `metric_framing` on Gibson's
+K-nearest-neighbour geometry — both restate exactly this view's edges and
+distances with the figure-ground assignment reversed and a locative register
+("is ... of") instead; see either parser's docstring for why that reversal is
+not an egocentric/allocentric flip. It is also the only single non-`json`
 representation that fuses connectivity with metric direction, so it is the
 natural single view for navigation questions.
 
@@ -50,7 +54,7 @@ def _degree(connectivity, rooms, rid) -> int:
 
 
 def _bearing(a: Room, b: Room, axes) -> tuple[float, str]:
-    du = b.position[axes[0]] - a.position[axes[0]]  # direction of b *from* a (egocentric)
+    du = b.position[axes[0]] - a.position[axes[0]]  # direction of b relative to a (navigational framing)
     dv = b.position[axes[1]] - a.position[axes[1]]
     return plane_distance(a.position, b.position, axes), compass(du, dv)
 
@@ -116,4 +120,4 @@ def parse(building: Building) -> str:
 
 
 if __name__ == "__main__":
-    run_parser(parse, "Serialize an egocentric route view (where you can go from each room)")
+    run_parser(parse, "Serialize a navigational-framing route view (where you can go from each room)")

@@ -1153,8 +1153,8 @@ def plot_aggregate(aggregate_path: Path) -> None:
         written |= _plot_heatmap(results_path, rows, ds, out_dir)
 
     # -- Chart 4: axis-contrast paired deltas (every AXES entry declaring a
-    #    headline_pair: format, reference frame, structure presentation, relation
-    #    linearization, and the three ProcTHOR framing exhibits) --
+    #    headline_pair: format, structure presentation, relation linearization,
+    #    relational vs. navigational framing (ProcTHOR primary + Gibson companion)) --
     # For each axis pair, the per-question AC delta (second pole minus first), over
     # the questions that axis DECLARES -- its host and its probe types, both poles in
     # scope (axis_pair_questions). Bar = mean, whisker = ±1 population std, dots =

@@ -2,17 +2,25 @@
 
 Pre-computes the metric relation an LLM would otherwise derive from raw
 coordinates: an in-plane distance and an 8-way compass bearing between rooms.
-This is the *allocentric* metric point on the reference-frame axis (compare
-`navigation`, the egocentric route view of the same geometry) and the metric
-rung of the spatial-encoding ladder (compare `topology_inventory`, which keeps
-only connectivity).
+This is the metric rung of the spatial-encoding ladder (compare
+`topology_inventory`, which keeps only connectivity) -- see axes.metric_rung
+for its Gibson companion card, the cleanest metric-rung exhibit in the study.
 
 Density is controlled, not exhaustive: instead of every O(n^2) room pair, each
 room lists only its `NEAREST_K` closest same-floor neighbours. Relations are
 grouped by room -- each room heads a block of its nearest neighbours, nearest
-first -- which is the allocentric, room-grouped twin of the egocentric
-`navigation` view (same grouping, only the vantage and bearing differ), so the
-reference-frame contrast is a pure frame flip. Listing is directed: a pair appears
+first -- using the same floor-grouping and neighbour-ranking rule as
+`navigation`'s proximity mode. Unlike that view, though, this one ALSO carries
+a full per-room object inventory and a room-type census (see `_inventory_lines`
+below), so it is not a bare geometry restatement and not a content-matched
+counterpart to anything: an earlier design paired it directly with `navigation`
+as if the two differed only in framing, and that pairing has been retired
+because it does not hold -- the inventory and census are real extra content,
+not a vantage change. The actual fact-matched relational-framing counterpart to
+`navigation` on Gibson is `metric_framing` (metric_framing_parser.py), a
+separate, purpose-built view carrying none of this view's extra content. This
+view keeps its inventory and census unchanged, because they are what the
+spatial-encoding ladder needs it for. Listing is directed: a pair appears
 under both of its rooms, not de-duplicated.
 
 `NEAREST_K` stays at the salient default of 4 -- the exhaustive all-pairs variant
