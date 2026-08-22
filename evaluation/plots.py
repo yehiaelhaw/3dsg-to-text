@@ -723,6 +723,15 @@ CEILING_PREMIUM_EXCLUDED = {
                    "derived-view result",
     CANDIDATE:     "reported as the candidate default in report.md's candidate section",
     FLOOR:         "the no-information control, not a derived view",
+    # Temporary, not permanent like the four above: navigation's rendered prompt on
+    # ProcTHOR (and, via the retired Spatial-anchoring pairing, on Gibson) changed
+    # under the 2026-08-21 block-layout fix (thesis Sec. 6.3.3), and results.csv has
+    # not been regenerated against the corrected prompt yet. Excluding it here keeps
+    # the ceiling-premium/cost-quality reporting from presenting a stale value as a
+    # current best-observed result. Remove this entry once the fresh ProcTHOR and
+    # Gibson reruns are filled, judged, and folded into results.csv.
+    "navigation":  "excluded pending its fresh rerun after the 2026-08-21 "
+                   "block-layout fix; not a permanent exclusion",
 }
 
 

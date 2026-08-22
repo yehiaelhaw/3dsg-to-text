@@ -194,7 +194,7 @@ AXES: list[Axis] = [
               "needs its own card rather than being folded into the main "
               "spatial-encoding card.",
          kind="companion"),
-    Axis("format", "Structured vs. prose presentation", "procthor",
+    Axis("format", "Block vs. sentence rendering", "procthor",
          ["topology_inventory", "narrative"],
          ["connectivity"],
          headline_pair=("topology_inventory", "narrative"),
@@ -226,7 +226,7 @@ AXES: list[Axis] = [
     # it is now the Gibson companion (`framing_gibson`, below) of the promoted
     # "Relational vs. navigational framing" axis (`framing`, further down), whose
     # primary reading was always the stronger, better-powered ProcTHOR pair.
-    Axis("structure_presentation", "Structure presentation", "procthor",
+    Axis("structure_presentation", "Graph-structure representation", "procthor",
          ["topology", "room_tree", "graph_digest"],
          ["connectivity"],
          headline_pair=("topology", "graph_digest"),
@@ -240,12 +240,13 @@ AXES: list[Axis] = [
                   "matched within-fact-set comparison",
          confound_reps=("graph_digest",),
          confound_kind="vocabulary"),
-    Axis("relation_linearization", "Relation organization", "3rscan",
+    Axis("relation_linearization", "Relation organization and abstraction", "3rscan",
          ["relations_flat", "relations_subject", "relations_predicate",
           "relations_tree", "relations_digest"],
          ["object_relation", "relation_structure", "relation_aggregate"],
          headline_pair=("relations_subject", "relations_predicate"),
-         note="same edge set, five presentations; only diverges on dense 3RScan "
+         note="same source relation graph exposed through direct, grouped, "
+              "selective hierarchical, and derived views; only diverges on dense 3RScan "
               "(near-trivial on ProcTHOR's on-forest). relations_tree/relations_digest "
               "are lossy derived presentations (narrower scope.py channels), so "
               "object_relation/relation_structure/relation_aggregate are read as one "

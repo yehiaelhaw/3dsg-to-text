@@ -9,35 +9,49 @@ files. They stay exactly as they are, as the audit artifacts a reader checks the
 thesis against, and this module draws SEPARATE figures at final page dimensions with
 native type.
 
-Three renders and three LaTeX tables, all written from the same rows the production
-figures use — `plots.ceiling_premium_rows` and `report._paired_rows` — so a mark
-here, a mark there and a row in report.md are one computation:
+Three renders and three LaTeX tables are wired into the thesis by `main()`, all
+written from the same rows the production figures use — `plots.ceiling_premium_rows`
+and `report._paired_rows` — so a mark here, a mark there and a row in report.md are
+one computation:
 
-  fig_ceiling_premium   F1. 19 host x question-type cells, best observed derived view
-                        against the json_mini ceiling. The production figure's
-                        right-hand annotation columns (best view / of k, token ratio,
-                        verdict) are NOT drawn: they are a table rendered as pixels,
-                        and they are what makes that figure 13in wide. They move to
-                        tab_ceiling_premium.tex as real LaTeX text.
-  fig_paired_separation F2. The 19 WITHIN-representation contrasts. Not "every
-                        comparison": every (rung, CEILING) anchor belongs to F1 by the
-                        same rule `Axis.confound_for` already applies -- an anchor
-                        comparison is not the design decision an axis isolates -- so
-                        drawing them again here would be F1 twice. Split into the
-                        declared axis contrasts and the exhibits, because thesis 6.1.2
-                        says an exhibit is never read as an axis contrast and a shared
-                        panel would invite exactly that.
+  fig_ceiling_premium   F1. 19 host x question-type cells, best OBSERVED eligible
+                        representation against the json_mini reference, selected
+                        DESCRIPTIVELY after seeing the tested representations for
+                        that cell -- not a fixed representation declared in advance,
+                        not a representation axis, and not a claim about a
+                        prospective selection policy (thesis 6.3). The declared axis
+                        comparisons of the sections that follow remain the primary
+                        evidence for RQ1; this figure is a supporting overview only.
+                        `navigation` is temporarily excluded from the candidate pool
+                        (`plots.CEILING_PREMIUM_EXCLUDED`) pending its fresh rerun,
+                        so no cell here can show a stale, pre-block-layout-fix value.
+  fig_paired_separation F2. The WITHIN-representation contrasts. Not "every
+                        comparison": every (rung, CEILING) anchor belongs to F1 by
+                        the same rule `Axis.confound_for` already applies -- an
+                        anchor comparison is not the design decision an axis
+                        isolates -- so drawing them again here would be F1 twice.
+                        Split into the declared axis contrasts and the exhibits,
+                        because thesis 6.1.2 says an exhibit is never read as an
+                        axis contrast and a shared panel would invite exactly that.
+                        NOT currently written by `main()`: in this draft it is
+                        entirely suppressed pending the framing reruns (its retired
+                        axis and stale navigation rows make the whole image
+                        unusable), so `render_f2` is left defined for internal
+                        inspection or for reinstating the full image later.
   fig_cost_quality      The GRADEABLE F1 cells as a scatter: token reduction against
-                        the paired AC delta. One point per host x question type;
-                        nothing is pooled across question types, and any cell the
-                        ceiling's own coverage gate declines to license is not
-                        plotted, because a cell with no licensed delta has no y.
+                        the paired AC delta, for the same descriptively-selected
+                        best-observed view per cell. One point per host x question
+                        type; nothing is pooled across question types.
 
-  tab_ceiling_premium   F1's detail columns.
+  tab_ceiling_premium   F1's detail columns: the candidate pool and selected view.
   tab_comparison_catalogue  ALL 63 rows of the separation table, landscape. The
                         exhaustive catalogue F2 no longer carries.
-  tab_cost_quality      The scatter's 14 points as numbers. Appendix, not chapter 7:
-                        beside the figure it is the same 14 cells twice on one page.
+  tab_cost_quality      The scatter's points as numbers -- the numerical companion
+                        to fig_cost_quality, in the appendix rather than beside the
+                        figure to avoid repeating the same cells twice on one page.
+
+  fig_vocab_sensitivity The natural/constructed/matched vocabulary-robustness triad
+                        (rendered only when `vocab_sensitivity_rows` finds data).
 
 Fonts are set so nothing renders below 7pt at final size, and no figure carries a
 title, caption or footnote: those are `\\caption` in LaTeX, where they reflow, get a
@@ -260,8 +274,8 @@ def render_f1(prem: list[dict], out: Path) -> None:
     ax.set_yticks(range(n))
     ax.set_yticklabels(list(reversed(labels)), fontsize=7.5)
     ax.set_ylim(-0.7, n - 0.3)
-    ax.set_xlabel(f"Scene-paired AC delta:  best observed derived view "
-                  f"{MINUS} {CEILING} ceiling", fontsize=8)
+    ax.set_xlabel(f"Scene-paired AC delta:  best observed eligible view "
+                  f"{MINUS} {CEILING} reference", fontsize=8)
     ax.grid(axis="x", linestyle=":", alpha=0.45, zorder=0)
     ax.set_axisbelow(True)
     for side in ("top", "right", "left"):
@@ -613,9 +627,11 @@ CQ_NUDGE = {
     # x ~ 14: set logic and aggregation, likewise
     ("gibson", "set_logic"):     (-7, 0),
     ("gibson", "aggregation"):   (7, 0),
-    # "direction" is long enough at x ~ 25 that a right-pointing default offset
-    # ran its label past the right edge of the axes.
-    ("procthor", "direction"):   (-7, 0),
+    # ProcTHOR route (~23x, +0.458) and 3RScan relation structure (~16x, +0.454)
+    # sit close enough in both x and y, after navigation's exclusion moved route
+    # off its old ~25x/+0.75 position, that their default right-pointing labels
+    # overlapped. Moving route's label above its marker clears the row instead.
+    ("procthor", "route"): (7, 9),
     # 3RScan aggregation (x~4.44) sits close enough to connectivity's leftward
     # label (x~7.93, nudged -7) that their two rightward/leftward text runs
     # overlapped ("aggregationconnectivity"). Moving this one above its own
@@ -670,10 +686,16 @@ def render_cost_quality(prem: list[dict], out: Path) -> None:
     ax.set_xticks(ticks)
     ax.set_xticklabels([f"{v}×" for v in ticks])
     ax.minorticks_off()
-    ax.set_ylim(-0.10, 0.95)
-    ax.set_xlabel("Prompt-token reduction vs the json_mini ceiling  "
+    # Both bounds follow the data rather than a fixed (-0.10, 0.95): a fixed lower
+    # bound silently clipped ProcTHOR direction out of the visible axes, despite it
+    # being drawn and counted as plotted, once excluding navigation (pending its
+    # fresh rerun) moved that cell's best-observed mean below -0.10. Same rationale
+    # as the dynamic x lower bound above.
+    ys = [r["mean"] for r in pts]
+    ax.set_ylim(min(-0.10, min(ys) - 0.05), max(0.95, max(ys) + 0.05))
+    ax.set_xlabel("Prompt-token reduction vs the json_mini reference  "
                   "(log scale; input tokens only)", fontsize=8)
-    ax.set_ylabel(f"Scene-paired AC delta  (derived view {MINUS} ceiling)", fontsize=8)
+    ax.set_ylabel(f"Scene-paired AC delta  (best observed eligible view {MINUS} json_mini reference)", fontsize=8)
     ax.grid(True, which="major", linestyle=":", alpha=0.45, zorder=0)
     ax.set_axisbelow(True)
     for side in ("top", "right"):
@@ -736,8 +758,8 @@ def _tt(s: str) -> str:
 
 
 def token_range(ratios: list[float]) -> tuple[str, str]:
-    """(ratio phrase, share phrase) for the oracle winners, from the SAME unrounded
-    ratios, in the one convention the table and chapter 7 both use.
+    """(ratio phrase, share phrase) for the best-observed winners, from the SAME
+    unrounded ratios, in the one convention the table and chapter 7 both use.
 
     The share is deliberately approximate and integer. Carried to a decimal it is
     3.96--24.54%, which invites `4.0--24.5` in one place and `4.0--24.6` in another
@@ -748,8 +770,8 @@ def token_range(ratios: list[float]) -> tuple[str, str]:
     """
     lo, hi = min(ratios), max(ratios)
     return (f"${lo:.2f}\\times$--${hi:.2f}\\times$",
-            f"about {round(100 / hi)}--{round(100 / lo)}\\,\\% of the ceiling's "
-            f"prompt tokens")
+            f"about {round(100 / hi)}--{round(100 / lo)}\\,\\% of the "
+            f"\\texttt{{json\\_mini}} reference's prompt tokens")
 
 
 def table_f1(prem: list[dict], out: Path, label: str) -> None:
@@ -764,16 +786,13 @@ def table_f1(prem: list[dict], out: Path, label: str) -> None:
         "  \\centering",
         "  \\footnotesize",
         "  \\setlength{\\tabcolsep}{4pt}",
-        "  \\caption[Ceiling premium: the best observed derived view per cell]{%",
-        "    Detail for \\cref{fig:ceiling-premium}. For each host $\\times$ "
-        "question-type cell in which the \\texttt{json\\_mini} ceiling is itself "
-        "scored, the derived view with the largest scene-paired advantage over it. "
-        "The winner is selected \\emph{post hoc} from the $k$ in-scope candidates "
-        "listed for that cell --- an oracle choice made on the same data, not a "
-        "representation declared in advance. $\\bar{d}$ is the mean of the "
-        "scene-level AC deltas (view $-$ ceiling). Verdicts: CA $=$ consistent "
-        "advantage, dir $=$ directional, no sep.\\ $=$ no practically meaningful "
-        "separation, n.l.\\ $=$ not licensed. Token ratios are prompt (input) "
+        "  \\caption[Best observed eligible view per cell: candidate pool]{%",
+        "    Numerical detail for \\cref{fig:ceiling-premium}. For each host "
+        "$\\times$ question-type cell, the table lists the descriptively selected "
+        "best-observed eligible view and its in-scope candidate count $k$. "
+        "$\\bar{d}$ is the mean scene-level AC delta (view $-$ "
+        "\\texttt{json\\_mini} reference). Verdict abbreviations follow "
+        "Section~\\ref{sec:meth-analysis}; token ratios use prompt (input) "
         "tokens only.}",
         f"  \\label{{{label}}}",
         "  \\begin{tabular}{llrrl}",
@@ -809,17 +828,18 @@ def table_f1(prem: list[dict], out: Path, label: str) -> None:
 
 
 def table_cost_quality(prem: list[dict], out: Path, label: str) -> None:
-    """The plotted points, as numbers. A scatter a reader cannot re-read off the
-    page is a claim without a source, and these are the study's headline cells."""
+    """The plotted points, as numbers: the numerical companion to the descriptive
+    best-observed cost/quality figure, so a reader can re-read the scatter off the
+    page rather than take it as a claim without a source."""
     pts = [r for r in prem if r["verdict"] != VERDICT_NOT_LICENSED and r["tok_ratio"]]
     xs = [r["tok_ratio"] for r in pts]
     ys = [r["mean"] for r in pts]
     excluded = len(prem) - len(pts)
     exclusion_note = (
         f" {excluded} cell{'s are' if excluded != 1 else ' is'} absent because "
-        "the ceiling itself fails the coverage gate there, so no delta against "
+        "the reference itself fails the coverage gate there, so no delta against "
         "it is licensed." if excluded else
-        " Every cell of \\cref{fig:ceiling-premium} clears the ceiling's "
+        " Every cell of \\cref{fig:ceiling-premium} clears the reference's "
         "coverage gate, so none is absent here.")
     L = [
         "% GENERATED by evaluation/thesis_figures.py -- do not edit by hand.",
@@ -827,11 +847,14 @@ def table_cost_quality(prem: list[dict], out: Path, label: str) -> None:
         "  \\centering",
         "  \\footnotesize",
         "  \\setlength{\\tabcolsep}{5pt}",
-        "  \\caption[Cost and quality of the oracle-selected view per cell]{%",
-        f"    The {len(pts)} points of \\cref{{fig:cost-quality}}, as numbers. One "
-        "row per gradeable host $\\times$ question-type cell; the view is the "
-        "oracle-selected winner of \\cref{tab:ceiling-premium}. Reduction is the "
-        f"ratio of the ceiling's mean prompt tokens to the view's.{exclusion_note}}}",
+        "  \\caption[Cost and quality of the best-observed view per cell]{%",
+        f"    The {len(pts)} points of \\cref{{fig:cost-quality}}, as numbers: the "
+        "numerical companion to that descriptive best-observed cost/quality "
+        "figure. One row per gradeable host $\\times$ question-type cell; the view "
+        "is the best-observed eligible representation of "
+        "\\cref{tab:ceiling-premium}, selected descriptively rather than declared "
+        "in advance. Reduction is the ratio of the reference's mean prompt tokens "
+        f"to the view's.{exclusion_note}}}",
         f"  \\label{{{label}}}",
         "  \\begin{tabular}{lllrrl}",
         "    \\toprule",
@@ -885,10 +908,11 @@ def table_catalogue(prs: list, out: Path, label: str) -> None:
         # two text columns wrap instead of setting on one line.
         "\\scriptsize",
         "\\setlength{\\tabcolsep}{3pt}",
-        f"\\tablecaption{{Complete catalogue of the {len(prs)} paired comparisons "
-        "behind \\cref{fig:ceiling-premium,fig:paired-separation}. "
-        "Every contrast the axis registry generates on the primary responder "
-        "(\\texttt{qwen2.5:14b}, Gemini judge), decided by the rule of "
+        f"\\tablecaption[Complete declared-comparison catalogue]{{Complete catalogue of the {len(prs)} paired comparisons "
+        "the axis registry generates on the primary responder "
+        "(\\texttt{qwen2.5:14b}, Gemini judge): the exhaustive declared-comparison "
+        "set, distinct from the descriptive best-observed summary of "
+        "\\cref{fig:ceiling-premium}. Every comparison is decided by the rule of "
         "\\cref{sec:meth-analysis}. $\\bar{d}$ is the mean of the scene-level AC "
         "deltas (B $-$ A); \\emph{range} is their minimum and maximum, the "
         "replication the verdict is actually read from. $n_q$ counts paired "
@@ -998,8 +1022,13 @@ def main(argv=None) -> int:
 
     _rc()
     render_f1(prem, a.figures / "fig_ceiling_premium")
-    render_f2(f2, a.figures / "fig_paired_separation")
     render_cost_quality(prem, a.figures / "fig_cost_quality")
+    # fig_paired_separation (`render_f2`) is NOT written here: in this draft it is
+    # entirely suppressed pending the framing reruns (its retired \emph{Spatial
+    # anchoring} axis and stale ProcTHOR navigation rows make the whole image
+    # unusable, not just those rows). `render_f2` is left defined above for internal
+    # inspection or for reinstating the full image once the framing reruns are
+    # filled and judged.
     if vocab:
         render_vocab_sensitivity(vocab, a.figures / "fig_vocab_sensitivity")
     table_f1(prem, a.tables / "tab_ceiling_premium.tex", "tab:ceiling-premium")
