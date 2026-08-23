@@ -21,8 +21,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from _base import run_parser, NotApplicable
 from _format import sort_key
 from _relations import resolve_labels
-from utils.capabilities import has_object_relations
-from utils.models import Building
+from scene_graph.capabilities import has_object_relations
+from scene_graph.models import Building
 
 
 def parse(building: Building) -> str:

@@ -28,8 +28,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from _base import run_parser, NotApplicable
 from _format import room_type_summary, sort_key as _id_key
 from prose_parser import _room_line, _degree
-from utils.capabilities import has_room_connectivity
-from utils.models import Building
+from scene_graph.capabilities import has_room_connectivity
+from scene_graph.models import Building
 
 
 def parse(building: Building) -> str:

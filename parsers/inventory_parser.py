@@ -17,7 +17,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from _base import run_parser
 from _format import room_label, object_inventory, room_type_summary, sort_key
-from utils.models import Building
+from scene_graph.models import Building
 
 
 def parse(building: Building) -> str:

@@ -6,7 +6,7 @@ These keep label and inventory rendering consistent across `prose`,
 
 from collections import Counter, defaultdict
 
-from utils.models import Room
+from scene_graph.models import Room
 
 
 def sort_key(id_str: str):

@@ -78,8 +78,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from _base import run_parser, NotApplicable
 from _format import room_label, sort_key
 from _geometry import floor_plane, compass, plane_distance
-from utils.capabilities import has_multiroom_layout, has_floors
-from utils.models import Building, Room
+from scene_graph.capabilities import has_multiroom_layout, has_floors
+from scene_graph.models import Building, Room
 
 # Same K as `metric_relations`/`navigation`'s proximity mode -- this pole must
 # reproduce their neighbour selection exactly, not choose its own value.

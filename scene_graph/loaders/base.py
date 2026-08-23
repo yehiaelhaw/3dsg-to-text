@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from utils.models import Building
+from scene_graph.models import Building
 
 
 class DatasetLoader(ABC):

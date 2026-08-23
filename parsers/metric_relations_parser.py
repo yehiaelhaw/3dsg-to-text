@@ -44,8 +44,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from _base import run_parser, NotApplicable
 from _format import room_label, object_inventory, room_type_summary, sort_key
 from _geometry import floor_plane, compass, plane_distance
-from utils.capabilities import has_multiroom_layout, has_floors
-from utils.models import Building, Room
+from scene_graph.capabilities import has_multiroom_layout, has_floors
+from scene_graph.models import Building, Room
 
 # Each room keeps its K nearest same-floor neighbours. Set very high (>= room
 # count) to recover the exhaustive all-pairs variant for the density ablation.

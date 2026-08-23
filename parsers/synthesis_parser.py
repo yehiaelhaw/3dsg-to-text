@@ -61,8 +61,8 @@ from metric_relations_parser import (
     NEAREST_K as _METRIC_K,
 )
 from relations_digest_parser import object_relations_digest
-from utils.capabilities import has_room_connectivity, has_multiroom_layout, has_object_relations
-from utils.models import Building, Room
+from scene_graph.capabilities import has_room_connectivity, has_multiroom_layout, has_object_relations
+from scene_graph.models import Building, Room
 
 
 def _head(building: Building) -> list[str]:

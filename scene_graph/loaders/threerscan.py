@@ -1,8 +1,8 @@
 import json
 import os
 
-from utils.loaders.base import DatasetLoader
-from utils.models import Building, ObjectRelation, Room, SceneObject
+from scene_graph.loaders.base import DatasetLoader
+from scene_graph.models import Building, ObjectRelation, Room, SceneObject
 
 
 def _tuple3(lst) -> tuple[float, float, float] | None:

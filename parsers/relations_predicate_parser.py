@@ -29,8 +29,8 @@ from collections import defaultdict
 from _base import run_parser, NotApplicable
 from _format import sort_key, undirected_components
 from _relations import resolve_labels, classify_predicate
-from utils.capabilities import has_object_relations
-from utils.models import Building
+from scene_graph.capabilities import has_object_relations
+from scene_graph.models import Building
 
 # Read order: spatial buckets first, low-value comparative/attribute buckets last.
 _CLASS_ORDER = {"support": 0, "proximity": 1, "directional": 2, "other": 3, "attribute": 4}

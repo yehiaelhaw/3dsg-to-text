@@ -53,8 +53,8 @@ from collections import deque
 
 from _base import run_parser, NotApplicable
 from _format import room_label, sort_key
-from utils.capabilities import has_room_connectivity
-from utils.models import Building, Room
+from scene_graph.capabilities import has_room_connectivity
+from scene_graph.models import Building, Room
 
 
 def _adjacency(connectivity: dict[str, list[str]], rooms: dict[str, Room]) -> dict[str, set[str]]:

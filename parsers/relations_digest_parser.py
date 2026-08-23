@@ -43,8 +43,8 @@ from collections import Counter
 from _base import run_parser, NotApplicable
 from _format import sort_key, undirected_components
 from _relations import resolve_labels, classify_predicate, support_forest
-from utils.models import Building
-from utils.capabilities import has_object_relations
+from scene_graph.models import Building
+from scene_graph.capabilities import has_object_relations
 
 
 def _root_to_leaf_paths(children: dict[str, list[str]], roots: list[str]) -> list[list[str]]:

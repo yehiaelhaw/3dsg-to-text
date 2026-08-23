@@ -47,8 +47,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from _base import run_parser, NotApplicable
 from _format import room_label, sort_key
 from _geometry import floor_plane, compass, plane_distance
-from utils.capabilities import has_multiroom_layout, has_room_connectivity, has_floors
-from utils.models import Building, Room
+from scene_graph.capabilities import has_multiroom_layout, has_room_connectivity, has_floors
+from scene_graph.models import Building, Room
 
 # In the door-free (proximity) mode, how many nearest neighbours each room lists.
 NEAREST_K = 4

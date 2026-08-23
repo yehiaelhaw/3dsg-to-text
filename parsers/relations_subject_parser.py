@@ -40,8 +40,8 @@ from collections import defaultdict
 from _base import run_parser, NotApplicable
 from _format import sort_key, is_attribute_predicate
 from _relations import resolve_labels
-from utils.capabilities import has_object_relations
-from utils.models import Building
+from scene_graph.capabilities import has_object_relations
+from scene_graph.models import Building
 
 
 def parse(building: Building) -> str:

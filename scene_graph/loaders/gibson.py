@@ -1,7 +1,7 @@
 import os
 import numpy as np
-from utils.loaders.base import DatasetLoader
-from utils.models import Building, Room, SceneObject
+from scene_graph.loaders.base import DatasetLoader
+from scene_graph.models import Building, Room, SceneObject
 
 
 def _tuple3(arr) -> tuple[float, float, float] | None:

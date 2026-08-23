@@ -14,7 +14,7 @@ from _format import (
     is_attribute_predicate,
     undirected_components,
 )
-from utils.models import Building, Room
+from scene_graph.models import Building, Room
 
 
 def _degree(connectivity: dict | None, rooms: dict, rid: str) -> int:

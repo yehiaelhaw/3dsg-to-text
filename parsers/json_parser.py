@@ -14,8 +14,8 @@ from typing import Any
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from utils.loaders import REGISTRY, load
-from utils.models import Building
+from scene_graph.loaders import REGISTRY, load
+from scene_graph.models import Building
 
 _NDIGITS = 4
 

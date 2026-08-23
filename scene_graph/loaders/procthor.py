@@ -4,8 +4,8 @@ import os
 import warnings
 from collections import defaultdict
 
-from utils.loaders.base import DatasetLoader
-from utils.models import Building, ObjectRelation, Room, SceneObject
+from scene_graph.loaders.base import DatasetLoader
+from scene_graph.models import Building, ObjectRelation, Room, SceneObject
 
 
 def _room_id(room_str: str) -> str:

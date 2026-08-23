@@ -3,8 +3,8 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from utils.loaders import REGISTRY, load
-from utils.models import Building
+from scene_graph.loaders import REGISTRY, load
+from scene_graph.models import Building
 
 
 class NotApplicable(Exception):

@@ -1,4 +1,4 @@
-from utils.models import Building
+from scene_graph.models import Building
 
 
 def has_multiroom_layout(b: Building) -> bool:

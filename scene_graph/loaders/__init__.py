@@ -1,8 +1,8 @@
-from utils.loaders.base import DatasetLoader
-from utils.loaders.gibson import GibsonLoader
-from utils.loaders.procthor import ProcTHORLoader
-from utils.loaders.threerscan import ThreeRScanLoader
-from utils.models import Building
+from scene_graph.loaders.base import DatasetLoader
+from scene_graph.loaders.gibson import GibsonLoader
+from scene_graph.loaders.procthor import ProcTHORLoader
+from scene_graph.loaders.threerscan import ThreeRScanLoader
+from scene_graph.models import Building
 
 REGISTRY: dict[str, type[DatasetLoader]] = {
     "gibson": GibsonLoader,
