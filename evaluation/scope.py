@@ -81,39 +81,6 @@ from __future__ import annotations
 ALL_CAPS = {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
             "object_relations_raw", "object_relations_support", "object_relations_derived"}
 
-# Names that were once valid and are now errors. `json` was split into
-# json_pretty (the historical pretty serialization) and json_mini (the minified
-# ceiling). There is deliberately NO alias: the resume cache keys on
-# (question_id, representation, repetition), so a silent alias would let one logical
-# cell exist under two keys and quietly double a rep group in every mean.
-RETIRED_REPS: dict[str, str] = {
-    "json": "split into 'json_pretty' (historical pretty serialization) and "
-            "'json_mini' (the minified ceiling) on 2026-08-09",
-    # Whole-name entries, not parts: both parts of each concatenation are active
-    # single views, so only the assembled name is retired. Checkers match the full
-    # representation string as well as its "+"-parts for exactly this case.
-    "topology+metric_relations":
-        "retired 2026-08-11 and purged 2026-08-12; superseded as the ProcTHOR route "
-        "baseline by 'topology_metric', which carries {connectivity, metric_edges} "
-        "and is fact-matched to 'navigation' instead of being a channel superset",
-    "graph_digest+metric_relations":
-        "retired 2026-08-11 and purged 2026-08-12; the 'can salient views match the "
-        "ceiling?' question it probed belongs to 'synthesis', a curated single "
-        "document rather than a concatenation",
-    # Structure-presentation naming swap: the compositional pattern set by
-    # 'topology_metric' (topology + a channel) made the old pair's naming
-    # backwards -- bare 'topology' silently meant "topology + inventory", while the
-    # connectivity-only pole carried the suffix. Swapped so 'topology' is now the
-    # atomic connectivity representation (formerly 'topology_edges_only') and the
-    # old inventory-carrying 'topology' is 'topology_inventory'. Deliberately NOT
-    # retiring bare 'topology': that string is reused by the new pole, so a
-    # permanent guard entry for it would fail-close on every future run's
-    # legitimate data. This entry only tombstones the name that is truly gone.
-    "topology_edges_only":
-        "renamed to 'topology' on 2026-08-20 as part of a structure-presentation "
-        "naming swap; see 'topology_inventory' for the old bare 'topology'",
-}
-
 REP_CAPS: dict[str, set[str]] = {
     "inventory":        {"inventory"},
     "topology_inventory": {"inventory", "connectivity"},
@@ -180,7 +147,10 @@ REP_CAPS: dict[str, set[str]] = {
     # two ways, so they carry exactly the same channels -- expressed by referencing
     # ALL_CAPS rather than restating it, so the two entries cannot drift apart.
     # json_mini is the ceiling (axes.CEILING); json_pretty is the raw pole of the
-    # json_formatting ablation. The bare name `json` is retired -- see RETIRED_REPS.
+    # json_formatting ablation. The bare name `json` is gone: no REP_CAPS entry,
+    # and deliberately no alias, so a strict run aborts instead of resolving it to
+    # either view (the resume cache keys on representation, so an alias would let
+    # one logical cell exist under two keys and quietly double a rep group).
     "json_mini":        set(ALL_CAPS),
     "json_pretty":      set(ALL_CAPS),
     # synthesized best-of-axes default: prose backbone + derived connectivity
@@ -278,26 +248,14 @@ def validate_declared(reps: set[str], qtypes: set[str | None]) -> None:
     """Fail-closed check for final runs: raise if any representation part or
     question type would fall through to the fail-open defaults.
 
-    A combo ("a+b") is checked part-by-part AND under its full assembled name --
-    the retired concatenations are built from parts that are themselves active, so
-    a part-only check would wave them straight through. A missing/None question
-    type counts as undeclared: fail-open never filters it, so in a strict run every
-    question must carry a type with a TYPE_NEEDS entry.
+    A combo ("a+b") is checked part by part. A missing/None question type counts as
+    undeclared: fail-open never filters it, so in a strict run every question must
+    carry a type with a TYPE_NEEDS entry.
     """
     problems: list[str] = []
     for rep in sorted(reps):
-        if "+" in rep and rep in RETIRED_REPS:
-            problems.append(
-                f"representation {rep!r} is RETIRED: {RETIRED_REPS[rep]}. "
-                f"Name the replacement explicitly -- there is no alias, on purpose"
-            )
         for part in rep.split("+"):
-            if part in RETIRED_REPS:
-                problems.append(
-                    f"representation {part!r} (from {rep!r}) is RETIRED: {RETIRED_REPS[part]}. "
-                    f"Name the replacement explicitly -- there is no alias, on purpose"
-                )
-            elif part not in REP_CAPS:
+            if part not in REP_CAPS:
                 problems.append(f"representation {part!r} (from {rep!r}) has no REP_CAPS entry")
     for qt in sorted(qtypes, key=lambda t: t or ""):
         if not qt:

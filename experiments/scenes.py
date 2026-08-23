@@ -8,8 +8,8 @@ of truth for the per-scene rep set -- run_experiments.py reads it, so the list
 lives here and nowhere else.
 
 No scene declares an "a+b" combo any more, and the two that once existed are named
-in scope.RETIRED_REPS, so declaring one again aborts the run (see the retirement
-note below the ProcTHOR list). The loader still parses the syntax; that path is now
+gone from REP_CAPS, so declaring one again aborts a strict run (see the note below
+the ProcTHOR list). The loader still parses the syntax; that path is now
 unexercised by the study.
 
 Each Scene also carries a `role` -- the pool it may enter when results are POOLED.
@@ -74,7 +74,7 @@ _PROCTHOR_REPS = [
     "inventory", "topology_inventory", "topology", "room_tree", "graph_digest",
     # json_mini is the ceiling; json_pretty is the same content pretty-printed, kept
     # as the formatting ablation's raw pole (axes.json_formatting). The bare name
-    # `json` is retired -- scope.RETIRED_REPS aborts any run that still names it.
+    # The bare name `json` is gone; name json_pretty or json_mini explicitly.
     "prose", "metric_relations", "navigation", "json_mini", "json_pretty", "synthesis",
     # The matched counterpart to `navigation` on route/direction: the door graph
     # with per-edge metric, in locative framing. Carries exactly navigation's
@@ -95,8 +95,8 @@ _PROCTHOR_REPS = [
 # all three ProcTHOR scenes under the Gemini judge. Those 242 rows have been
 # DELETED from experiments/results/ (one raw copy is kept under
 # experiments/backups/). No reporting, plotting or test path is combo-aware any
-# more, and both names are declared in scope.RETIRED_REPS, so re-declaring one
-# aborts the run instead of quietly re-entering the analysis.
+# more, and neither name has a REP_CAPS entry, so re-declaring one aborts a strict
+# run instead of quietly re-entering the analysis.
 #
 # Why they went: the only comparison that REQUIRED a concatenation was the
 # ProcTHOR route baseline, because no single view carried connectivity and

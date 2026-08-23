@@ -34,8 +34,8 @@ CANDIDATE = "synthesis"
 # Multi-view combinations (`topology+metric_relations`, `graph_digest+metric_relations`)
 # are retired and purged: their rows are gone, and so is every reporting role, table
 # and plot branch that filed them. Nothing here is combo-aware, because nothing is
-# left to be aware of. The names are declared in scope.RETIRED_REPS so a reappearance
-# aborts rather than being silently reported as a pole.
+# left to be aware of. Neither name has a REP_CAPS entry, so a strict run aborts
+# rather than reporting one as a pole.
 #
 # They went because no distinct research question required a concatenation any
 # more. The one that did was the ProcTHOR route baseline -- a route question needs
@@ -214,7 +214,7 @@ AXES: list[Axis] = [
     # the primary scenes), so the pair was never fact-matched -- see
     # metric_relations_parser.py's docstring for the corrected account.
     # `metric_relations` itself is unchanged and unretired: it keeps its
-    # spatial-encoding role (`metric_rung` above) and is not in scope.RETIRED_REPS.
+    # spatial-encoding role (`metric_rung` above) and is still an active view.
     # This is a PAIRING retirement, not a representation retirement.
     #
     # The replacement pairing is `metric_framing` (metric_framing_parser.py, a

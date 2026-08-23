@@ -49,7 +49,6 @@ experiments/         Run configuration and drivers.
   scenes.py          scene registry — which scenes, which QA file, which reps
   run_experiments.py runs the responder x scene matrix
   aggregate_results.py  pools per-scene results and redraws the charts
-  check_retired_reps.py fail-closed guard against stale representation names
   qa/<scene>/keyfact-qa.jsonl   the authored questions and their key facts
 
 thesis/              LaTeX sources.
@@ -114,7 +113,6 @@ regeneration. Also useful: `--reps`, `--types`, `--generate-only`.
 ```bash
 python -m experiments.aggregate_results                 # every model found
 python -m experiments.aggregate_results --models qwen2.5-14b
-python -m experiments.check_retired_reps --scope all    # guard: stale rep names
 ```
 
 Both write into `experiments/results/`; `aggregate_results` also regenerates `report.md` and
