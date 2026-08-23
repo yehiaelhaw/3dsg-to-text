@@ -16,7 +16,7 @@ Each Scene also carries a `role` -- the pool it may enter when results are POOLE
 It is a property of the study design, not of the data, so it lives here and not in a
 directory name: `aggregate_results.py` reads it, `axes.dataset_of()` never sees it,
 and a non-primary scene keeps its ordinary `3rscan_*` directory so it still resolves
-to its host dataset. See docs/3RSCAN_SCENE_SELECTION.md S7.
+to its host dataset.
 """
 from __future__ import annotations
 
@@ -89,14 +89,14 @@ _PROCTHOR_REPS = [
     "narrative",
 ]
 
-# COMBOS ARE RETIRED AND PURGED (retired 2026-08-11, rows deleted 2026-08-12).
+# COMBOS ARE RETIRED AND PURGED.
 #
 # `topology+metric_relations` and `graph_digest+metric_relations` were scored on
 # all three ProcTHOR scenes under the Gemini judge. Those 242 rows have been
-# DELETED from experiments/results/ (one raw copy sits outside the active tree, in
-# experiments/backups/combo-purge-2026-08-12/). No reporting, plotting or test path
-# is combo-aware any more, and both names are declared in scope.RETIRED_REPS, so
-# re-declaring one aborts the run instead of quietly re-entering the analysis.
+# DELETED from experiments/results/ (one raw copy is kept under
+# experiments/backups/). No reporting, plotting or test path is combo-aware any
+# more, and both names are declared in scope.RETIRED_REPS, so re-declaring one
+# aborts the run instead of quietly re-entering the analysis.
 #
 # Why they went: the only comparison that REQUIRED a concatenation was the
 # ProcTHOR route baseline, because no single view carried connectivity and
@@ -124,12 +124,12 @@ SCENES: list[Scene] = [
     #
     # The primary trio is an even sparse -> medium -> dense gradient in post-filter
     # relation count (321 -> 647 -> 1304; consecutive ratios 2.016x / 2.015x), selected
-    # under the frozen pre-response gates in docs/3RSCAN_SCENE_SELECTION.md. It
+    # under gates frozen before any response was generated. It
     # replaced the old trio, whose two dense scenes sat close together (1501 vs 1541)
     # and whose json_mini ceiling could not be scored on either of them.
     #
-    # Medium scene amended 2026-08-16 (docs/3RSCAN_SCENE_SELECTION.md S2.1, still
-    # pre-responder): 38770ca1 -> 1d2f8518. 38770ca1's door-state relations were
+    # Medium scene amended (still pre-responder): 38770ca1 -> 1d2f8518.
+    # 38770ca1's door-state relations were
     # internally contradictory (all 7 door pairs asserted both "more open" and "more
     # closed" between the same pair) -- rank 13/1335 worst in the corpus under the new
     # G5 gate. 1d2f8518 is the G1-G5/P1-P4 argmin of the medium band, zero
@@ -139,7 +139,7 @@ SCENES: list[Scene] = [
     Scene("3rscan_0cac762f", _qa("3rscan_0cac762f"), None, role=PRIMARY),
 
     # Non-primary, kept for the two reporting artifacts defined in
-    # docs/3RSCAN_SCENE_SELECTION.md S6. Both fail G1 (json_mini context headroom):
+    # Both fail G1 (json_mini context headroom):
     # 7f30f36c overflows the window outright (32,907 / 36,783 tokens against a 32,512
     # budget), d7d40d62 fits with 2,202 tokens = 6.7% of num_ctx, under the 12% bar.
     # They keep their ordinary 3rscan_* ids on purpose -- role is carried here, never

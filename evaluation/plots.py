@@ -725,8 +725,8 @@ CEILING_PREMIUM_EXCLUDED = {
     FLOOR:         "the no-information control, not a derived view",
     # Temporary, not permanent like the four above: navigation's rendered prompt on
     # ProcTHOR (and, via the retired Spatial-anchoring pairing, on Gibson) changed
-    # under the 2026-08-21 block-layout fix (thesis Sec. 6.3.3), and results.csv has
-    # not been regenerated against the corrected prompt yet. Excluding it here keeps
+    # under the block-layout fix (thesis Sec. 6.3.3), and results.csv has not been
+    # regenerated against the corrected prompt yet. Excluding it here keeps
     # the ceiling-premium/cost-quality reporting from presenting a stale value as a
     # current best-observed result. Remove this entry once the fresh ProcTHOR and
     # Gibson reruns are filled, judged, and folded into results.csv.
@@ -1223,10 +1223,10 @@ def plot_aggregate(aggregate_path: Path) -> None:
     # single combined axis card and any per-axis card whose axis lost its data.
     stale = ["ac_comparison.png", "faithfulness_comparison.png", "ac_delta.png",
              "ac_lift_over_floor.png", "axis_cards.png",
-             # The host-pooled predecessors of the three per-host charts above
-             # (2026-08-14). Deleted rather than left beside them: they are the same
-             # chart under a shorter name, and the shorter name is the one a stale
-             # reference would still resolve to.
+             # The host-pooled predecessors of the three per-host charts above.
+             # Deleted rather than left beside them: they are the same chart under
+             # a shorter name, and the shorter name is the one a stale reference
+             # would still resolve to.
              "ac_by_axis.png", "value_of_spatial_structure.png", "ac_heatmap.png"]
     stale += [p.name for p in out_dir.glob("axis_card_*.png") if p.name not in written_cards]
     # ...and any per-host figure whose host lost its data since the last run.

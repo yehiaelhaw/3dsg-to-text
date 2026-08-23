@@ -12,7 +12,7 @@ not an egocentric/allocentric flip.
 
 BLOCK LAYOUT IS MATCHED TO THE COUNTERPART, ON PURPOSE
 -------------------------------------------------------
-Until 2026-08-21 this view joined a room's neighbours into one semicolon-joined
+This view once joined a room's neighbours into one semicolon-joined
 sentence ("From X you can walk to: A (..); B (..)."), while `topology_metric`/
 `metric_framing` used a header line plus one indented clause per neighbour. That
 was an accidental structural confound, not a framing choice -- a design review

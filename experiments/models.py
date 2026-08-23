@@ -11,24 +11,17 @@ be the model's representative (modal) answer. Standard instruction families use
 greedy decoding (temperature 0); reasoning models that degrade at 0 use their
 recommended floor (deepseek-r1 ~0.6, kept to its own branch ablation).
 
-MODEL_PROFILES below is the committed responder set for the study: qwen2.5-14b
-(primary, full matrix), mistral-nemo-12b (second responder, headline cells --
-selection rationale in docs/METHODOLOGY.md 3.6); the remaining profiles are
-contingency/ablation options (llama3.1-8b dormant third point, qwen2.5-32b
-upper scale rung, deepseek-r1-14b reasoning-branch ablation) that run only
-when their trigger conditions are met.
+MODEL_PROFILES below is the committed responder set: qwen2.5-14b (primary, full
+matrix) and mistral-nemo-12b (second responder, headline cells); the rest are
+contingency/ablation options that run only when their trigger conditions are met.
 
-Naming convention: a `_screening` suffix means the profile's directory is
-judged by gemma2:9b and nothing else; a bare name means it is Gemini-judged
-(confirmatory). The suffix is the directory's judge tier made visible, so the
-one-judge-per-directory invariant is readable from `ls` rather than only from
-the `judge` column. Renamed 2026-08-10: qwen2.5-7b, qwen2.5-32b and
-deepseek-r1-14b were always screening-only but carried bare names, which read
-as if they held confirmatory numbers. If any of them is later promoted under
-the METHODOLOGY 3.6 contingency rule, the Gemini pass gets a NEW bare-named
-profile/directory -- never a second judge in the `_screening` one. llama3.1-8b
-keeps a bare name because it is dormant and its tier is undecided; give it a
-suffix at the moment it is activated at screening tier.
+Naming convention: a `_screening` suffix means the profile's directory is judged
+by gemma2:9b and nothing else; a bare name means it is Gemini-judged
+(confirmatory). The suffix makes the one-judge-per-directory invariant readable
+from `ls` rather than only from the `judge` column. If a screening profile is
+later promoted, the Gemini pass gets a NEW bare-named profile/directory -- never a
+second judge in the `_screening` one. llama3.1-8b keeps a bare name because it is
+dormant and its tier is undecided.
 """
 from __future__ import annotations
 
@@ -43,31 +36,25 @@ class ModelProfile:
     options: dict = field(default_factory=dict)
 
 
-# Remote ollama endpoints -- university GPU servers reached over an SSH local
-# port-forward (run scripts/ssh_tunnel.ps1 before launching a run that uses
-# these hosts). Replaces the previous Kaggle+ngrok setup.
-#   _VOXEL -> voxel.nes, RTX 3090  24GB VRAM
-#   _PIXEL -> pixel.nes, RTX 5070 Ti 16GB VRAM
+# Remote ollama endpoints -- GPU servers reached over an SSH local port-forward,
+# which must be up before a run that uses them.
+#   _VOXEL -> RTX 3090, 24GB VRAM
+#   _PIXEL -> RTX 5070 Ti, 16GB VRAM
 #
-# 2026-08-08: every profile is pinned to _VOXEL because a third-party job
-# (Hunyuan3D gradio_app, running as root) holds ~14 of pixel's 16 GB. Ollama
-# does not refuse to serve a card that full -- it loads the model into system
-# RAM instead and keeps answering ~150x slower (measured 0.35 tok/s vs 54
-# tok/s), which presents as a hung run rather than an error. _PIXEL is kept
-# defined so profiles can be moved back one constant at a time once that job
-# ends; check free VRAM first with:
-#   ssh pixel.nes "nvidia-smi --query-compute-apps=pid,used_memory,process_name --format=csv"
+# Every profile is pinned to _VOXEL: _PIXEL's card is contended by another job.
+# Check free VRAM before moving one back -- ollama does not refuse a card that is
+# too full, it silently falls back to system RAM and answers ~150x slower, which
+# presents as a hung run rather than an error.
 _VOXEL = "http://localhost:11434"
-_PIXEL = "http://localhost:11435"  # currently unusable -- see note above
+_PIXEL = "http://localhost:11435"  # unused -- see above
 
 MODEL_PROFILES: list[ModelProfile] = [
     # --- standard instruction families: greedy decoding (temperature 0) ---
-    # (placeholders -- replace with the families you intend to compare)
     ModelProfile("qwen2.5-14b", "ollama", "qwen2.5:14b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     # Scale rung below the primary: with 14b/32b it forms the within-family
     # scale curve (screening-tier ablation; confirmatory only per the
-    # METHODOLOGY 3.6 contingency rule).
+    # contingency rule).
     ModelProfile("qwen2.5-7b_screening", "ollama", "qwen2.5:7b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     # 32B fits voxel only (Q4 weights ~20GB); 32k-token KV cache spills past
@@ -77,45 +64,33 @@ MODEL_PROFILES: list[ModelProfile] = [
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     ModelProfile("llama3.1-8b", "ollama", "llama3.1:8b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
-    # Second responder for the headline-cell robustness check (METHODOLOGY
-    # 3.6): dense 12B scale-matched to qwen2.5-14b, lineage-independent of
-    # responder and both judges, 128k native window so the matched num_ctx
-    # stays inside it. llama3.1-8b above is the dormant third point (scale
-    # read, only if nemo diverges from qwen on a headline cell). This
-    # profile's directory is judged by Gemini only (confirmatory) -- never
-    # run it with --score-only under a different judge; use the profile
-    # below for anything screening-tier.
-    # Host moved _PIXEL -> _VOXEL 2026-08-08: a long-running third-party job
-    # (Hunyuan3D gradio_app) pinned ~14 of pixel's 16 GB, leaving too little
-    # VRAM to load this model -- ollama silently fell back to ~97% CPU offload
-    # (0.3 of 10.3 GB resident) and generation slowed ~50-100x, which reads as
-    # a hung run rather than an error. Move back to _PIXEL once that card frees.
+    # Second responder for the headline-cell robustness check: dense 12B
+    # scale-matched to qwen2.5-14b, lineage-independent of the responder and both
+    # judges, 128k native window so the matched num_ctx stays inside it.
+    # llama3.1-8b above is the dormant third point (scale read, only if nemo
+    # diverges from qwen on a headline cell). This directory is judged by Gemini
+    # only -- never run it with --score-only under a different judge; use the
+    # profile below for anything screening-tier.
     ModelProfile("mistral-nemo-12b", "ollama", "mistral-nemo:12b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
-    # Same tag/host as mistral-nemo-12b above but a distinct profile name/directory
-    # (results/mistral-nemo-12b_screening/) -- the second responder's
-    # screening-tier coverage-gap fill (scripts/run_ablation_responders.ps1),
-    # kept separate so the Gemini-confirmatory mistral-nemo-12b directory is
-    # never mixed with gemma2:9b-judged rows (one judge per directory).
+    # Same tag/host as mistral-nemo-12b above but a distinct profile name and
+    # directory -- the second responder's screening-tier coverage-gap fill, kept
+    # separate so the Gemini-confirmatory mistral-nemo-12b directory is never
+    # mixed with gemma2:9b-judged rows (one judge per directory).
     ModelProfile("mistral-nemo-12b_screening", "ollama", "mistral-nemo:12b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
 
-    # --- judge-tier validation (2026-08-17): NOT new responder points. Same
-    # backend/model/options as mistral-nemo-12b above -- these exist only to
-    # re-judge that profile's already-generated responses.jsonl (duplicated
-    # verbatim into each directory below) under a different judge, via
-    # --score-only. Neither follows the bare/`_screening` naming convention
-    # above, because neither is a confirmatory RESULT directory: both are
-    # diagnostics for evaluation/results.py's judge-agreement analysis
-    # (project_judge_tier_disagreement memory) and are never read by
+    # --- judge-tier validation: NOT new responder points. Same backend/model/
+    # options as mistral-nemo-12b above -- these exist only to re-judge that
+    # profile's already-generated responses.jsonl (duplicated verbatim into each
+    # directory below) under a different judge, via --score-only. Neither follows
+    # the bare/`_screening` convention above, because neither is a confirmatory
+    # RESULT directory: both are judge-agreement diagnostics, never read by
     # aggregate_results.py or cited as a study result.
-    #   _gemini2 -- same judge (gemini-2.5-flash), second draw, temperature 0.
-    #               Isolates same-judge non-determinism: any verdict that
-    #               moves here moves for reasons that have nothing to do with
-    #               which judge was used.
-    #   _gpt41   -- different vendor (openai gpt-4.1), tier-matched to
-    #               gemini-2.5-flash on cost/capability. Isolates cross-vendor
-    #               judge disagreement.
+    #   _gemini2 -- same judge (gemini-2.5-flash), second draw. Isolates
+    #               same-judge non-determinism.
+    #   _gpt41   -- different vendor (openai gpt-4.1), tier-matched on
+    #               cost/capability. Isolates cross-vendor judge disagreement.
     ModelProfile("mistral-nemo-12b_gemini2", "ollama", "mistral-nemo:12b",
                  {"host": _VOXEL, "num_ctx": 32768, "temperature": 0}),
     ModelProfile("mistral-nemo-12b_gpt41", "ollama", "mistral-nemo:12b",

@@ -7,7 +7,7 @@ separation table that decides every axis verdict. It is regenerated
 from `results.csv` on every run/aggregation alongside the PNGs, so it never goes
 stale, and it is the seed for publication tables at thesis-writing time.
 
-Design rules enforced here (thesis 4.6 `sec:meth-analysis`; METHODOLOGY 3.5/3.7):
+Design rules enforced here (thesis 4.6 `sec:meth-analysis`):
 - No `ALL/ALL` grand mean is ever surfaced; every number is within one question
   type, and axis cards are within one host dataset (no cross-dataset pooling).
 - Axis cards are floor/ceiling-anchored and ladder-ordered (evaluation/axes.py).
@@ -291,8 +291,8 @@ def _planning_section(rows: list[dict]) -> list[str]:
     incompatible scopes.
 
     No filtering is needed here any more: the multi-view combos this table once had
-    to exclude by name were purged from the results tree on 2026-08-12, so every rep
-    reaching this point is part of the design."""
+    to exclude by name were purged from the results tree, so every rep reaching this
+    point is part of the design."""
 
     def order(cells, rep):
         """Floor first, then the poles, then the ceiling -- and within the poles the
@@ -1092,9 +1092,9 @@ def _cross_section(rows: list[dict], results_path: Path,
     boundary.
 
     *One judge per comparison.* A directory under a different judge is refused and
-    the refusal is printed. `feedback_one_judge_per_directory` keeps judges out of a
-    single directory; the same confound reappears across directories the moment two
-    are compared, and a judge change is not a responder change.
+    the refusal is printed. The one-judge-per-directory rule keeps judges from
+    mixing inside a directory; the same confound reappears across directories the
+    moment two are compared, and a judge change is not a responder change.
 
     *Matched evidence.* A comparison is read only where both responders averaged
     over the SAME scenes. Otherwise a disagreement could come from the responder or
@@ -1313,8 +1313,8 @@ def _small_n_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
             + _table(["rep", "type", "n", "AC"], trows) + [""])
 
 
-# The multi-view-combination section that used to sit here was deleted on
-# 2026-08-12 along with the rows it printed. It rendered an ungraded
+# The multi-view-combination section that used to sit here was deleted along with
+# the rows it printed. It rendered an ungraded
 # difference-of-means table for the two concatenated views; those were superseded
 # as a route baseline by `topology_metric` (fact-matched to `navigation` rather
 # than a channel superset of it) and are no longer part of the study.

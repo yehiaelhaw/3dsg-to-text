@@ -30,11 +30,10 @@ and derived tier, once each:
     standalone `relations_digest` view, appended after prose's raw per-object
     section the same way graph_digest's global facts sit alongside
     topology_inventory's local adjacency: raw triples (specific-pair lookups) + derived structure
-    (chain-depth/cluster/census lookups), not a restatement. Added 2026-07-14 --
-    until then this section was missing and `synthesis` silently under-performed
-    `relations_digest` on both derived-tier types with no way to close the gap;
-    see `evaluation/scope.py`'s `synthesis` entry for the scope-model side of
-    that correction.
+    (chain-depth/cluster/census lookups), not a restatement. Without this section
+    `synthesis` silently under-performs `relations_digest` on both derived-tier
+    types with no way to close the gap; see `evaluation/scope.py`'s `synthesis`
+    entry for the scope-model side of that correction.
 
 Egocentric routing (`navigation`) is deliberately *excluded*. Its edge on
 direction/route comes from the first-person reference frame, which cannot be

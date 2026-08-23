@@ -31,7 +31,7 @@ def _compact_for_resume(path: Path) -> None:
     a retried cell ends up in the CSV twice (the stale error row plus the fresh
     scored one), and since no downstream aggregation dedups by key, coverage
     reads below 100% forever after the retry already succeeded (observed on
-    3rscan_7f30f36c synthesis, 2026-07-15). Two rules, preserving file order:
+    3rscan_7f30f36c synthesis). Two rules, preserving file order:
       1. last write wins per (question_id, representation, repetition);
       2. real error rows are dropped -- they are exactly the rows the resumed
          run is about to re-attempt (and re-append if they fail again).
@@ -40,7 +40,7 @@ def _compact_for_resume(path: Path) -> None:
     Fails loudly rather than compacting if the header doesn't match CSV_COLUMNS:
     DictReader treats whatever is in row 1 as the fieldnames unconditionally, so
     a file that has already lost its header (observed on
-    qwen2.5-7b_screening/3rscan_0cac762f, 2026-08-16 -- interrupted mid-run)
+    qwen2.5-7b_screening/3rscan_0cac762f -- interrupted mid-run)
     would otherwise have its first data row silently adopted as the header and
     rewritten that way, cementing the corruption on every subsequent resume.
     """
@@ -192,7 +192,7 @@ def _compute_aggregate(rows: list[dict]) -> list[dict]:
     # context-exceeded counts, throughput), NOT a quality score: it pools floor +
     # ceiling, in/out-of-scope, every type and dataset, so its AC mean answers no
     # research question. report.py never surfaces it; read within a type instead
-    # (METHODOLOGY 3.5 / 5.6).
+    # within one question type.
     out.append(_group_row("ALL", "operational-total", rows))
     return out
 
@@ -264,7 +264,7 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
         "context_exceeded":        context_exceeded,
         "n_scored":                n_scored,
         # coverage = scored fraction; a cell below ~0.8 has a survivorship-biased
-        # mean (see report.py / METHODOLOGY 3.5) and must not be ranked on AC alone.
+        # mean (see report.py) and must not be ranked on AC alone.
         "coverage":                f"{n_scored / n:.4f}" if n else "",
         "faithfulness_mean":       mean_of(fth),
         "faithfulness_std":        std_of(fth),

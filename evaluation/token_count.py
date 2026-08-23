@@ -7,7 +7,7 @@ above it), but loose enough that a prompt had to be ~36% past the window before
 it tripped. Everything between 100% and 136% was sent anyway and had to be
 caught after the fact — and the post-call guard cannot be relied on there,
 because an overflowing prompt is exactly the case where this server misreports
-`prompt_eval_count` (see the 16,386 signature in METHODOLOGY 2.4).
+`prompt_eval_count` (the 16,386 signature).
 
 This module closes that gap by tokenizing the prompt locally with the *same*
 tokenizer the server uses, so the pre-call number is not an estimate.

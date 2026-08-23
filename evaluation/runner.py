@@ -154,9 +154,8 @@ def generate_responses(config: EvalConfig) -> Path:
                 # Skip cells this rep structurally cannot answer -- except the
                 # no-information control (inventory), which is deliberately posed
                 # the spatial questions it cannot answer so its prior-driven
-                # guessing forms the spatial-encoding floor (see METHODOLOGY 3.1.1).
-                # Without
-                # this exemption inventory is never scored on the spatial types and
+                # guessing forms the spatial-encoding floor. Without this exemption
+                # inventory is never scored on the spatial types and
                 # value_of_spatial_structure.png cannot populate.
                 if (config.scope_filter
                         and representation != "inventory"
@@ -203,12 +202,11 @@ def generate_responses(config: EvalConfig) -> Path:
         responder.unload()
     print(f"PHASE 1/2  done — {n_new} generated, {n_err} errored, "
           f"{n_ctx} context-exceeded, {n_skip} already cached\n")
-    # A phase where EVERY attempt errored must not exit 0. It did until
-    # 2026-08-13, so the 2026-08-12 topology_metric run reported "[ok]" and
-    # "FILL COMPLETE" for three responders whose model was not on the host and
-    # which produced 234 errors and zero rows -- indistinguishable from a clean
-    # run to any caller reading the exit code. Errors alongside successes stay
-    # non-fatal (resume re-attempts them); a total wipeout is a setup fault.
+    # A phase where EVERY attempt errored must not exit 0. It once did, so a run
+    # against three responders whose model was not on the host reported "[ok]"
+    # for 234 errors and zero rows -- indistinguishable from a clean run to any
+    # caller reading the exit code. Errors alongside successes stay non-fatal
+    # (resume re-attempts them); a total wipeout is a setup fault.
     if n_err and not n_new and not n_ctx:
         raise RuntimeError(
             f"generation produced no rows: all {n_err} attempted cells errored "

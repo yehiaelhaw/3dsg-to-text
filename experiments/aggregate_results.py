@@ -8,17 +8,17 @@ evaluation/plots.py -- so the cross-scene views are identical in form to the
 per-scene ones, just pooled over more questions.
 
 Pooling is **per dataset** because each dataset hosts a different representation
-set and different question types (METHODOLOGY 1.2); pooling across datasets would
+set and different question types; pooling across datasets would
 average incomparable rep sets. A combined "all" group is also written for a global
 overview -- scope-masking keeps out-of-scope cells blank, but read it with the
-ALL-row caveat (METHODOLOGY 5.6): compare within a question type, not across.
+ALL-row caveat: compare within a question type, not across.
 
 Only scenes whose registry role is `primary` are pooled (scenes.PRIMARY_SCENE_IDS).
 A `stress` or `sensitivity` scene keeps its own per-scene results.csv/report.md and
 is reachable through --nonprimary, but it never enters a primary group -- its
 results answer a different question (an operational limit, or how much the verdict
 set depends on scene choice) and pooling it would put it inside axis verdicts and
-headline counts. See docs/3RSCAN_SCENE_SELECTION.md S6/S7. Role lives in the
+headline counts. Role lives in the
 registry, never in a directory name, so axes.dataset_of() still resolves an
 excluded scene to its host dataset.
 
@@ -51,7 +51,7 @@ OUTPUT_ROOT = Path("experiments/results")
 AGG_DIRNAME = "_aggregate"
 NONPRIMARY_PREFIX = "nonprimary_"
 
-# Every dataset hosts exactly three primary scenes (METHODOLOGY 1.2), and scene is
+# Every dataset hosts exactly three primary scenes, and scene is
 # the unit of replication for the separation rule. A per-dataset group built from
 # fewer than three is a TRANSITION STATE -- mid scene substitution, or a run that
 # only reached some scenes -- and writing it would silently replace a full report

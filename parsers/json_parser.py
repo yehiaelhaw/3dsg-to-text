@@ -2,7 +2,7 @@
 
 This module builds the object (`parse`) and offers both serializations of it
 (`to_json_string`, `to_json_mini_string`), but it is no longer a runnable parser:
-the bare name `json` was retired on 2026-08-09 and the two shipped views are
+the bare name `json` is retired and the two shipped views are
 `json_pretty_parser` and `json_mini_parser`. Keeping the single `parse` here is
 what makes them content-identical by construction rather than by convention.
 """

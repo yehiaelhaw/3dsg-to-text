@@ -22,7 +22,7 @@ from typing import NamedTuple
 # The candidate (synthesis) answers a *different* question than the axis poles, so
 # it is reported in its own tables, never mixed into a card.
 FLOOR = "inventory"
-# The complete-information anchor of the primary ladder, minified (2026-08-09).
+# The complete-information anchor of the primary ladder, minified.
 # CEILING bounds what a derived view can *express*, not what can score highest:
 # json_pretty carries identical information and is graded against it on the
 # json_formatting cards. Minifying is a cost-accounting correction -- the ceiling's
@@ -32,12 +32,10 @@ CEILING = "json_mini"
 CANDIDATE = "synthesis"
 
 # Multi-view combinations (`topology+metric_relations`, `graph_digest+metric_relations`)
-# were retired from the argument on 2026-08-11 and PURGED from the results tree on
-# 2026-08-12: their rows are gone, and so is every reporting role, table and plot
-# branch that existed to file them. There is no archived heading any more, and no
-# `ARCHIVED_COMBOS` list -- nothing here is combo-aware, because nothing is left to
-# be aware of. The names are declared in scope.RETIRED_REPS so a reappearance aborts
-# rather than being silently reported as a pole.
+# are retired and purged: their rows are gone, and so is every reporting role, table
+# and plot branch that filed them. Nothing here is combo-aware, because nothing is
+# left to be aware of. The names are declared in scope.RETIRED_REPS so a reappearance
+# aborts rather than being silently reported as a pole.
 #
 # They went because no distinct research question required a concatenation any
 # more. The one that did was the ProcTHOR route baseline -- a route question needs
@@ -168,7 +166,7 @@ class Axis:
         return ""
 
 
-# The order/content mirrors METHODOLOGY 1 and AXIS_CONTRAST. The retracted density
+# The retracted density
 # and source-fidelity axes (see those docs) are intentionally absent -- with named
 # axes there is no letter gap to explain. The spatial-encoding axis is a ladder, not
 # a single contrast pair, so it carries no headline_pair (its result is read as lift
@@ -208,7 +206,7 @@ AXES: list[Axis] = [
               "prose keeps its readings elsewhere: the Gibson content_verbosity "
               "exhibit, the relation-linearization family, planning, and as the "
               "synthesis backbone.)"),
-    # RETIRED (2026-08-21): this slot used to hold "Spatial anchoring", pairing
+    # RETIRED: this slot used to hold "Spatial anchoring", pairing
     # `metric_relations` directly against `navigation` on Gibson under the premise
     # that the two differ only in anchoring/frame. A design review found that
     # false: `metric_relations` additionally carries a per-room object inventory
@@ -256,8 +254,8 @@ AXES: list[Axis] = [
                   "re-cut and the matched within-fact-set comparison",
          confound_reps=("relations_digest",),
          confound_kind="vocabulary"),
-    # --- the framing axis (promoted 2026-08-21 from three separate ProcTHOR
-    # exhibits, consolidated into one formal axis) -----------------------------
+    # --- the framing axis (consolidated from three separate ProcTHOR exhibits
+    # into one formal axis) ---------------------------------------------------
     # NAMING: this used to be "route_presentation", which invited the reading that
     # one pole prints routes. NEITHER DOES. Both print the same one-hop doorway
     # adjacency and nothing else -- no path, no hop count, no summed distance. What
@@ -285,7 +283,7 @@ AXES: list[Axis] = [
     #   directories show. A separation here would NOT strengthen the route/direction
     #   readings below; it would mean the manipulation is doing something not
     #   attributed to it, and would need explaining before either is quoted.
-    #   DECLARED POST-HOC on 2026-08-13, after route/direction cells already existed
+    #   DECLARED POST-HOC, after route/direction cells already existed
     #   and were sitting unread (topology_metric carries the connectivity channel,
     #   so they were always in scope) -- disclose that wherever this reading is
     #   quoted; it is a power check on exhibits already run, not a preregistered
@@ -304,8 +302,8 @@ AXES: list[Axis] = [
     #   either direction and cannot be separated from it. Not a bound on the
     #   inversion's cost in either direction.
     #
-    # BLOCK LAYOUT WAS AN UNRELATED CONFOUND UNTIL 2026-08-21 and has since been
-    # removed: navigation used to join a room's neighbours into one semicolon-
+    # BLOCK LAYOUT WAS AN UNRELATED CONFOUND AND HAS SINCE BEEN REMOVED:
+    # navigation used to join a room's neighbours into one semicolon-
     # joined sentence, while topology_metric used a header line plus one indented
     # clause per neighbour. A design review found that structural mismatch had
     # nothing to do with the framing being studied, so navigation_parser.py was
@@ -400,19 +398,12 @@ AXES: list[Axis] = [
               "it carries channels the questions do not need, which is the superset "
               "confound this card exists without."),
     # --- formatting ablation: json_pretty vs the json_mini ceiling -------------
-    # Declared 2026-08-09 alongside the ceiling migration, BEFORE any json_mini
-    # cells existed, so neither outcome can be read post-hoc. The two members are
-    # the same parse() output under two serializations, so they are matched on
-    # every channel by construction -- hence no confound (confound_for exempts
-    # any pair containing CEILING anyway), and no headline_pair: a single-rung
-    # ladder plus the ceiling anchor already yields exactly the one pair, so a
-    # bar would restate the card.
-    #
-    # (That reason used to be joined by a second one -- AXIS_PAIRS dropped `host`,
-    # so axis_contrasts.png pooled every host and a bar here would have dragged
-    # 3RScan back in. AXIS_PAIRS now carries the host and the pair is filtered to
-    # it, so that hazard is gone; the restatement argument above is what still
-    # withholds the headline_pair.)
+    # Declared BEFORE any json_mini cells existed, so neither outcome can be read
+    # post-hoc. The two members are the same parse() output under two
+    # serializations, so they are matched on every channel by construction --
+    # hence no confound (confound_for exempts any pair containing CEILING
+    # anyway), and no headline_pair: a single-rung ladder plus the ceiling anchor
+    # already yields exactly the one pair, so a bar would restate the card.
     #
     # 3RScan is deliberately not hosted: json_pretty is CONTEXT_EXCEEDED on two of
     # its three scenes, so its coverage there falls under MIN_COVERAGE and the pair
@@ -480,7 +471,7 @@ AXIS_PAIRS = [
 
 
 def dataset_of(scene_id: str) -> str:
-    """Host dataset of a scene from its committed id (METHODOLOGY 1.2). Gibson
+    """Host dataset of a scene from its committed id. Gibson
     scenes are named Brinnon/Thrall/Donaldson, so anything not procthor_*/3rscan_*
     falls into gibson. Handles the pooled `scene_id` column (still the bare scene
     id; aggregate_results namespaces only `question_id`)."""

@@ -73,8 +73,7 @@ from __future__ import annotations
 #     basket[26]->bath cabinet[16]), so arbitrary non-highlighted support facts
 #     stay under object_relations_raw only. Any new question relying on
 #     relations_digest for a specific fact must still be verified against the
-#     actual printed text before being admitted, same as always (CLAUDE.md
-#     "Writing a QA dataset for a scene").
+#     actual printed text before being admitted.
 
 # Every channel there is. Defined before REP_CAPS so the full-information views can
 # reference it instead of restating the list: "identical content ⇒ identical
@@ -82,7 +81,7 @@ from __future__ import annotations
 ALL_CAPS = {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
             "object_relations_raw", "object_relations_support", "object_relations_derived"}
 
-# Names that were once valid and are now errors. `json` was split on 2026-08-09 into
+# Names that were once valid and are now errors. `json` was split into
 # json_pretty (the historical pretty serialization) and json_mini (the minified
 # ceiling). There is deliberately NO alias: the resume cache keys on
 # (question_id, representation, repetition), so a silent alias would let one logical
@@ -101,8 +100,8 @@ RETIRED_REPS: dict[str, str] = {
         "retired 2026-08-11 and purged 2026-08-12; the 'can salient views match the "
         "ceiling?' question it probed belongs to 'synthesis', a curated single "
         "document rather than a concatenation",
-    # Structure-presentation naming swap, 2026-08-20: the compositional pattern set
-    # by 'topology_metric' (topology + a channel) made the old pair's naming
+    # Structure-presentation naming swap: the compositional pattern set by
+    # 'topology_metric' (topology + a channel) made the old pair's naming
     # backwards -- bare 'topology' silently meant "topology + inventory", while the
     # connectivity-only pole carried the suffix. Swapped so 'topology' is now the
     # atomic connectivity representation (formerly 'topology_edges_only') and the
@@ -192,26 +191,19 @@ REP_CAPS: dict[str, set[str]] = {
     # direction/route -- the gap to navigation there is a result to measure, not a
     # cell to mask.
     #
-    # object_relations_derived history: this channel was an over-claim from
-    # 2026-07-14 to (same day) its fix. Briefly, synthesis's relations content was
-    # raw enumeration only (prose's section, reused verbatim) with none of
-    # relations_digest's guaranteed derived content (deepest-chain, top-N
-    # receptacles, proximity-cluster membership, relation-type census) -- yet the
-    # channel was claimed anyway. Root-caused to `parsers/synthesis_parser.py`
-    # (recovered after being briefly missing from disk) never having imported
-    # `relations_digest_parser`. Fixed by extracting `object_relations_digest`
-    # (relations_digest_parser.py, mirrors `graph_digest_parser.connectivity_digest`
-    # -- body without the head line, byte-identical to the standalone view) and
-    # folding it into `synthesis_parser.parse`, appended after the raw section
-    # (verified byte-identical `relations_digest` output; verified the fold-in
-    # does not restate prose's own "Shared attributes" clique rollup -- that
-    # trailing block is cut from the raw tier since the derived section always
-    # supplies it whenever both are present). Channel restored the same day.
-    # scene_contexts/*/synthesis.txt regenerated for all 9 scenes 2026-07-14.
-    # NB: `prose` also declares this channel. This used to be flagged here as an
-    # unreviewed over-claim of the same kind; re-checked 2026-08-06, it is not one,
-    # and the two cases are not the same kind of thing. The channel is declared by
-    # every view that states the triples exhaustively, because raw enumeration is
+    # object_relations_derived is earned, not assumed: `synthesis_parser.parse`
+    # folds in `relations_digest_parser.object_relations_digest` (the standalone
+    # view's body without its head line, byte-identical to it), appended after the
+    # raw section. Declaring the channel without that fold-in is an over-claim --
+    # prose's raw enumeration alone carries none of the guaranteed derived content
+    # (deepest chain, top-N receptacles, cluster membership, relation-type census).
+    # The fold-in deliberately does not restate prose's own "Shared attributes"
+    # clique rollup: that trailing block is cut from the raw tier, since the
+    # derived section always supplies it whenever both are present.
+    #
+    # NB: `prose` also declares this channel, and that is NOT the same kind of
+    # claim. The channel is declared by every view that states the triples
+    # exhaustively, because raw enumeration is
     # what makes the derived content derivable -- that is why relations_flat/
     # subject/predicate carry it (above), and prose enumerates the same way. The
     # synthesis defect was a BUILD defect, not a scope-convention question: the

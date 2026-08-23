@@ -11,8 +11,8 @@ two of that host's three scenes, so its coverage there falls below MIN_COVERAGE
 and the pair is not rank-eligible.
 
 **The shipped scene_contexts/<scene>/json_pretty.json files were NOT produced by
-this module.** They are the historical `json.json` artifacts, renamed in place on
-2026-08-09, and they are what every pre-migration run actually consumed. This
+this module.** They are the historical `json.json` artifacts, renamed in place,
+and they are what every pre-migration run actually consumed. This
 module exists so the two views cannot drift going forward, and as a reproducibility
 check: run it to a scratch path and diff against the shipped file after normalizing
 newlines. Do not regenerate the shipped file from it. `_base.run_parser` writes via
