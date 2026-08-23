@@ -66,9 +66,8 @@ from evaluation.scope import in_scope
 # --- the authored fact-set map ---------------------------------------------
 # `pair_id` is a property of the authored question, not of a run, so it is not a
 # results.csv column (see the comment on core.Question). It is joined here from the
-# QA files at analysis time -- the same (scene_id, question_id) join
-# experiments/scripts/backfill_question_style.py performs -- which keeps every
-# committed results.csv byte-identical.
+# QA files at analysis time, on (scene_id, question_id), which keeps every committed
+# results.csv byte-identical.
 #
 # It is used for exactly ONE thing: grouping the two members of a fact-set so their
 # register effects can be differenced. It never filters, never groups a table, and
@@ -76,7 +75,7 @@ from evaluation.scope import in_scope
 # before or during the matching exercise is history, not an experimental variable:
 # `natural` means natural and `constructed` means constructed regardless, and all
 # 134 scoped questions participate in every table.
-QA_ROOT = Path(__file__).resolve().parents[1] / "experiments" / "scripts"
+QA_ROOT = Path(__file__).resolve().parents[1] / "experiments" / "qa"
 QA_FILENAME = "keyfact-qa.jsonl"
 
 

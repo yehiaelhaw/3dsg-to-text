@@ -1,7 +1,7 @@
 """scenes.py -- the scene registry consumed by the evaluation matrix.
 
 Each Scene names a scene_contexts/<scene_id>/ directory, the QA file authored for
-it under experiments/scripts/<scene_id>/, and the representation set to score
+it under experiments/qa/<scene_id>/, and the representation set to score
 (None -> auto-discover every single file present; an explicit list is needed only
 to pin or exclude specific views). This is the single source
 of truth for the per-scene rep set -- run_experiments.py reads it, so the list
@@ -57,7 +57,7 @@ class Scene:
 
 
 def _qa(scene_id: str) -> str:
-    return f"experiments/scripts/{scene_id}/keyfact-qa.jsonl"
+    return f"experiments/qa/{scene_id}/keyfact-qa.jsonl"
 
 
 # ProcTHOR rep set (shared across its scenes for gradient comparability): the

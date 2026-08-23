@@ -453,8 +453,7 @@ def _score_one(rec: dict, config, judge, judge_tag, ctx_cache) -> EvalRecord:
         text=rec["question_text"],
         question_type=rec["question_type"],
         # .get: caches written before question_style existed carry no such key, and a
-        # score_only re-judge must still read them (the tag is backfilled into
-        # results.csv separately by experiments/scripts/backfill_question_style.py).
+        # score_only re-judge must still read them.
         question_style=rec.get("question_style"),
         key_facts=[KeyFact(fact=f["fact"], weight=f["weight"]) for f in rec.get("key_facts", [])],
     )

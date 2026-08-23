@@ -61,9 +61,8 @@ class Question:
     #
     # It is deliberately NOT in CSV_COLUMNS. It is a property of the authored
     # question, not of a run, so report.py joins it from the QA files on
-    # (scene_id, question_id) at analysis time -- the same join
-    # backfill_question_style.py performs. That keeps every committed results.csv
-    # byte-identical and avoids the mixed-fieldnames failure in
+    # (scene_id, question_id) at analysis time. That keeps every committed
+    # results.csv byte-identical and avoids the mixed-fieldnames failure in
     # aggregate_results._pool_rows, which takes fieldnames from the last scene it
     # reads and would reject rows carrying keys the header lacks.
     pair_id:        Optional[str] = None
