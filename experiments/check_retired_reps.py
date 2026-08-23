@@ -174,8 +174,6 @@ def assert_clean(root: Path, scope: str = "inputs", quiet: bool = False) -> None
     print("\nWhy this is retired:", file=sys.stderr)
     for name in sorted({k for _, h in bad for k in h}):
         print(f"  {name}: {RETIRED_REPS[name]}", file=sys.stderr)
-    print("\nMigrate with: python -m experiments.scripts.rename_json_representation",
-          file=sys.stderr)
     raise SystemExit(1)
 
 
