@@ -25,7 +25,7 @@ import traceback
 from pathlib import Path
 from typing import Iterator
 
-from evaluation import dataset, scene_loader, scope, token_count
+from evaluation import dataset, judging, scene_loader, scope, token_count
 from evaluation.config import EvalConfig
 from evaluation.core import (
     CONTEXT_EXCEEDED,
@@ -37,7 +37,6 @@ from evaluation.core import (
     is_context_exceeded,
 )
 from evaluation.llm.factory import create_provider
-from evaluation.metrics import context_based
 
 _RESPONDER_PROMPT = """\
 You are a 3D scene understanding assistant. Use the scene graph context below to answer the question.
@@ -480,7 +479,7 @@ def _score_one(rec: dict, config, judge, judge_tag, ctx_cache) -> EvalRecord:
 
         if config.compute_faithfulness:
             context = _get_context(config, question.scene_id, response.representation, ctx_cache)
-            scores.faithfulness = context_based.faithfulness(
+            scores.faithfulness = judging.faithfulness(
                 question.text, context, response.raw_answer, judge
             )
 
@@ -488,7 +487,7 @@ def _score_one(rec: dict, config, judge, judge_tag, ctx_cache) -> EvalRecord:
         if question.key_facts:
             (scores.answer_correctness,
              scores.answer_correctness_detail,
-             rubric_reasoning) = context_based.rubric_correctness(
+             rubric_reasoning) = judging.rubric_correctness(
                 question.text, response.raw_answer, question.key_facts, judge
             )
 

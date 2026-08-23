@@ -1,4 +1,4 @@
-"""context_based.py — Metrics that require the source context (scene graph text)."""
+"""judging.py — the LLM-judge scoring layer: prompts, scores, verdict parsing."""
 
 from __future__ import annotations
 
