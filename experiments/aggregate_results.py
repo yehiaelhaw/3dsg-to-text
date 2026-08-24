@@ -19,15 +19,12 @@ OUTPUT_ROOT = Path("experiments/results")
 AGG_DIRNAME = "_aggregate"
 NONPRIMARY_PREFIX = "nonprimary_"
 
-# Each dataset has exactly 3 primary scenes; a group with fewer is a transition
-# state and is skipped by default (see --allow-partial) rather than silently
-# overwriting a full report.
+# Require all 3 primary scenes unless --allow-partial is used.
 SCENES_PER_DATASET = 3
 
 
 def _scene_dirs(model_dir: Path) -> list[Path]:
-    """Scene subdirs of a model that actually carry a results.csv (skip the
-    _aggregate output dir and any incomplete scene)."""
+    """Return scene directories containing results.csv."""
     return sorted(
         d for d in model_dir.iterdir()
         if d.is_dir() and d.name != AGG_DIRNAME and (d / "results.csv").exists()
@@ -35,10 +32,7 @@ def _scene_dirs(model_dir: Path) -> list[Path]:
 
 
 def _split_by_role(scene_dirs: list[Path]) -> tuple[list[Path], list[tuple[Path, str]]]:
-    """Partition scene dirs into (primary_dirs, [(dir, role), ...]).
-
-    Fails closed on an unregistered scene so it can't silently enter the pooled means.
-    """
+    """Partition scene directories into primary and non-primary groups."""
     primary: list[Path] = []
     excluded: list[tuple[Path, str]] = []
     unknown: list[str] = []
@@ -61,9 +55,7 @@ def _split_by_role(scene_dirs: list[Path]) -> tuple[list[Path], list[tuple[Path,
 
 
 def _pool_rows(scene_dirs: list[Path]) -> tuple[list[str], list[dict]]:
-    """Concatenate scene results.csv rows, namespacing question_id by scene so
-    identities stay unique (the per-question paired deltas key on question_id).
-    Returns (fieldnames, rows)."""
+    """Pool scene rows while namespacing question IDs by scene."""
     fieldnames: list[str] | None = None
     rows: list[dict] = []
     for d in scene_dirs:
@@ -95,8 +87,7 @@ def _write_group(group_dir: Path, fieldnames: list[str], rows: list[dict],
     plots.plot_aggregate(aggregate_path)
     plots.plot_per_question(detail_path, diagnostics=diagnostics)
 
-    # Axis cards self-restrict to each axis's host dataset (axes.dataset_of), so
-    # none is pooled across datasets in the 'all' group.
+    # Axis cards restrict themselves to their host dataset.
     from evaluation.report import write_report
     write_report(detail_path, aggregate_path)
 
@@ -108,8 +99,7 @@ def aggregate_model(model_dir: Path, diagnostics: bool = False,
         print(f"  (no scene results under {model_dir})")
         return
 
-    # Role split before grouping; exclusions are printed so they stay out of the
-    # aggregate without staying out of sight.
+    # Split roles before grouping and report excluded scenes.
     primary_dirs, excluded = _split_by_role(scene_dirs)
     if excluded:
         print(f"  non-primary, excluded from every pooled group: "
@@ -145,11 +135,7 @@ def aggregate_model(model_dir: Path, diagnostics: bool = False,
 
 
 def partial_groups(groups: dict[str, list[Path]]) -> dict[str, str]:
-    """Which primary groups are under-filled, and why (group -> reason).
-
-    `all` is marked partial whenever any dataset group it pools is, so the guard
-    can't be bypassed by rewriting the cross-dataset overview from a short pool.
-    """
+    """Return under-filled primary groups, propagating partial status to `all`."""
     out: dict[str, str] = {}
     for group, dirs in groups.items():
         if group == "all" or group.startswith(NONPRIMARY_PREFIX):

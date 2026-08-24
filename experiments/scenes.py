@@ -1,17 +1,10 @@
-"""The scene registry consumed by the evaluation matrix: each Scene names its
-scene_contexts/ dir, QA file, rep set, and pooling `role` (primary/stress/
-sensitivity) -- the single source of truth run_experiments.py and
-aggregate_results.py both read.
-"""
+"""Scene registry for experiment execution and aggregation."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
 
-# PRIMARY: the confirmatory experiment (all axis cards/verdicts/figures).
-# STRESS: an operational limit (context overflow), reported as token fit only.
-# SENSITIVITY: how much the verdict set depends on scene choice, reported separately.
-# The pooling layer treats both non-primary roles identically (only `!= PRIMARY` matters).
+# Scene roles: confirmatory, operational stress, and sensitivity analysis.
 PRIMARY = "primary"
 STRESS = "stress"
 SENSITIVITY = "sensitivity"
@@ -36,59 +29,32 @@ def _qa(scene_id: str) -> str:
     return f"experiments/qa/{scene_id}/keyfact-qa.jsonl"
 
 
-# Explicit rep list pins the full structure-presentation ladder (topology ->
-# room_tree -> graph_digest, connectivity-only). relations_* is excluded --
-# linearization is near-trivial on ProcTHOR's forest (3RScan carries that axis).
-# metric_relations_full is retired (near-null axis, -0.043, half its questions
-# were circular).
+# Explicit ProcTHOR representation set; relation-linearization is evaluated on 3RScan.
 _PROCTHOR_REPS = [
     "inventory", "topology_inventory", "topology", "room_tree", "graph_digest",
-    # json_mini is the full-record anchor; json_pretty is the same content pretty-printed (the
-    # formatting ablation's raw pole). The bare name `json` is retired -- name
-    # explicitly.
+    # Full-record representations used for the formatting comparison.
     "prose", "metric_relations", "navigation", "json_mini", "json_pretty", "synthesis",
-    # Matched counterpart to `navigation` on route/direction (door graph + per-edge
-    # metric) -- proven fact-for-fact in test_topology_metric_equivalence.py.
+    # Content-matched navigation counterpart; see test_topology_metric_equivalence.py.
     "topology_metric",
-    # Content-matched counterpart to topology_inventory (prose sentences, same
-    # channels) -- proven fact-for-fact in test_format_axis_equivalence.py.
+    # Content-matched topology_inventory counterpart; see test_format_axis_equivalence.py.
     "narrative",
 ]
 
-# Combos are retired: neither `topology+metric_relations` nor
-# `graph_digest+metric_relations` has a REP_CAPS entry any more, so declaring one
-# aborts a strict run. The loader still parses the concatenation syntax; no scene
-# uses it.
-
-
 SCENES: list[Scene] = [
-    # ProcTHOR (spatial-encoding / format / structure-presentation axes). Three
-    # 10-room trees (all connectivity graphs are trees).
     Scene("procthor_train1", _qa("procthor_train1"), _PROCTHOR_REPS),
     Scene("procthor_train232", _qa("procthor_train232"), _PROCTHOR_REPS),
     Scene("procthor_train314", _qa("procthor_train314"), _PROCTHOR_REPS),
 
-    # 3RScan (relation-linearization axis): auto-discover; no combos, since
-    # concatenating two relations_* views would mix poles of the same axis.
-    #
-    # Primary trio is a sparse -> medium -> dense gradient in relation count
-    # (321/647/1304), selected under gates frozen before any response was
-    # generated. 1d2f8518 is the medium scene: zero relation contradictions, the
-    # G1-G5/P1-P4 argmin of the medium band.
+    # 3RScan primary scenes span sparse, medium, and dense relation graphs.
     Scene("3rscan_02b33dfb", _qa("3rscan_02b33dfb"), None, role=PRIMARY),
     Scene("3rscan_1d2f8518", _qa("3rscan_1d2f8518"), None, role=PRIMARY),
     Scene("3rscan_0cac762f", _qa("3rscan_0cac762f"), None, role=PRIMARY),
 
-    # Non-primary; kept for the STRESS/SENSITIVITY reporting artifacts (see ROLES
-    # above). Both fail G1 (json_mini context headroom): 7f30f36c overflows
-    # outright (STRESS); d7d40d62 fits under the 12% headroom bar (SENSITIVITY).
-    # Real 3rscan_* ids, so axes.dataset_of() still resolves them to the host.
+    # Non-primary 3RScan scenes for stress and sensitivity analyses.
     Scene("3rscan_7f30f36c", _qa("3rscan_7f30f36c"), None, role=STRESS),
     Scene("3rscan_d7d40d62", _qa("3rscan_d7d40d62"), None, role=SENSITIVITY),
 
-    # Gibson (spatial-encoding/reference-frame axes): auto-discover the 6 single
-    # files; no door graph so no combos. Trio spans a floor-area gradient
-    # (Brinnon 35 > Thrall > Donaldson 27 rooms).
+    # Gibson primary scenes span a floor-area gradient; representations auto-discover.
     Scene("Brinnon", _qa("Brinnon"), None),
     Scene("Thrall", _qa("Thrall"), None),
     Scene("Donaldson", _qa("Donaldson"), None),
@@ -100,9 +66,7 @@ PRIMARY_SCENE_IDS: frozenset[str] = frozenset(
 
 
 class UnregisteredScene(KeyError):
-    """A scene id with no entry in SCENES; raised rather than defaulted because any
-    default role (primary or not) would silently corrupt the aggregate.
-    """
+    """Raised when a scene has no registry entry."""
 
 
 def role_of(scene_id: str) -> str:

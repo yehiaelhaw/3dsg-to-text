@@ -1,7 +1,4 @@
-"""Run the responder x scene evaluation matrix: one EvalConfig per (model, scene),
-written to results/<profile>/<scene>/. Resumable, and --score-only re-judges a
-cached responses.jsonl under a different judge without regenerating.
-"""
+"""Run the responder × scene evaluation matrix."""
 from __future__ import annotations
 
 import os
@@ -15,7 +12,6 @@ from itertools import product
 from experiments.models import MODEL_PROFILES
 from experiments.scenes import SCENES
 
-# Fixed screening judge (not swept). Gemini re-judge is a separate score_only pass.
 JUDGE_BACKEND = "ollama"
 JUDGE_MODEL = "gemma2:9b"
 JUDGE_OPTIONS = {"temperature": 0.0}
@@ -39,11 +35,7 @@ def _select(items, names, kind, key):
 def build_config(profile, scene, *, judge_backend=None, judge_model=None,
                   score_only=False, compute_faithfulness=False, representations=None,
                   question_types=None):
-    """One EvalConfig for a (model x scene) cell. Imports lazily so --list is cheap.
-
-    question_types narrows generation to what a reported comparison reads; being
-    in scope (scope.py) is not a reason to spend a cell.
-    """
+    """Build one EvalConfig for a model × scene cell."""
     from evaluation.config import EvalConfig
     return EvalConfig(
         dataset_path=scene.dataset_path,
@@ -54,20 +46,17 @@ def build_config(profile, scene, *, judge_backend=None, judge_model=None,
         responder_options=profile.options,
         judge_backend=judge_backend or JUDGE_BACKEND,
         judge_model=judge_model or JUDGE_MODEL,
-        # temperature=0.0 is a reasonable determinism default for any judge backend.
+        # Deterministic judge decoding.
         judge_options=JUDGE_OPTIONS,
         representations=representations or scene.representations,
         question_types=question_types,
-        # One draw per cell: the (rep x type) group mean already averages over many
-        # independent questions, so a repeat is pseudo-replication, not new signal.
+        # One responder draw per cell.
         repetitions=1,
-        # Screening pass: gemma2's 8k window can't hold the large contexts for the
-        # faithfulness check. answer_correctness needs only the answer. (Gemini later.)
+        # Faithfulness is disabled during Gemma screening due to context limits.
         compute_faithfulness=compute_faithfulness,
         resume=True,
         score_only=score_only,
-        # Fail-closed: aborts before the first LLM call if any rep/question type
-        # lacks a scope.py declaration (catches silent-typo mis-scope on every run).
+        # Require explicit scope declarations before running.
         strict_scope=True,
     )
 
