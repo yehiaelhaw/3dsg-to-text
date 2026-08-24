@@ -41,12 +41,9 @@ def load(
 
             qt_raw = raw.get("question_type")
             question_type = qt_raw or None
-            # Only the types exposed to a derived pole are tagged; absent elsewhere
-            # by design, so a missing tag is not an error (see core.Question).
+            # Style tags are used only for the matched natural/constructed questions.
             question_style = raw.get("question_style") or None
-            # The fact-set key, present only on the scoped domain (the three types
-            # with a derived pole). Absent elsewhere by design, so missing is not an
-            # error -- same contract as question_style above.
+            # Groups the two wording variants of one matched fact request.
             pair_id = raw.get("pair_id") or None
 
             try:

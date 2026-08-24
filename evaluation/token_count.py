@@ -1,4 +1,4 @@
-"""Exact prompt token counts for Ollama responders, tokenized locally with the same tokenizer the server uses."""
+"""Local prompt-token counting for supported Ollama responder families."""
 
 from __future__ import annotations
 
@@ -13,9 +13,7 @@ _CACHE_DIR = Path(__file__).resolve().parent / ".token_cache"
 _DEFAULT_HOST = "http://localhost:11434"
 _TIMEOUT = 180  # the verbose payload is ~4 MB per model over an SSH forward
 
-# Pretokenizer regexes from llama.cpp's llm_tokenizer_bpe, keyed by
-# tokenizer.ggml.pre. These decide where the BPE is allowed to merge, so they
-# are load-bearing: the wrong one still produces plausible-looking counts.
+# tokenizer.ggml.pre selects the pretokenizer regex; the wrong regex can silently change token counts.
 _PRE_REGEX = {
     "qwen2": r"(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])"
              r"|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*"
@@ -29,7 +27,7 @@ _PRE_REGEX = {
 
 
 # --------------------------------------------------------------------------- #
-# Template rendering — one function per validated family
+# Template rendering — supported families
 # --------------------------------------------------------------------------- #
 
 def _render_qwen_chatml(prompt: str, system: str) -> str:
@@ -48,8 +46,7 @@ def _render_mistral(prompt: str, system: str) -> str:
     return f"[INST]{body}[/INST]"
 
 
-# model-tag prefix -> (renderer, expected tokenizer.ggml.pre). Matched longest
-# first, so "deepseek-r1" wins over a bare family check.
+# Model-tag prefix -> (renderer, expected tokenizer.ggml.pre). Keep specific prefixes before broader ones (qwen2.5 before qwen2).
 _FAMILIES: list[tuple[str, Callable[[str, str], str], str]] = [
     ("deepseek-r1",  _render_deepseek_r1, "qwen2"),
     ("qwen2.5",      _render_qwen_chatml, "qwen2"),
@@ -81,8 +78,7 @@ def _post(host: str, path: str, payload: dict) -> dict:
 
 
 def _digest(host: str, model: str) -> str:
-    """Served blob digest — the cache key. Changes whenever the model is
-    re-pulled, which is also when template/system/vocab could change."""
+    """Return the served model digest used as the tokenizer-cache key."""
     with urllib.request.urlopen(host.rstrip("/") + "/api/tags", timeout=30) as r:
         tags = json.loads(r.read().decode("utf-8"))
     for m in tags.get("models", []):
@@ -97,11 +93,7 @@ def _cache_path(model: str, digest: str) -> Path:
 
 
 def _spec(host: str, model: str) -> dict:
-    """Everything needed to tokenize, fetched once and cached on disk.
-
-    Keyed by digest, so a re-pull silently invalidates rather than serving a
-    stale vocab. Gzipped: the raw arrays are ~4 MB per model.
-    """
+    """Fetch and cache tokenizer metadata required for local counting."""
     digest = _digest(host, model)
     path = _cache_path(model, digest)
     if path.exists():
@@ -169,7 +161,7 @@ UNSUPPORTED_REASON: dict[tuple[str, str, str], str] = {}
 
 
 def make_sizer(backend: str, model: str, options: dict) -> Callable[[str], Optional[int]]:
-    """Return `prompt -> exact token count`, or `prompt -> None` if unsupported. Memoised per (backend, model, host); never raises -- any failure degrades to the None-sizer and the caller falls back to its heuristic."""
+    """Return an exact prompt-token sizer when supported, otherwise a sizer that returns None. Setup failures are non-fatal."""
     host = (options or {}).get("host", _DEFAULT_HOST)
     key = (backend, model, host)
     if key in _SIZERS:

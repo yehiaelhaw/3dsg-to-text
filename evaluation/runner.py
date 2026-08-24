@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterator
 
 from evaluation import dataset, judging, scene_loader, scope, token_count
+from evaluation.axes import dataset_of
 from evaluation.config import EvalConfig
 from evaluation.core import (
     CONTEXT_EXCEEDED,
@@ -32,10 +33,8 @@ QUESTION:
 
 Answer the question and explain your reasoning. Include specific values (distances, counts, room IDs) that support your answer."""
 
-# Minimum completion budget. If the prompt leaves fewer than this many tokens of
-# the responder's context window free, the representation did not fit (the input
-# was filled/truncated and there is no room for a real answer) -> flag the cell
-# context-exceeded instead of judging a clipped answer.
+# Tokens reserved for the completion; a prompt that leaves less is flagged
+# context-exceeded rather than judged on a truncated answer.
 _CTX_RESERVE = 256
 
 
@@ -80,13 +79,10 @@ def generate_responses(config: EvalConfig) -> Path:
         config.responder_backend, config.responder_model, dict(config.responder_options)
     )
     responder_tag = f"{config.responder_backend}/{config.responder_model}"
-    # Responder context window (ollama num_ctx). Used to flag cells whose prompt
-    # overflows it; None for backends that do not expose it -> guard is skipped.
+    # num_ctx enables the overflow guard; absent on backends that don't expose it.
     num_ctx = config.responder_options.get("num_ctx")
-    # Exact pre-call token counter for this responder, built once (the tokenizer
-    # build costs ~0.2s; per-prompt encoding is negligible). Returns None per
-    # prompt on any backend/model it cannot count exactly, which drops
-    # _generate_one back to its character heuristic.
+    # Exact pre-call token counter, built once; returns None where unsupported
+    # (falls back to the approximate estimate).
     sizer = token_count.make_sizer(
         config.responder_backend, config.responder_model, config.responder_options
     )
@@ -124,14 +120,15 @@ def generate_responses(config: EvalConfig) -> Path:
 
     with path.open("a", encoding="utf-8") as fh:
         for question in questions:
+            host = dataset_of(question.scene_id)
             representations = config.representations or scene_loader.list_representations(
                 config.scene_contexts_dir, question.scene_id
             )
             for representation in representations:
-                # Skip out-of-scope cells except `inventory`, which is deliberately posed spatial questions it can't answer so its guessing forms the spatial-encoding non-spatial anchor.
+                # inventory always runs, even out-of-scope: it's the non-spatial anchor.
                 if (config.scope_filter
                         and representation != "inventory"
-                        and not scope.in_scope(representation, question.question_type)):
+                        and not scope.in_scope(representation, question.question_type, host)):
                     continue
 
                 try:
@@ -139,11 +136,16 @@ def generate_responses(config: EvalConfig) -> Path:
                         config.scene_contexts_dir, question.scene_id, representation
                     )
                 except (FileNotFoundError, ValueError) as exc:
-                    rec = _gen_dict(question, representation, 0, responder_tag,
-                                    raw_answer="", error=str(exc))
-                    _write(fh, rec)
-                    n_err += 1
-                    print(f"  ERR   {question.id} | {representation} | {exc}")
+                    # Record load failures on the configured repetition schedule.
+                    for repetition in range(1, config.repetitions + 1):
+                        if (question.id, representation, str(repetition)) in done:
+                            n_skip += 1
+                            continue
+                        rec = _gen_dict(question, representation, repetition, responder_tag,
+                                        raw_answer="", error=str(exc))
+                        _write(fh, rec)
+                        n_err += 1
+                        print(f"  ERR   {question.id} | {representation} | rep{repetition} | {exc}")
                     continue
 
                 for repetition in range(1, config.repetitions + 1):
@@ -165,7 +167,8 @@ def generate_responses(config: EvalConfig) -> Path:
                         n_err += 1
                         print(f"  ERR   {question.id} | {representation} | rep{repetition}")
 
-    # Free VRAM before the judge loads, but only when responder and judge share an Ollama host -- otherwise unload buys nothing and forces a cold reload whose load time leaks into the next cell's latency_ms.
+    # Unload only when responder and judge share a host -- otherwise it just
+    # forces a cold reload, leaking load time into the next cell's latency_ms.
     if _responder_judge_colocated(config):
         responder.unload()
     print(f"PHASE 1/2  done — {n_new} generated, {n_err} errored, "
@@ -187,12 +190,13 @@ def _generate_one(question, representation, repetition, context, responder,
             context=context.strip(),
             question=question.text.strip(),
         )
-        # Pre-call guard, two tiers: `exact` (evaluation.token_count, verified against prompt_eval_count) is preferred; `len//4` is a fallback lower bound for backends token_count doesn't support. Done pre-call because the post-hoc guard below trusts the backend's reported count, which can misreport exactly when a prompt overflows.
+        # Pre-call guard: exact token count preferred, approximate estimate otherwise.
         exact_tokens = sizer(prompt) if sizer else None
         if num_ctx:
             limit = _ctx_limit(num_ctx)
             if exact_tokens is not None:
-                # Strict `>` here (the heuristic below uses `>=`): a prompt of exactly `limit` leaves exactly _CTX_RESERVE tokens, which is enough by definition, and an exact count is entitled to that boundary.
+                # Exact count is entitled to equality at the boundary (reserve is
+                # exactly met); the estimate below stays conservative with `>=`.
                 if exact_tokens > limit:
                     return _gen_dict(
                         question, representation, repetition, responder_tag,
@@ -204,24 +208,25 @@ def _generate_one(question, representation, repetition, context, responder,
                                f"(representation cannot fit; not generated)"),
                     )
             else:
-                est_min_tokens = len(prompt) // 4
-                if est_min_tokens >= limit:
+                est_tokens = len(prompt) // 4
+                if est_tokens >= limit:
                     return _gen_dict(
                         question, representation, repetition, responder_tag,
                         raw_answer="",
-                        prompt_tokens=est_min_tokens,
-                        error=(f"{CONTEXT_EXCEEDED}: prompt is at least ~{est_min_tokens} tokens "
-                               f"(character lower bound) >= context window {num_ctx} "
+                        prompt_tokens=est_tokens,
+                        error=(f"{CONTEXT_EXCEEDED}: estimated prompt ~{est_tokens} tokens "
+                               f"(approximate character-based estimate) >= context window {num_ctx} "
                                f"(representation cannot fit; not generated)"),
                     )
         gen = responder.generate(prompt)
-        # Post-call backstop: catches a server whose effective window is smaller than the num_ctx it accepted. Should be unreachable with the exact guard in front of it.
+        # Post-call backstop for a server whose actual window is smaller than num_ctx.
         error = None
         if (num_ctx and gen.prompt_tokens
-                and gen.prompt_tokens >= _ctx_limit(num_ctx)):
+                and gen.prompt_tokens > _ctx_limit(num_ctx)):
             error = (f"{CONTEXT_EXCEEDED}: prompt {gen.prompt_tokens} tokens "
-                     f">= context window {num_ctx} (representation truncated; not scored)")
-        # Local and server token counts must agree; a mismatch means they've drifted (template change, re-pull, silent truncation). Loud but non-fatal.
+                     f"> budget {_ctx_limit(num_ctx)} (representation truncated; not scored)")
+        # Local/server token counts should agree; a mismatch signals drift
+        # (re-pull, template change, silent truncation). Loud but non-fatal.
         elif exact_tokens is not None and gen.prompt_tokens and exact_tokens != gen.prompt_tokens:
             print(f"  WARN  {question.id} | {representation} | token count drift: "
                   f"predicted {exact_tokens}, server reported {gen.prompt_tokens} "

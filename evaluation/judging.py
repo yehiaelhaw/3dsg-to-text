@@ -82,14 +82,14 @@ def answer_correctness(
 
 
 def _parse_score(text: str) -> float:
-    # prefer explicit SCORE: tag to avoid grabbing numbers from mid-explanation
+    # Prefer an explicit SCORE tag before falling back to the first numeric score.
     tagged = re.search(r"SCORE:\s*([01](?:\.\d+)?|\.\d+)", text, re.IGNORECASE)
     if tagged:
         return round(min(max(float(tagged.group(1)), 0.0), 1.0), 4)
     match = re.search(r"\b([01](?:\.\d+)?|\.\d+)\b", text.strip())
     if match:
         return round(min(max(float(match.group(1)), 0.0), 1.0), 4)
-    raise ValueError(f"Could not parse faithfulness score from judge output: {text!r}")
+    raise ValueError(f"Could not parse judge score from output: {text!r}")
 
 
 _RUBRIC_PROMPT = """\
@@ -152,13 +152,12 @@ def rubric_correctness(
     return core_score, tier_score(detail), text
 
 
-# A verdict word only counts when the line ends there or continues into a reason; otherwise a fact restatement beginning with "No"/"Yes" would parse as the opposite of the real verdict on the next line.
+# Accept YES/NO only when it is syntactically a verdict, not part of a fact restatement.
 _NUM_VERDICT = re.compile(r"^[\-\s]*(\d+)[.)]\s*(YES|NO)\b(.*)$", re.IGNORECASE)
 _REASON_SEP = re.compile(r"^\s*(?:[-–—:;,.!]|$)")
 _SUB_VERDICT = re.compile(r"^[\-•\*\s]*(YES|NO)\b", re.IGNORECASE)
 
-# Only an affirmation earns the fact -- any non-"YES" verdict (hedge, "partially", etc.) scores NO, deliberately vocabulary-free so unseen hedges resolve the same way.
-# This differs from a fact the judge never mentions at all, which still raises below ("evaluated but not affirmed" vs "never evaluated" are different failure modes).
+# Addressed but non-YES verdicts score NO; completely unaddressed facts raise below.
 _NUM_ANY = re.compile(r"^[\-\s]*(\d+)[.)]\s*(.+)$")
 _SEP_SPLIT = re.compile(r"\s*[-–—:;,.!]\s*")
 _MAX_VERDICT_WORDS = 3
@@ -167,12 +166,10 @@ _MAX_VERDICT_WORDS = 3
 def _parse_rubric(text: str, n: int) -> list[bool]:
     results = [False] * n
     seen: set[int] = set()
-    # Index of the most recent numbered fact still awaiting a verdict, so a
-    # verdict on the following indented line can be attributed to it.
+    # Numbered fact awaiting a verdict on a following indented line.
     pending: int | None = None
     for line in text.splitlines():
-        # Tolerate markdown emphasis / bullets the judge sometimes adds, e.g.
-        # "1.  **YES** - ..." or "- 1) `NO`": strip emphasis chars before matching.
+        # Strip common Markdown emphasis before parsing.
         clean = line.replace("*", "").replace("`", "").replace("_", "").strip()
         m = _NUM_VERDICT.match(clean)
         if m:
@@ -208,7 +205,7 @@ def _parse_rubric(text: str, n: int) -> list[bool]:
                 seen.add(pending)
                 pending = None
     if n > 0 and len(seen) < n:
-        # Every fact must be ADDRESSED: defaulting a skipped fact to absent would silently understate AC. Raise so the record errors and is re-judged on resume.
+        # Missing verdicts are errors, not implicit NOs, so the record can be re-judged.
         missing = [i + 1 for i in range(n) if i not in seen]
         raise ValueError(
             f"Judge gave no verdict at all for fact(s) {missing} of {n}: {text!r}"

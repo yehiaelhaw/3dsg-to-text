@@ -6,14 +6,11 @@ import csv
 from dataclasses import dataclass, field
 from typing import Optional
 
-# A runaway responder answer (repetition loops on dense scenes) can exceed csv's
-# default 128 KB per-field cap, breaking every DictReader that reads results.csv
-# (resume bookkeeping, aggregate, report, plots). Raise it once here — core is
-# imported by all of them. 2**31-1 is the max on Windows (32-bit C long).
+# Allow unusually long responder outputs in CSV fields; 2**31 - 1 is the Windows-safe maximum.
 csv.field_size_limit(2**31 - 1)
 
 
-# Sentinel for a responder context-window overflow (prompt clipped/truncated). Terminal: resume must not retry it, the judge must not score it.
+# Terminal context-overflow sentinel: resume does not retry it and judging excludes it.
 CONTEXT_EXCEEDED = "CONTEXT_EXCEEDED"
 
 
@@ -33,10 +30,10 @@ class Question:
     scene_id:       str
     text:           str
     question_type:  Optional[str] = None
-    # `natural`: a user could ask this without having seen a derived view's output. `constructed`: wording mirrors that output's computed vocabulary. Only set for types exposed to a derived pole.
+    # On affected types: natural does not rely on seeing a derived view; constructed mirrors its vocabulary.
     question_style: Optional[str] = None
-    # Fact-set key: (scene_id, pair_id) groups a natural/constructed pair so report.py can difference their register effect. NOT a provenance field -- never filter/group on which member was authored first.
-    # Deliberately excluded from CSV_COLUMNS; report.py joins it from the QA files at analysis time to keep results.csv byte-identical across runs.
+    # Groups the natural/constructed versions of one fact request; not a provenance field.
+    # Omitted from results.csv and rejoined from the QA files during analysis.
     pair_id:        Optional[str] = None
     key_facts:      list[KeyFact] = field(default_factory=list)
 
@@ -55,12 +52,10 @@ class Response:
 
 @dataclass
 class MetricScores:
-    faithfulness:              Optional[float] = None  # 0.0 – 1.0
-    answer_correctness:        Optional[float] = None  # 0.0 – 1.0, core (weight > 1) facts only
-    # Diagnostic only: fraction of the supporting-detail (weight <= 1) facts the answer
-    # carried. Never folded into answer_correctness; None when the question has no detail
-    # facts. Measures volunteered detail (verbosity x representation), not correctness.
-    answer_correctness_detail: Optional[float] = None  # 0.0 – 1.0
+    faithfulness:              Optional[float] = None  # 0.0–1.0, diagnostic
+    answer_correctness:        Optional[float] = None  # 0.0–1.0, core facts only
+    # Supporting-detail score; excluded from primary correctness.
+    answer_correctness_detail: Optional[float] = None  # 0.0–1.0; None if no detail facts
     def to_dict(self) -> dict[str, Optional[float]]:
         return {
             "faithfulness":              self.faithfulness,

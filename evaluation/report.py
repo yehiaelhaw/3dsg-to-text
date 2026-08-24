@@ -1,4 +1,4 @@
-"""Auto-generated numeric report: coverage, rank-eligibility, and the paired scene-level separation table that decides every axis verdict."""
+"""Evaluation report with coverage, eligibility, and paired scene-level verdicts."""
 
 from __future__ import annotations
 
@@ -20,13 +20,27 @@ from evaluation.axes import (
 from evaluation.core import is_context_exceeded
 from evaluation.scope import in_scope
 
-# pair_id is joined here from the QA files at analysis time (not a results.csv column) and used for exactly one purpose: grouping a fact-set's natural/constructed pair so their register effects can be differenced. Never filters or groups a table.
+# Load QA pair_ids for matched fact-set analysis.
 QA_ROOT = Path(__file__).resolve().parents[1] / "experiments" / "qa"
 QA_FILENAME = "keyfact-qa.jsonl"
 
 
+class MixedComparisonError(ValueError):
+    """Raised when comparative results mix responders or judges."""
+
+
+def require_single_responder_judge(rows: list[dict]) -> None:
+    """Require exactly one nonblank responder and judge."""
+    responders = {(r.get("responder") or "").strip() for r in rows}
+    judges = {(r.get("judge") or "").strip() for r in rows}
+    if len(responders) != 1 or len(judges) != 1 or "" in responders or "" in judges:
+        raise MixedComparisonError(
+            "Thesis comparative outputs require one responder and one judge per results.csv."
+        )
+
+
 def _load_pairs(qa_root: Path | None = None) -> dict[tuple[str, str], str]:
-    """(scene_id, question_id) -> pair_id, over every authored QA file. Returns {} when the QA files aren't reachable, so the matched section just doesn't render rather than failing at import time."""
+    """Load (scene_id, qid) -> pair_id; return {} if QA files are unavailable."""
     root = Path(qa_root if qa_root is not None else QA_ROOT)
     pairs: dict[tuple[str, str], str] = {}
     if not root.is_dir():
@@ -44,7 +58,7 @@ def _load_pairs(qa_root: Path | None = None) -> dict[tuple[str, str], str]:
 
 
 def _row_key(r: dict) -> tuple[str, str]:
-    """A row's (scene_id, authored question id) -- strips aggregate_results._pool_rows's `<scene_id>:` namespacing prefix from question_id so the join matches."""
+    """Return (scene_id, authored qid), stripping aggregate scene prefixes."""
     scene, qid = r["scene_id"], r["question_id"]
     prefix = f"{scene}:"
     return scene, (qid[len(prefix):] if qid.startswith(prefix) else qid)
@@ -52,41 +66,37 @@ def _row_key(r: dict) -> tuple[str, str]:
 
 @dataclass
 class Cell:
-    """One (representation x question_type) group's display statistics."""
+    """Display statistics for one representation × question-type cell."""
     n: int
     error_count: int
     context_exceeded: int
     n_scored: int
     ac_mean: float
-    # Descriptive min-max spread over the k per-question means. NOT an interval
-    # estimate and never a decision rule -- separation is decided in
-    # `_paired_section`. (lo, hi); (0.0, 0.0) when there is nothing to spread.
+    # Descriptive per-question min-max; not an interval or verdict input.
     ac_range: tuple[float, float]
     coverage: float
     tokens_mean: float | None
-    # Diagnostic: supporting-detail coverage over its OWN support (cells with weight<=1
-    # facts only), NOT correctness and NOT comparable cell-for-cell against ac_mean.
+    # Supporting-detail diagnostic; separate from primary correctness.
     detail_mean: float | None
     n_detail: int
 
     @property
     def rank_eligible(self) -> bool:
-        return self.n_scored > 0 and self.coverage >= MIN_COVERAGE
+        return self.n >= MIN_OBSERVATIONS and self.n_scored > 0 and self.coverage >= MIN_COVERAGE
 
 
 def _cell(rows: list[dict]) -> Cell:
     n = len(rows)
     context_exceeded = sum(1 for r in rows if is_context_exceeded(r["error"]))
     error_count = sum(1 for r in rows if r["error"] and not is_context_exceeded(r["error"]))
-    ac = [float(r["answer_correctness"]) for r in rows
-          if not r["error"] and r["answer_correctness"] not in ("", None)]
-    # Per-question means first (repetitions of one question are not independent
-    # evidence), then their min-max range -- matching the per-question points
-    # plots.py draws. A descriptive spread, not a precision estimate.
+    # Scored rows require no error and a real AC value.
+    scored = [r for r in rows
+              if not r["error"] and r["answer_correctness"] not in ("", None)]
+    n_scored = len(scored)
+    # Average repetitions within question before cell summaries.
     ac_by_q: dict[str, list[float]] = collections.defaultdict(list)
-    for r in rows:
-        if not r["error"] and r["answer_correctness"] not in ("", None):
-            ac_by_q[r["question_id"]].append(float(r["answer_correctness"]))
+    for r in scored:
+        ac_by_q[r["question_id"]].append(float(r["answer_correctness"]))
     q_means = [statistics.mean(v) for v in ac_by_q.values()]
     det = [float(r["answer_correctness_detail"]) for r in rows
            if not r["error"] and r.get("answer_correctness_detail") not in ("", None)]
@@ -101,8 +111,7 @@ def _cell(rows: list[dict]) -> Cell:
             toks.append(float(t))
         except ValueError:
             pass
-    n_scored = n - error_count - context_exceeded
-    ac_mean = statistics.mean(ac) if ac else 0.0
+    ac_mean = statistics.mean(q_means) if q_means else 0.0
     ac_range = (min(q_means), max(q_means)) if q_means else (0.0, 0.0)
     coverage = n_scored / n if n else 0.0
     return Cell(n, error_count, context_exceeded, n_scored, ac_mean, ac_range,
@@ -127,44 +136,40 @@ def _table(headers: list[str], rows: list[list[str]]) -> list[str]:
 
 
 def _ac_str(c: Cell) -> str:
-    """AC with a coverage flag: a sub-threshold cell prints `0.70* (cov 33%)` so it
-    is never silently ranked against a full-coverage one."""
+    """Format AC and its failing eligibility gate."""
     if c.n_scored == 0:
         return "n/a"
     s = f"{c.ac_mean:.2f}"
-    if c.coverage < MIN_COVERAGE:
+    if c.n < MIN_OBSERVATIONS:
+        s += f"* (n={c.n})"
+    elif c.coverage < MIN_COVERAGE:
         s += f"* (cov {c.coverage * 100:.0f}%)"
     return s
 
 
 def _range_str(c: Cell) -> str:
-    """Descriptive min-max spread of the per-question means. Deliberately NOT an
-    interval: two of these overlapping means nothing, and overlap is never a tie
-    rule (thesis 4.6). Separation is read from the paired table."""
+    """Format descriptive per-question min-max; not an interval."""
     lo, hi = c.ac_range
     return f"{lo:.2f}-{hi:.2f}" if c.n_scored > 1 else ""
 
 
 def _tok_str(p) -> str:
-    """Mean prompt tokens of the two members (rep_b vs rep_a, with b's share of a) -- a pair that doesn't separate on correctness but differs sharply here is still a result."""
-    a, b = p.tokens_a, p.tokens_b
-    if not a or not b:
+    """Format matched token means and tok_n coverage."""
+    if not p.n_token_pairs:
         return "-"
-    return f"{b:.0f} vs {a:.0f} ({b / a:.2f}x)"
+    a, b = p.tokens_a, p.tokens_b
+    return f"{b:.0f} vs {a:.0f} ({b / a:.2f}x; tok_n={p.n_token_pairs}/{p.n_questions})"
 
 
 def _axis_reps(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[str]:
-    """Anchored, ladder-ordered rep list for one axis x type: non-spatial anchor
-    first, the in-scope poles in rung order, full-record anchor last -- keeping
-    only those with data. Returns [] when there is no real ladder (fewer than two
-    reps present)."""
+    """Return available reps in anchor/ladder order; [] if fewer than two."""
     reps: list[str] = []
     if (NON_SPATIAL_ANCHOR, qt) in cells:
         reps.append(NON_SPATIAL_ANCHOR)
     for p in axis.ladder:
         if p in (NON_SPATIAL_ANCHOR, FULL_RECORD_ANCHOR):
             continue
-        if in_scope(p, qt) and (p, qt) in cells:
+        if in_scope(p, qt, axis.host) and (p, qt) in cells:
             reps.append(p)
     if (FULL_RECORD_ANCHOR, qt) in cells and FULL_RECORD_ANCHOR not in reps:
         reps.append(FULL_RECORD_ANCHOR)
@@ -172,17 +177,9 @@ def _axis_reps(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[str]:
 
 
 def _axis_card(axis, rows: list[dict]) -> list[str]:
-    """One card: a per-probe-type anchored table, host dataset only.
-
-    The heading names what the entry is whenever it is not one of the five design
-    axes (Axis.kind) -- a companion carding the same axis on a second host, or an
-    exhibit that is not an axis contrast at all. Without that, the card count here
-    reads as an axis count and contradicts the design chapter.
-    """
+    """Render one host-scoped axis card."""
     cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == axis.host])
-    # Question-matched, from the one pairing primitive -- NOT this cell's mean minus
-    # the anchor cell's mean, which would difference two different question sets
-    # wherever a rep answered fewer questions than the anchor did.
+    # Anchor lifts are question-matched, not differences of cell means.
     lifts = {(p.qt, p.rep_b): p for p in non_spatial_anchor_lifts(rows, axis.host)}
     body: list[str] = []
     for qt in axis.probe_types:
@@ -208,10 +205,10 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
 
 
 def _planning_section(rows: list[dict]) -> list[str]:
-    """Planning / real-world-utility probe, reported on its own (not an axis pole). Split per host dataset, never pooled -- planning's reference-anchor meaning differs by dataset (e.g. 3RScan planning needs the raw relation channel, not just inventory)."""
+    """Render planning separately by host; planning is not an axis pole."""
 
     def order(cells, rep):
-        """Non-spatial anchor first, poles by AC descending (rank-eligible before sub-threshold), then full-record anchor -- row order is a de facto ranking, so a sub-coverage cell must never sit above a full-coverage one."""
+        """Order planning rows by role, eligibility, then AC."""
         c = cells[(rep, "planning")]
         block = {"non_spatial_anchor": 0, "full_record_anchor": 2}.get(rep_role(rep), 1)
         return (block, 0 if c.rank_eligible else 1, -c.ac_mean)
@@ -232,52 +229,43 @@ def _planning_section(rows: list[dict]) -> list[str]:
                         else _lift_str(lifts.get(("planning", rep))))
             trows.append([rep, rep_role(rep), str(c.n), f"{c.coverage * 100:.0f}",
                           _ac_str(c), _range_str(c), d_anchor])
+        license_note = (
+            "Formal planning representation comparisons are licensed only on 3RScan; "
+            "planning is a separate real-world-utility probe, not a spatial axis."
+            if ds == "3rscan" else
+            "Descriptive planning scores only; no representation-level planning "
+            "comparison is licensed on this host.")
         out += [f"## Planning / real-world utility (separate probe, host: {ds})",
-                "_Goal-framed questions: the model must infer the objects a goal needs, not be "
-                "handed them. Reported on its own -- not an axis pole, and never pooled across "
-                f"datasets. {NON_SPATIAL_ANCHOR} = non-spatial anchor, "
-                f"{FULL_RECORD_ANCHOR} = full-record anchor._", ""]
+                f"_Goal-framed planning probe; separate by host, not an axis. {license_note}_", ""]
         out += _table(["rep", "role", "n", "cov%", "AC", "q-range", "vs non-spatial anchor"], trows) + [""]
     return out
 
 
-# --- the separation analysis (thesis 4.6) -----------------------------
-# This is the only place a comparison between two representations is decided.
-# Everything above is display.
+# --- paired separation analysis ---
+# Formal verdicts come from the paired analysis below.
 
 @dataclass
 class Paired:
-    """One axis pair x question type, compared the way the design licenses.
-
-    scene_deltas: scene_id -> mean per-question AC diff (rep_b - rep_a), over questions BOTH members answered. Scene is the unit of replication, so the headline is the unweighted mean of scene values -- not pooled questions, which would let a question-rich scene outvote the others.
-    """
+    """One paired comparison; scene_deltas are equally weighted scene means of matched-question deltas."""
     axis_id: str
     host: str
     qt: str
-    rep_a: str                      # earlier rung / baseline
-    rep_b: str                      # later rung, or the full-record anchor
+    rep_a: str
+    rep_b: str
     scene_deltas: dict[str, float]
-    n_questions: int                # paired questions summed across scenes
+    n_questions: int
     verdict: str
     confound: str
-    capped: bool                    # the confound actually downgraded the grade
-    ineligible: str                 # why the gates failed, or ""
-    # Mean prompt tokens of each member, carried so the cost rule (thesis 4.6) is
-    # decided from the same row as the verdict: a pair that fails to separate on
-    # correctness while differing sharply in tokens is a result, and the cheaper
-    # member is reported as the more efficient alternative -- never as the winner.
+    capped: bool
+    ineligible: str
+    # Matched prompt-token means for the paired questions.
     tokens_a: float | None = None
     tokens_b: float | None = None
-    # How many distinct information requests the paired questions come from. On the
-    # scoped types every fact-set contributes BOTH its natural and its constructed
-    # member, so `n_questions` counts two correlated observations per request and
-    # overstates the support; this is the honest denominator. 0 where no fact-set
-    # map joins (every unpaired question type). Display only -- no verdict reads it.
+    # Correctness-paired qids with token data on both reps.
+    n_token_pairs: int = 0
+    # Distinct information requests; display only, never a gate.
     n_factsets: int = 0
-    # The individual paired differences behind `scene_deltas`, scene-major. Display
-    # only: the verdict reads the SCENE values, never these. Carried so a chart can
-    # draw the per-question points of a comparison without recomputing them -- a
-    # recomputation is where a second, subtly different matching rule gets in.
+    # Per-question deltas for plots; verdicts use scene_deltas.
     q_deltas: tuple[float, ...] = ()
 
     @property
@@ -292,10 +280,7 @@ class Paired:
 
 
 def _verdict(scene_deltas: dict[str, float], confound: str, ineligible: str) -> str:
-    """Verdict scale of thesis 4.6, Table 4.5.
-
-    MIXED is decided on the scene values, not their mean -- testing the mean alone lets cancelling scene deltas (some clearing +margin, some -margin) average out to a false null. A margin-met-but-under-replicated direction (not enough scenes showing it) grades down to directional rather than consistent.
-    """
+    """Apply the declared scene-level verdict and confound-cap rules."""
     if ineligible or not scene_deltas:
         return VERDICT_NOT_LICENSED
 
@@ -315,23 +300,22 @@ def _verdict(scene_deltas: dict[str, float], confound: str, ineligible: str) -> 
     if reversed_:
         return VERDICT_MIXED if margin_met else VERDICT_NO_SEPARATION
     if margin_met and showing >= MIN_SCENES_SHOWING:
-        # A declared confound caps an otherwise-consistent result. It never
-        # promotes and never rescues -- only downgrades.
+        # Confounds only downgrade consistent results.
         return CAPPED_VERDICT if confound else VERDICT_CONSISTENT
     return VERDICT_DIRECTIONAL
 
 
 def _paired_pairs(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[tuple[str, str]]:
-    """Contrasts for one axis x question type: ladder baseline vs each later rung, the declared headline pair, and each rung vs the full-record anchor. Deduplicated, always ordered (earlier, later)."""
+    """Return declared axis contrasts in earlier-to-later order."""
     rungs = [p for p in axis.ladder
-             if p not in (NON_SPATIAL_ANCHOR, FULL_RECORD_ANCHOR) and in_scope(p, qt) and (p, qt) in cells]
+             if p not in (NON_SPATIAL_ANCHOR, FULL_RECORD_ANCHOR) and in_scope(p, qt, axis.host) and (p, qt) in cells]
     pairs: list[tuple[str, str]] = []
     if rungs:
         base = rungs[0]
         pairs += [(base, r) for r in rungs[1:]]
     if axis.headline_pair:
         a, b = axis.headline_pair
-        if (a, qt) in cells and (b, qt) in cells and in_scope(a, qt) and in_scope(b, qt):
+        if (a, qt) in cells and (b, qt) in cells and in_scope(a, qt, axis.host) and in_scope(b, qt, axis.host):
             pairs.append((a, b))
     if (FULL_RECORD_ANCHOR, qt) in cells:
         pairs += [(r, FULL_RECORD_ANCHOR) for r in rungs]
@@ -345,7 +329,7 @@ def _paired_pairs(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[tup
 
 
 def _q_means(host_rows: list[dict]) -> tuple[dict[tuple[str, str], float], dict[str, str]]:
-    """((rep, question_id) -> mean AC, question_id -> scene_id). Errors/context-exceeded rows carry no AC, so an overflowing rep contributes no delta rather than a zero."""
+    """Return per-question AC means and qid->scene; omit unscored rows."""
     ac: dict[tuple[str, str], list[float]] = collections.defaultdict(list)
     scene_of: dict[str, str] = {}
     for r in host_rows:
@@ -356,11 +340,39 @@ def _q_means(host_rows: list[dict]) -> tuple[dict[tuple[str, str], float], dict[
     return {k: statistics.mean(v) for k, v in ac.items()}, scene_of
 
 
+def _q_token_means(host_rows: list[dict]) -> dict[tuple[str, str], float]:
+    """Return per-question token means, averaging repetitions first."""
+    toks: dict[tuple[str, str], list[float]] = collections.defaultdict(list)
+    for r in host_rows:
+        if r["error"]:
+            continue
+        t = r.get("prompt_tokens")
+        if t in ("", "0", None):
+            continue
+        try:
+            v = float(t)
+        except ValueError:
+            continue
+        toks[(r["representation"], r["question_id"])].append(v)
+    return {k: statistics.mean(v) for k, v in toks.items()}
+
+
+def _paired_token_summary(q_tok: dict[tuple[str, str], float], qids,
+                          rep_a: str, rep_b: str) -> tuple[float | None, float | None, int]:
+    """Average tokens on correctness-paired qids available for both reps."""
+    a_vals, b_vals = [], []
+    for q in sorted(set(qids)):
+        if (rep_a, q) in q_tok and (rep_b, q) in q_tok:
+            a_vals.append(q_tok[(rep_a, q)])
+            b_vals.append(q_tok[(rep_b, q)])
+    if not a_vals:
+        return None, None, 0
+    return statistics.mean(a_vals), statistics.mean(b_vals), len(a_vals)
+
+
 def paired_deltas(q_mean: dict[tuple[str, str], float], scene_of: dict[str, str],
                   qids, rep_a: str, rep_b: str) -> dict[str, list[tuple[float, str]]]:
-    """scene_id -> [(AC(rep_b) - AC(rep_a), question_id)] over questions BOTH members answered; a question either missed is DROPPED, never zero-filled -- subtracting cell means would attribute a rep's missing (overflowed) questions to the representation.
-    THE pairing primitive: every difference this repo reports comes through here. Sorted (not set-ordered) so summation order is reproducible across runs (CPython randomizes string hashing per process).
-    """
+    """Return scene-grouped matched AC deltas (rep_b-rep_a); drop unmatched qids."""
     by_scene: dict[str, list[tuple[float, str]]] = collections.defaultdict(list)
     for q in sorted(qids):
         if (rep_a, q) in q_mean and (rep_b, q) in q_mean:
@@ -377,24 +389,24 @@ def _summarise(by_scene: dict[str, list[tuple[float, str]]]):
     return scene_deltas, n_q, q_deltas
 
 
-def _gates(cells: dict[tuple[str, str], Cell], qt: str, reps: tuple[str, ...],
-           n_q: int, unit: str = "paired questions") -> str:
-    """Why this comparison is not rank-eligible, or "" -- applied to the COMPARISON, not either cell alone: a pair is only as licensed as its weaker member, and the paired question count (not either cell's n) is its real support."""
-    reasons = [f"{rep} coverage {cells[(rep, qt)].coverage * 100:.0f}%"
-               for rep in reps
-               if (rep, qt) in cells and not cells[(rep, qt)].rank_eligible]
-    if n_q < MIN_OBSERVATIONS:
-        reasons.append(f"only {n_q} {unit}")
+def _gates(cells: dict[tuple[str, str], Cell], qt: str, reps: tuple[str, ...]) -> str:
+    """Return failed cell-level gates; paired/fact-set support never gates."""
+    reasons = []
+    for rep in reps:
+        c = cells.get((rep, qt))
+        if c is None or c.rank_eligible:
+            continue
+        if c.n < MIN_OBSERVATIONS:
+            reasons.append(f"{rep} n={c.n} (< {MIN_OBSERVATIONS})")
+        else:
+            reasons.append(f"{rep} coverage {c.coverage * 100:.0f}%")
     return "; ".join(reasons)
 
 
 def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
                  lift_confound: bool = False,
                  pairs: dict[tuple[str, str], str] | None = None) -> list[Paired]:
-    """Every licensed axis contrast, compared per scene and graded.
-
-    `style` restricts to one question-style subset for the vocabulary-coupling re-cut, applied before `_cells` so the eligibility gates see the actual subset compared. `lift_confound` drops the cap for the `natural` half of the re-cut only, where the confound is resolved by construction (a natural question can't mirror output it never saw) -- never for a `content` confound, which no style split addresses.
-    """
+    """Build paired axis rows; style filtering occurs before eligibility checks."""
     out: list[Paired] = []
     for axis in (AXES if axes is None else axes):
         host_rows = [r for r in rows if dataset_of(r["scene_id"]) == axis.host]
@@ -404,7 +416,8 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
             continue
         cells = _cells(host_rows)
         q_mean, scene_of = _q_means(host_rows)
-        # question_id (as it appears in this csv) -> (scene, pair_id), for the count.
+        q_tok = _q_token_means(host_rows)
+        # qid -> (scene, pair_id) for fact-set support.
         fs_of: dict[str, tuple[str, str]] = {}
         for r in host_rows:
             key = _row_key(r)
@@ -422,37 +435,35 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
                 factsets = {fs_of[q] for items in by_scene.values()
                             for _, q in items if q in fs_of}
                 scene_deltas, n_q, q_deltas = _summarise(by_scene)
-                ineligible = _gates(cells, qt, (rep_a, rep_b), n_q)
+                paired_qids = [q for items in by_scene.values() for _, q in items]
+                tokens_a, tokens_b, n_token_pairs = _paired_token_summary(
+                    q_tok, paired_qids, rep_a, rep_b)
+                ineligible = _gates(cells, qt, (rep_a, rep_b))
                 confound = "" if lift_confound else axis.confound_for(rep_a, rep_b)
                 verdict = _verdict(scene_deltas, confound, ineligible)
-                # The cap fired only where it changed the grade: the same pair
-                # judged without its confound would have been consistent.
+                # capped is true only when the confound changed a consistent verdict.
                 capped = bool(confound) and verdict == CAPPED_VERDICT and (
                     _verdict(scene_deltas, "", ineligible) == VERDICT_CONSISTENT)
-                ca, cb = cells.get((rep_a, qt)), cells.get((rep_b, qt))
                 out.append(Paired(axis.id, axis.host, qt, rep_a, rep_b, scene_deltas,
                                   n_q, verdict, confound, capped, ineligible,
-                                  ca.tokens_mean if ca else None,
-                                  cb.tokens_mean if cb else None,
+                                  tokens_a, tokens_b, n_token_pairs,
                                   len(factsets), q_deltas))
     return out
 
 
 # --- the anchor comparison ---------------------------------------------------
-# An anchor comparison isn't a design decision an axis isolates, so `_paired_pairs` never pairs a rung against it -- but it still gets the same graded treatment here, not a weaker one of its own.
+# Inventory lift is a separate anchor comparison.
 NON_SPATIAL_ANCHOR_LIFT_ID = "non_spatial_anchor"
 
 
 def non_spatial_anchor_lifts(rows: list[dict], host: str) -> list[Paired]:
-    """Every representation against the `inventory` non-spatial anchor on one host, question-matched. The anchor is exempt from the scope filter and so answers every question, while other reps routinely don't (JSON views overflow on dense scenes) -- a plain mean-vs-mean subtraction would read those missing questions as an effect of the representation.
-
-    Returns every type the anchor has data on, not just control types; restricting to control types is the chart's job.
-    """
+    """Build matched rep-vs-inventory comparisons for one host."""
     host_rows = [r for r in rows if dataset_of(r["scene_id"]) == host]
     if not host_rows:
         return []
     cells = _cells(host_rows)
     q_mean, scene_of = _q_means(host_rows)
+    q_tok = _q_token_means(host_rows)
     qids_by_type: dict[str, set[str]] = collections.defaultdict(set)
     for r in host_rows:
         qids_by_type[r["question_type"] or "unknown"].add(r["question_id"])
@@ -462,25 +473,26 @@ def non_spatial_anchor_lifts(rows: list[dict], host: str) -> list[Paired]:
         if (NON_SPATIAL_ANCHOR, qt) not in cells:
             continue
         reps = sorted({rep for (rep, t) in cells
-                       if t == qt and rep != NON_SPATIAL_ANCHOR and in_scope(rep, qt)})
+                       if t == qt and rep != NON_SPATIAL_ANCHOR and in_scope(rep, qt, host)})
         for rep in reps:
             by_scene = paired_deltas(q_mean, scene_of, qids_by_type[qt], NON_SPATIAL_ANCHOR, rep)
             if not by_scene:
                 continue
             scene_deltas, n_q, q_deltas = _summarise(by_scene)
-            ineligible = _gates(cells, qt, (NON_SPATIAL_ANCHOR, rep), n_q)
-            ca, cb = cells.get((NON_SPATIAL_ANCHOR, qt)), cells.get((rep, qt))
+            paired_qids = [q for items in by_scene.values() for _, q in items]
+            tokens_a, tokens_b, n_token_pairs = _paired_token_summary(
+                q_tok, paired_qids, NON_SPATIAL_ANCHOR, rep)
+            ineligible = _gates(cells, qt, (NON_SPATIAL_ANCHOR, rep))
             out.append(Paired(NON_SPATIAL_ANCHOR_LIFT_ID, host, qt, NON_SPATIAL_ANCHOR, rep, scene_deltas, n_q,
                               _verdict(scene_deltas, "", ineligible), "", False,
                               ineligible,
-                              ca.tokens_mean if ca else None,
-                              cb.tokens_mean if cb else None,
+                              tokens_a, tokens_b, n_token_pairs,
                               0, q_deltas))
     return out
 
 
 def _lift_str(p: Paired | None) -> str:
-    """The `vs non-spatial anchor` cell: a question-matched delta, or the reason instead of a number for a sub-threshold cell -- a number a reader must remember not to use is a number that gets used."""
+    """Format matched lift or its eligibility reason."""
     if p is None:
         return ""
     if p.verdict == VERDICT_NOT_LICENSED:
@@ -489,7 +501,7 @@ def _lift_str(p: Paired | None) -> str:
 
 
 def _paired_section(rows: list[dict], pairs=None) -> list[str]:
-    """The separation table -- the analysis every axis verdict is read from."""
+    """Render the formal paired-separation table."""
     prs = _paired_rows(rows, pairs=pairs)
     if not prs:
         return []
@@ -512,19 +524,9 @@ def _paired_section(rows: list[dict], pairs=None) -> list[str]:
                       f"{p.mean:+.3f}", f"{lo:+.3f}..{hi:+.3f}", str(len(p.scene_deltas)),
                       str(p.n_questions), str(p.n_factsets) if p.n_factsets else "",
                       _tok_str(p), p.verdict, note])
-    return (["## Paired separation (the analysis -- thesis 4.6)",
-             f"_Per-question AC differences, averaged within each host scene; the mean is "
-             f"over the SCENE values (the unit of replication), not over pooled questions. "
-             f"A consistent advantage needs |mean| >= {PRACTICAL_MARGIN:.2f}, no scene "
-             f"reversed, and >= {MIN_SCENES_SHOWING} scenes showing the direction; a "
-             f"declared confound caps it at '{CAPPED_VERDICT}'. Scenes disagreeing by "
-             f"{PRACTICAL_MARGIN:.2f} in BOTH directions is '{VERDICT_MIXED}' whatever the "
-             f"mean does. No confidence intervals, and overlap is never a tie rule. Where a "
-             f"pair shows '{VERDICT_NO_SEPARATION}', the `tokens` column decides: report the "
-             f"cheaper representation as the more efficient alternative -- not as the "
-             f"winner. On the scoped types every information request contributes both its "
-             f"natural and its constructed stem, so read `fact-sets` -- not `n_q` -- as the "
-             f"count of independent requests behind a row._", ""]
+    return (["## Paired separation",
+             f"_Scene-first matched AC deltas; verdicts use the declared margin rules. "
+             f"Tokens are qid-matched (tok_n=X/Y); fact-sets count distinct requests._", ""]
             + _table(["axis", "type", "comparison", "scene deltas", "mean", "range",
                       "scenes", "n_q", "fact-sets", "tokens (b vs a)", "verdict", "note"],
                      trows) + [""])
@@ -534,25 +536,20 @@ STYLES = ("natural", "constructed")
 
 
 def _recut_rows(rows: list[dict]) -> dict[tuple[str, str, str, str], dict[str, "Paired"]]:
-    """(axis_id, qt, rep_a, rep_b) -> {style: Paired}, the vocabulary re-cut's raw data -- factored out so the thesis-figure renderer can read the same split without reimplementing it."""
+    """Return vocabulary-confound comparisons split by question style."""
     if not any((r.get("question_style") or "") for r in rows):
-        return {}   # results.csv predates the tag; nothing to re-cut
+        return {}   # No question-style metadata available.
     coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
     if not coupled:
         return {}
 
-    # The cap is lifted on `natural` only (see _paired_rows) -- there the coupling
-    # is resolved by construction. On `constructed` it stands: that subset is where
-    # the pole's own vocabulary is in the question, so its verdict is exactly the
-    # reading the cap exists to distrust.
+    # Lift the vocabulary cap for natural wording only.
     by_style = {s: _paired_rows(rows, style=s, axes=coupled,
                                 lift_confound=(s == "natural")) for s in STYLES}
     keyed: dict[tuple[str, str, str, str], dict[str, Paired]] = collections.defaultdict(dict)
     for s in STYLES:
         for p in by_style[s]:
-            # Only the comparisons the cap actually fires on. A comparison against
-            # the non-spatial or full-record anchor carries no vocabulary confound,
-            # so it has nothing for the re-cut to resolve and would only pad the table.
+            # Re-cut only comparisons with a vocabulary confound.
             axis = AXIS_BY_ID[p.axis_id]
             if not axis.confound_for(p.rep_a, p.rep_b):
                 continue
@@ -561,10 +558,7 @@ def _recut_rows(rows: list[dict]) -> dict[tuple[str, str, str, str], dict[str, "
 
 
 def _recut_section(rows: list[dict]) -> list[str]:
-    """Vocabulary-coupling re-cut -- the remedy the declared confound points at: splits each capped comparison by question style (natural/constructed), since a pole leading only on `constructed` questions is reciting its own vocabulary rather than reasoning better.
-
-    Only vocabulary-coupled axes are walked (no axis currently declares a `content` confound, which no style split could address); gates apply per subset, so a thin split reads `not licensed` rather than being pooled back.
-    """
+    """Render natural/constructed re-cut; each subset keeps its own gates."""
     keyed = _recut_rows(rows)
     if not keyed:
         return []
@@ -574,10 +568,7 @@ def _recut_section(rows: list[dict]) -> list[str]:
         for s in STYLES:
             p = keyed[(axis_id, qt, rep_a, rep_b)].get(s)
             if p is None:
-                # A style with no scored questions of this type at all -- recorded as
-                # absent, not as a null. The scoped types are authored balanced (one
-                # member of every fact-set per style), so this now only fires where a
-                # whole subset failed to score, never by construction as it once did.
+                # Missing style subsets are absent, not null.
                 trows.append([axis_id, qt, f"`{rep_b}` - `{rep_a}`", s,
                               "-", "-", "0", "no scored questions of this style"])
                 continue
@@ -586,22 +577,13 @@ def _recut_section(rows: list[dict]) -> list[str]:
                           f"{p.mean:+.3f}", str(p.n_questions),
                           p.verdict + (f" ({p.ineligible})" if p.ineligible else "")])
     return (["## Vocabulary re-cut: natural vs constructed (thesis 4.6)",
-             "_Every capped comparison, split by the question's authored style tag. A "
-             "derived pole that only leads on `constructed` questions is reciting its own "
-             "printed vocabulary, not reasoning better -- which is exactly what the capped "
-             "verdict in the table above leaves open. Read the two rows of a comparison "
-             "against each other; that adjacency is the argument. The cap is lifted on "
-             "`natural` (a question a user could have asked without seeing the derived view "
-             "cannot be mirroring it) and stands on `constructed`. Gates apply per subset, "
-             "so a thin split reads `not licensed` rather than being pooled back. Only "
-             "vocabulary-coupled axes appear here; no axis currently declares a content "
-             "confound (a superset no style split could address)._", ""]
+             "_Split vocabulary-confounded comparisons by natural/constructed wording; each subset keeps its own gates._", ""]
             + _table(["axis", "type", "comparison", "style", "scene deltas", "mean",
                       "n_q", "verdict"], trows) + [""])
 
 
 def _matched_rows(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[dict]:
-    """Matched within-fact-set comparison's raw numbers, one dict per comparison -- factored out so the thesis-figure renderer reads the same numbers as report.md's table rather than recomputing them."""
+    """Compute matched within-fact-set wording effects."""
     if not pairs:
         return []
     coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
@@ -616,7 +598,7 @@ def _matched_rows(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[d
         cells = _cells(host_rows)
         q_mean, _ = _q_means(host_rows)
 
-        # (scene, pair_id, question_type) -> {style: question_id as this csv spells it}
+        # (scene, pair_id, type) -> {style: qid}
         members: dict[tuple[str, str, str], dict[str, str]] = collections.defaultdict(dict)
         for r in host_rows:
             key = _row_key(r)
@@ -651,10 +633,11 @@ def _matched_rows(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[d
 
                 scene_deltas = {s: statistics.mean(v) for s, v in sorted(by_scene.items())}
                 n_f = sum(len(v) for v in by_scene.values())
-                ineligible = _gates(cells, qt, (rep_a, rep_b), n_f, "matched fact-sets")
+                ineligible = _gates(cells, qt, (rep_a, rep_b))
                 verdict = _verdict(scene_deltas, "", ineligible)
 
-                def _m(d):  # mean over scene means, same unit of replication
+                def _m(d):
+                    # Unweighted mean of scene means.
                     return statistics.mean([statistics.mean(v) for v in d.values()])
 
                 out.append({
@@ -668,10 +651,7 @@ def _matched_rows(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[d
 
 
 def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[str]:
-    """Matched within-fact-set comparison: each information request is authored in both registers over the same facts, so differencing d_constructed(f) - d_natural(f) within a fact-set cancels fact selection and isolates wording -- unlike the re-cut above, which compares different facts across two subsets.
-
-    A fact-set missing any of its four cells is DROPPED, never zero-filled (that would misread a context overflow as "wording made no difference"). No confound is passed to `_verdict`: the coupling is the estimand here, not a threat to it.
-    """
+    """Render d_constructed-d_natural within fact-set; drop incomplete sets."""
     rows_ = _matched_rows(rows, pairs)
     if not rows_:
         return []
@@ -687,25 +667,13 @@ def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> lis
         ])
 
     return (["## Matched fact-sets: does the lead depend on wording? (thesis 4.6)",
-             "_Each scoped information request is authored twice, once `natural` and once "
-             "`constructed`, over the same key facts and with the same expected answer. "
-             "This table differences the two WITHIN each fact-set, so fact selection "
-             "cancels and only the register remains -- which the re-cut above cannot do, "
-             "since its two halves ask about different facts. `mean` is "
-             "d(constructed) - d(natural): positive means the derived pole's lead is "
-             "larger when the question is worded in that pole's own vocabulary. A fact-set "
-             "with any member unscored is dropped, never zero-filled. Read the verdict as "
-             "a statement about the COUPLING, not about the representation: "
-             f"'{VERDICT_CONSISTENT}' here means the lead is consistently bigger on "
-             f"constructed stems, so the wording is doing work; "
-             f"'{VERDICT_NO_SEPARATION}' means the lead does not depend on wording, which "
-             "is the result that would clear the derived pole._", ""]
+             "_Within each fact-set, mean = d_constructed - d_natural; incomplete sets are dropped._", ""]
             + _table(["axis", "type", "comparison", "d_natural", "d_constructed",
                       "scene deltas", "mean", "fact-sets", "verdict"], trows) + [""])
 
 
 def _sibling_groups(results_path: Path) -> list[tuple[str, Path]]:
-    """(responder directory name, results.csv) for every other model directory holding the same aggregate group. Judge matching is deliberately NOT applied here -- a mismatch must be reported as a refusal downstream, not silently filtered out."""
+    """Find sibling responder results; judge filtering happens downstream."""
     if results_path.parent.parent.name != "_aggregate":
         return []
     group = results_path.parent.name
@@ -720,7 +688,7 @@ def _sibling_groups(results_path: Path) -> list[tuple[str, Path]]:
     return out
 
 
-# A sub-margin delta has NO DIRECTION, so the cross-responder reading is three-state, not sign-based -- this keeps REVERSED off noise (two sub-margin deltas of opposite sign are a null in both, not a failed replication). A shown sub-margin sign is called a LEAN, never a direction.
+# Sub-margin deltas are NULL; their raw sign is only a lean.
 AHEAD, NULL, BEHIND = 1, 0, -1
 
 CROSS_PRESERVED   = "ordering preserved"
@@ -740,7 +708,7 @@ def _dir_state(d: float) -> int:
 
 
 def _cross_outcome(d_here: float, d_there: float) -> str:
-    """Direction-and-separation state, never sign alone: REVERSED requires BOTH sides to clear the practical margin in opposite directions. Where only `here` separates, it's reported as a lean, not a reversal -- and the lean isn't split at all if `here` doesn't separate, since `here` supplies the reference ordering."""
+    """Classify ordering; reversal requires opposite margin-clearing deltas."""
     sh, st = _dir_state(d_here), _dir_state(d_there)
     if sh != NULL and st != NULL:
         return CROSS_PRESERVED if sh == st else CROSS_REVERSED
@@ -751,7 +719,7 @@ def _cross_outcome(d_here: float, d_there: float) -> str:
     return CROSS_NULL_BOTH
 
 
-# Cached to avoid re-parsing/re-pairing every sibling CSV once per reporting directory (the quadratic term). Keyed by (path, mtime, size), not path alone -- a run rewrites these same files as it proceeds.
+# Cache by path/mtime/size so rewritten results invalidate entries.
 _SIB_ROWS: dict[tuple[str, int, int], list[dict]] = {}
 _SIB_PAIRED: dict[tuple[str, int, int], dict] = {}
 
@@ -779,8 +747,7 @@ def _sibling_paired(path: Path, other_rows: list[dict], pairs) -> dict:
 
 def _cross_section(rows: list[dict], results_path: Path,
                    pairs: dict[tuple[str, str], str] | None = None) -> list[str]:
-    """Does each paired comparison point the same way under a second responder? Only direction states cross the boundary, never absolute levels (two responders differ in general capability, which is not the representation) -- and only where the judge matches and both responders averaged over the same scenes, so a disagreement can only come from the responder.
-    """
+    """Compare pairwise ordering across responders with the same judge and scenes."""
     sibs = _sibling_groups(results_path)
     if not sibs:
         return []
@@ -790,11 +757,7 @@ def _cross_section(rows: list[dict], results_path: Path,
     judges_here = sorted({r.get("judge", "?") for r in rows})
     responder = rows[0].get("responder", "?")
 
-    # Gather first, render second. Every exclusion is COLLECTED rather than dropped, so
-    # the compact summary and the collapsed tables are two views of one computation:
-    # nothing is shown that was not computed, and nothing computed is discarded. The
-    # display hierarchy is deliberate -- a reader acts on a reversal or a coverage gap,
-    # never on a preserved row, so the preserved rows are the part that collapses.
+    # Collect exclusions before rendering so summary and details use the same evidence.
     refused: dict[str, list[str]] = {}
     read: list[dict] = []
     for name, path in sibs:
@@ -814,13 +777,13 @@ def _cross_section(rows: list[dict], results_path: Path,
             if set(here[k].scene_deltas) == set(there[k].scene_deltas):
                 shared.append(k)
             else:
-                # Resolved now, not at render time: the excluded row's whole point is
-                # WHICH scenes differed, and `there` is not in scope further down.
+                # Store mismatched scene sets before `other_rows` leaves scope.
                 mismatched.append((k, sorted(here[k].scene_deltas),
                                    sorted(there[k].scene_deltas)))
         reps_there = {r["representation"] for r in other_rows}
         missing = sorted({r for k in here if k not in there
                           for r in (k[2], k[3]) if r not in reps_there})
+        # Keep matched/neither counts so summary totals reconcile.
         uncovered = sorted({k[0] for k in here if k not in there} - {k[0] for k in shared})
 
         trows, tally, reversals = [], collections.Counter(), []
@@ -845,22 +808,9 @@ def _cross_section(rows: list[dict], results_path: Path,
     if not read and not refused:
         return []
 
-    out = ["## Cross-responder ordering check (thesis 3.6)", "",
-           f"_Holding the evaluated items fixed, does changing the responder preserve the "
-           f"ordering within each comparison? A directory is read only when it holds the same "
-           f"aggregate group, under an identical judge, on matched scenes -- a judge change is "
-           f"not a responder change, so agreement across judges would measure both at once. "
-           f"Each responder's delta is computed inside its own directory and classified "
-           f"independently as ahead, behind, or no separation at the {PRACTICAL_MARGIN:.2f} "
-           f"margin; absolute correctness LEVELS are never compared. Two responders differ in "
-           f"general capability for reasons that have nothing to do with representation, so a "
-           f"gap between their scores reads the responder rather than the representations -- "
-           f"in either direction, whichever is stronger. `{CROSS_REVERSED}` "
-           f"requires clear separation in opposite directions; a sub-margin delta has no "
-           f"direction at all, and its raw sign is shown only as a lean. Outcomes are reported "
-           f"relative to the ordering in this report's responder, `{responder}`. These results "
-           f"test pairwise ordering stability, NOT cross-responder generalization, which the "
-           f"study does not claim. Every exclusion is printed rather than filtered._", ""]
+    out = ["## Cross-responder ordering check", "",
+           "_Same judge/scenes only; reversal requires opposite margin-clearing deltas. "
+           "Ordering-stability diagnostic only._", ""]
 
     if read:
         srows = []
@@ -872,54 +822,41 @@ def _cross_section(rows: list[dict], results_path: Path,
                           str(t[CROSS_PRESERVED]), str(t[CROSS_REVERSED]),
                           str(t[CROSS_LEAN_SAME]), str(t[CROSS_LEAN_OPPOSE]),
                           str(t[CROSS_ONLY_THERE]), str(t[CROSS_NULL_BOTH])])
-        # `matched` and `neither` are carried so the row accounts for itself: matched =
-        # preserved + reversed + both leans + only there + neither. Without them a reader
-        # cannot tell a thin comparison from a broad one that mostly agreed.
+        # matched = preserved + reversed + both leans + only there + neither.
         out += _table(["responder", "matched", "clear here", "preserved", "reversed",
                        "weakened same lean", "weakened opposite lean", "only there",
                        "neither"], srows) + [""]
 
     for judges, names in sorted(refused.items()):
         out += [f"**Refused (judge mismatch):** "
-                f"{', '.join(f'`{n}`' for n in sorted(names))} -- scored by {judges}, not this "
-                f"directory's {', '.join(f'`{j}`' for j in judges_here)}. Listed rather than "
-                f"dropped, so \"not comparable\" stays distinguishable from \"not found\".", ""]
+                f"{', '.join(f'`{n}`' for n in sorted(names))} -- judge: {judges}; expected: "
+                f"{', '.join(f'`{j}`' for j in judges_here)}.", ""]
 
     if not read:
-        # Nothing was comparable. The headings below would each assert something about a
-        # comparison that never happened -- "no reversals" most of all.
         return out
 
     revs = [r for x in read for r in x["reversals"]]
     out += ["### Reversals", ""]
     out += (_table(["responder", "axis", "type", "comparison", "d here", "d there"], revs) + [""]
             if revs else
-            ["**None.** Every comparison that separates on both responders points the same "
-             "way.", ""])
+            ["**None.** All comparisons separating on both responders preserve direction.", ""])
 
     gaps = [x for x in read if x["uncovered"] or not x["shared"]]
     if gaps:
         out += ["### Coverage gaps", ""]
         for x in gaps:
             if not x["shared"]:
-                out += [f"- `{x['name']}`: **no comparison** present in both directories on "
-                        f"matched scenes -- a coverage statement, not a result."]
+                out += [f"- `{x['name']}`: no matched comparison."]
             if x["uncovered"]:
                 why = (" -- never run on " + ", ".join(f"`{r}`" for r in x["missing"])
                        if x["missing"] else "")
                 out += [f"- `{x['name']}`: no coverage for "
                         + ", ".join(f"`{a}`" for a in x["uncovered"]) + why + "."]
-        out += ["", "Nothing about these axes is preserved or reversed at this judge tier. "
-                    "Stated explicitly because an absent section otherwise reads as "
-                    "agreement.", ""]
+        out += ["", "No ordering claim for uncovered axes.", ""]
 
     if any(x["mismatched"] for x in read):
         out += ["### Excluded -- evidence not matched", "",
-                "Both directories hold these comparisons but averaged them over different "
-                "scenes, so a difference would confound the responder with the scene set. "
-                "Excluded rather than recomputed on the intersection: a recomputed delta "
-                "would disagree with the same comparison's figure in the paired separation "
-                "table above, and one comparison must not carry two numbers in one document.",
+                "Excluded because responders used different scene sets; no intersection recomputation.",
                 ""]
         for x in read:
             out += [f"- `{x['name']}` / {k[0]} / {k[1]} / `{k[3]}` - `{k[2]}`: "
@@ -943,7 +880,7 @@ OBJECT_RELATION_TYPES = {"object_relation", "relation_structure", "relation_aggr
 
 
 def _coverage_section(rows: list[dict]) -> list[str]:
-    """Cells where coverage matters: anything that overflowed the window, plus the object-relation family. Split per host dataset, never pooled -- overflow is a host property (JSON views only overflow on dense 3RScan scenes), so pooling would hide the survivorship signal this table exists to surface."""
+    """Render host-scoped overflow and object-relation coverage."""
     out: list[str] = []
     for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
         cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == ds])
@@ -956,8 +893,7 @@ def _coverage_section(rows: list[dict]) -> list[str]:
         if not trows:
             continue
         out += (["## Coverage & rank-eligibility (host: %s)" % ds,
-                 "_Cells that overflowed the window or carry object relations. "
-                 "rank_eligible = coverage >= 80%; a `no` must not be ranked on AC._", ""]
+                 "_Overflow/object-relation cells; eligible iff coverage >= 80% and n >= 6._", ""]
                 + _table(["rep", "type", "n", "exceeded", "cov%", "AC", "rank_eligible"], trows)
                 + [""])
     return out
@@ -968,52 +904,108 @@ def _small_n_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
              for (rep, qt), c in sorted(cells.items()) if 0 < c.n < MIN_OBSERVATIONS]
     if not trows:
         return []
-    return (["## Small-n register (n < %d -- screening-only)" % MIN_OBSERVATIONS,
-             "_These cells are too small to rank on; treat as directional only._", ""]
+    return (["## Small-n register (n < %d -- descriptive only)" % MIN_OBSERVATIONS,
+             "_These cells are below the reporting threshold; inspect descriptively only "
+             "and assign no comparative verdict._", ""]
             + _table(["rep", "type", "n", "AC"], trows) + [""])
 
 
-# The multi-view-combination section that used to sit here was deleted along with
-# the rows it printed. It rendered an ungraded
-# difference-of-means table for the two concatenated views; those were superseded
-# as a route baseline by `topology_metric` (fact-matched to `navigation` rather
-# than a channel superset of it) and are no longer part of the study.
+# --- candidate audit ---
+# Fixed candidate comparison: synthesis - json_mini.
+CANDIDATE_AUDIT_ID = "candidate"
+
+
+def candidate_rows(rows: list[dict]) -> list[Paired]:
+    """Build the fixed candidate-vs-json_mini paired audit."""
+    out: list[Paired] = []
+    for host in sorted({dataset_of(r["scene_id"]) for r in rows}):
+        host_rows = [r for r in rows if dataset_of(r["scene_id"]) == host]
+        cells = _cells(host_rows)
+        cand_qts = {qt for (rep, qt) in cells if rep == CANDIDATE}
+        anchor_qts = {qt for (rep, qt) in cells if rep == FULL_RECORD_ANCHOR}
+        qts = sorted(cand_qts & anchor_qts)
+        if not qts:
+            continue
+        q_mean, scene_of = _q_means(host_rows)
+        q_tok = _q_token_means(host_rows)
+        for qt in qts:
+            qids = {q for (rep, q) in q_mean
+                    if any(r["question_id"] == q and (r["question_type"] or "unknown") == qt
+                           for r in host_rows)}
+            by_scene = paired_deltas(q_mean, scene_of, qids, FULL_RECORD_ANCHOR, CANDIDATE)
+            if not by_scene:
+                continue
+            scene_deltas, n_q, q_deltas = _summarise(by_scene)
+            paired_qids = [q for items in by_scene.values() for _, q in items]
+            tokens_a, tokens_b, n_token_pairs = _paired_token_summary(
+                q_tok, paired_qids, FULL_RECORD_ANCHOR, CANDIDATE)
+            ineligible = _gates(cells, qt, (FULL_RECORD_ANCHOR, CANDIDATE))
+            verdict = _verdict(scene_deltas, "", ineligible)
+            out.append(Paired(CANDIDATE_AUDIT_ID, host, qt, FULL_RECORD_ANCHOR, CANDIDATE,
+                              scene_deltas, n_q, verdict, "", False, ineligible,
+                              tokens_a, tokens_b, n_token_pairs, 0, q_deltas))
+    return out
+
+
+def _candidate_reading(p: Paired) -> str:
+    """Translate the candidate-audit verdict and matched cost evidence."""
+    if p.verdict == VERDICT_CONSISTENT:
+        if p.mean > 0:
+            return "consistent correctness advantage for synthesis"
+        if p.mean < 0:
+            return "consistent correctness advantage for json_mini"
+        return "consistent correctness advantage"
+    if p.verdict == VERDICT_DIRECTIONAL:
+        return "directional correctness evidence only; no efficiency conclusion"
+    if p.verdict == VERDICT_MIXED:
+        return "scene-dependent correctness result; no efficiency conclusion"
+    if p.verdict == VERDICT_NOT_LICENSED:
+        return "comparative claim not licensed"
+    complete = (p.n_token_pairs == p.n_questions and p.n_questions > 0
+                and p.tokens_a is not None and p.tokens_b is not None)
+    if not complete:
+        return "no correctness separation; token-cost reading incomplete"
+    if p.tokens_b < p.tokens_a:
+        return "no correctness separation; synthesis is the cheaper alternative"
+    if p.tokens_b > p.tokens_a:
+        return "no correctness separation; json_mini is the cheaper alternative"
+    return "no correctness separation; no token-cost separation"
 
 
 def _candidate_section(rows: list[dict]) -> list[str]:
-    """Synthesis candidate-default vs the json_mini full-record anchor, with token cost. Split per host dataset, never pooled -- reference-anchor scope semantics and synthesis's own composition are both host-dependent."""
+    """Render the host/type synthesis-vs-json_mini paired audit."""
+    prs = candidate_rows(rows)
+    if not prs:
+        return []
     out: list[str] = []
-    for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
-        cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == ds])
-        qts = sorted({qt for (rep, qt) in cells if rep == CANDIDATE})
-        if not qts:
-            continue
+    for host in sorted({p.host for p in prs}):
         trows = []
-        for qt in qts:
-            s = cells[(CANDIDATE, qt)]
-            j = cells.get((FULL_RECORD_ANCHOR, qt))
-            st = f"{s.tokens_mean:.0f}" if s.tokens_mean else "-"
-            jt = f"{j.tokens_mean:.0f}" if j and j.tokens_mean else "-"
-            trows.append([qt, _ac_str(s), _ac_str(j) if j else "n/a", st, jt])
-        out += [f"## Candidate default ({CANDIDATE} vs {FULL_RECORD_ANCHOR}, host: {ds})",
-                f"_Can one compact view match the {FULL_RECORD_ANCHOR} full-record anchor "
-                "at a fraction of the tokens? Never pooled across datasets._", ""]
-        out += _table(["type", f"{CANDIDATE} AC", f"{FULL_RECORD_ANCHOR} AC",
-                       f"{CANDIDATE} tok", f"{FULL_RECORD_ANCHOR} tok"], trows) + [""]
+        for p in sorted((p for p in prs if p.host == host), key=lambda p: p.qt):
+            lo, hi = p.spread
+            trows.append([
+                p.qt, f"`{CANDIDATE}` - `{FULL_RECORD_ANCHOR}`",
+                " / ".join(f"{v:+.3f}" for v in p.scene_deltas.values()),
+                f"{p.mean:+.3f}", f"{lo:+.3f}..{hi:+.3f}", str(len(p.scene_deltas)),
+                str(p.n_questions), _tok_str(p), p.verdict, _candidate_reading(p),
+            ])
+        out += [f"## Candidate audit ({CANDIDATE} vs {FULL_RECORD_ANCHOR}, host: {host})",
+                f"_Fixed candidate comparison: synthesis - json_mini. "
+                f"Cost reading requires no correctness separation and complete matched-token coverage (tok_n=X/Y)._", ""]
+        out += _table(["type", "comparison", "scene deltas", "mean", "range", "scenes",
+                       "n_q", f"tokens ({CANDIDATE} vs {FULL_RECORD_ANCHOR})", "verdict",
+                       "audit reading"], trows) + [""]
     return out
 
 
 def _detail_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
-    """Supporting-detail coverage -- a DIAGNOSTIC, not a quality score: measures verbosity x representation (volunteered unasked facts), not correctness. Not comparable cell-for-cell against AC; never rank on it."""
+    """Render supporting-detail diagnostics; never treat them as correctness."""
     trows = [[rep, qt, str(c.n_detail), f"{c.detail_mean:.2f}"]
              for (rep, qt), c in sorted(cells.items())
              if c.n_detail > 0 and c.detail_mean is not None]
     if not trows:
         return []
     return (["## Supporting-detail coverage (diagnostic -- NOT correctness)",
-             "_The weight<=1 detail tier, scored on its own. This is volunteered "
-             "supporting detail (verbosity x representation), not a quality score; "
-             "n_detail is its own support and it is NOT comparable to AC. Never rank on it._", ""]
+             "_Supporting-detail diagnostic only; not correctness and not ranked._", ""]
             + _table(["rep", "type", "n_detail", "detail_AC"], trows) + [""])
 
 
@@ -1026,28 +1018,16 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
         rows = list(csv.DictReader(fh))
     if not rows:
         return None
+    require_single_responder_judge(rows)
 
     cells = _cells(rows)
     responder = rows[0].get("responder", "?")
-    judges = sorted({r.get("judge", "?") for r in rows})
+    judge = rows[0].get("judge", "?")
+    tier = tier_of(judge)
+    judge_line = (f"- judge: `{judge}`  |  tier: **{tier}**"
+                  + ("  (candidate-selection tier only)" if tier == "screening" else ""))
     datasets = sorted({dataset_of(r["scene_id"]) for r in rows})
     today = datetime.date.today().isoformat()
-
-    if len(judges) == 1:
-        judge = judges[0]
-        tier = tier_of(judge)
-        judge_line = (f"- judge: `{judge}`  |  tier: **{tier}**"
-                      + ("  (ranking only, not reported effect sizes)" if tier == "screening" else ""))
-    else:
-        # Directory mixes judges (e.g. a headline subset re-judged by Gemini, then a
-        # coverage-gap fill run with the default screening judge on newly-added reps).
-        # A single global tier would be true for some cells and false for others --
-        # naming rows[0]'s judge as if it applied everywhere risks presenting a
-        # screening cell as confirmatory. Force the reader to the per-row column.
-        tiers = sorted({tier_of(j) for j in judges})
-        judge_line = (f"- judges: {', '.join(f'`{j}`' for j in judges)}  |  tiers: **{'/'.join(tiers)}** "
-                      "(MIXED -- judge varies by row; check the `judge` column in results.csv "
-                      "before citing any cell, never assume confirmatory)")
 
     lines = [
         f"# Evaluation report - {responder}",
@@ -1055,16 +1035,14 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
         judge_line,
         f"- datasets: {', '.join(datasets)}  |  generated: {today}",
         "",
-        "> Do NOT read an ALL/ALL grand mean. Every number below is within one "
-        "question type, and axis cards are within one host dataset. Compare within "
-        "a card, never across types or datasets.",
+        "> No ALL/ALL mean: compare only within question type and host.",
         "",
     ]
     pairs = _load_pairs()
     lines += _paired_section(rows, pairs)
     lines += _recut_section(rows)
     lines += _matched_section(rows, pairs)
-    lines += _cross_section(rows, results_path, pairs)
+    # Cross-responder check is auxiliary and omitted from the default report.
     for axis in AXES:
         lines += _axis_card(axis, rows)
     lines += _planning_section(rows)

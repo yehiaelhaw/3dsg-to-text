@@ -8,11 +8,14 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
+from evaluation.axes import dataset_of
 from evaluation.config import EvalConfig
 from evaluation.core import CSV_COLUMNS, EvalRecord, is_context_exceeded
 
+# Host-separated (dataset, representation, question_type) rows; repetitions of one
+# question are averaged together before the aggregate statistics.
 _AGGREGATE_COLUMNS = [
-    "representation", "question_type",
+    "dataset", "representation", "question_type",
     "n", "error_count", "context_exceeded", "n_scored", "coverage",
     "faithfulness_mean", "faithfulness_std",
     "answer_correctness_mean", "answer_correctness_std", "answer_correctness_q_range",
@@ -24,16 +27,14 @@ _AGGREGATE_COLUMNS = [
 
 
 def _compact_for_resume(path: Path) -> None:
-    """Drop rows a resumed run supersedes, in place: last write wins per (question_id, representation, repetition), real error rows are dropped (they're about to be retried), context_exceeded sentinels are kept (terminal by design). Without this, a retried cell duplicates in the CSV and coverage reads below 100% forever.
-
-    Fails loudly on a header mismatch rather than compacting -- DictReader would otherwise silently adopt a corrupted first data row as the header and cement it.
+    """Drop rows a resumed run supersedes, in place: last write wins per (question_id,
+    representation, repetition); ordinary errors are dropped for retry;
+    context_exceeded sentinels are kept (terminal). Fails closed on a header mismatch.
     """
     with path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         fieldnames = reader.fieldnames
         rows = list(reader)
-    if not rows:
-        return
     if fieldnames != CSV_COLUMNS:
         raise ValueError(
             f"{path}: header does not match the expected CSV_COLUMNS "
@@ -41,6 +42,8 @@ def _compact_for_resume(path: Path) -> None:
             "looks corrupted rather than silently entrenching it; repair the "
             "header manually before resuming."
         )
+    if not rows:
+        return
     last: dict[tuple[str, str, str], dict] = {}
     for r in rows:
         last[(r["question_id"], r["representation"], r["repetition"])] = r
@@ -62,7 +65,8 @@ class ResultsWriter:
     def __init__(self, path: Path, resume: bool = False) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._path = path
-        append = resume and path.exists()
+        # Treat a zero-byte resume file as fresh so the CSV header is written.
+        append = resume and path.exists() and path.stat().st_size > 0
         if append:
             _compact_for_resume(path)
         self._fh = path.open("a" if append else "w", newline="", encoding="utf-8")
@@ -122,7 +126,7 @@ def save(
                     print(f"         Q:  {record.question.text}")
                     print(f"         A:  {record.response.raw_answer}")
                     if record.rubric_reasoning:
-                        print(f"         JUDGE:")
+                        print("         JUDGE:")
                         for line in record.rubric_reasoning.strip().splitlines():
                             print(f"           {line}")
                     print(70 * "=")
@@ -162,87 +166,115 @@ def _write_aggregate_from_csv(detail_path: Path, aggregate_path: Path) -> None:
 
 
 def _compute_aggregate(rows: list[dict]) -> list[dict]:
-    groups: dict[tuple[str, str], list[dict]] = {}
+    groups: dict[tuple[str, str, str], list[dict]] = {}
     for r in rows:
+        ds = dataset_of(r["scene_id"])
         rep = r["representation"]
         qt = r["question_type"] or "unknown"
-        groups.setdefault((rep, qt), []).append(r)
+        groups.setdefault((ds, rep, qt), []).append(r)
 
     out = []
-    for (rep, qt), group in sorted(groups.items()):
-        out.append(_group_row(rep, qt, group))
+    for (ds, rep, qt), group in sorted(groups.items()):
+        out.append(_group_row(ds, rep, qt, group))
 
-    # Operational total (n, error/context-exceeded counts, throughput), NOT a quality score -- pools non-spatial+full-record anchors, in/out-of-scope, every type/dataset. report.py never surfaces it.
-    out.append(_group_row("ALL", "operational-total", rows))
+    # Operational total (n, error/context-exceeded/scored counts, coverage), NOT a
+    # quality score -- pools every dataset, representation, and question type.
+    # report.py never surfaces it; see its "do not read an ALL/ALL grand mean" note.
+    out.append(_operational_total_row(rows))
     return out
 
 
-def _group_row(representation: str, question_type: str, rows: list[dict]) -> dict:
+def _questions_of(rows: list[dict], metric: str) -> dict[tuple[str, str, str], list[float]]:
+    """Group valid metric values by (scene_id, question_id, representation).
+    Rows with an error or a missing/blank value for the metric are ignored.
+    """
+    by_q: dict[tuple[str, str, str], list[float]] = {}
+    for r in rows:
+        v = r.get(metric, "")
+        if r["error"] or v in ("", None):
+            continue
+        key = (r["scene_id"], r["question_id"], r["representation"])
+        by_q.setdefault(key, []).append(float(v))
+    return by_q
+
+
+def _group_row(dataset: str, representation: str, question_type: str, rows: list[dict]) -> dict:
     # Context-exceeded cells (the rep overflowed the responder window) are a
     # reportable token-cost outcome, kept separate from real errors and excluded
     # from the means -- not scored as a wrong answer.
     context_exceeded = sum(1 for r in rows if is_context_exceeded(r["error"]))
     error_count = sum(1 for r in rows if r["error"] and not is_context_exceeded(r["error"]))
 
-    def vals_of(metric: str) -> list[float]:
-        # .get so a CSV predating a column (e.g. answer_correctness_detail) yields an
-        # empty series rather than a KeyError.
-        out = []
-        for r in rows:
-            v = r.get(metric, "")
-            if r["error"] or v in ("", None):
-                continue
-            out.append(float(v))
-        return out
+    n = len(rows)
+    # Scored = no error and a real primary correctness value.
+    scored = [r for r in rows if not r["error"] and r["answer_correctness"] not in ("", None)]
+    n_scored = len(scored)
+
+    def per_question_means(metric: str) -> list[float]:
+        # Average repetitions within question before aggregate statistics.
+        return [statistics.mean(v) for v in _questions_of(rows, metric).values()]
 
     def mean_of(vals: list[float]) -> str:
         return f"{statistics.mean(vals):.4f}" if vals else ""
 
     def std_of(vals: list[float]) -> str:
-        # Population std (pstdev), matching the whiskers in plots.py: these are
-        # descriptive spreads of the actual cells, not estimates of a wider
-        # population. A single value has spread 0.0; no values -> blank.
+        # Descriptive population spread over per-question means; not an interval estimate.
         return f"{statistics.pstdev(vals):.4f}" if vals else ""
 
-    def q_range_of(metric: str) -> str:
-        # Descriptive min-max range over per-question means, clustered by (question, representation) so the ALL row doesn't pool across representations. Not a confidence interval -- see report.py.
-        by_q: dict[tuple[str, str], list[float]] = {}
-        for r in rows:
-            v = r.get(metric, "")
-            if r["error"] or v in ("", None):
-                continue
-            by_q.setdefault((r["question_id"], r["representation"]), []).append(float(v))
-        means = [statistics.mean(v) for v in by_q.values()]
-        if len(means) < 2:
+    def q_range_of(vals: list[float]) -> str:
+        # Descriptive min-max over the same per-question means.
+        if len(vals) < 2:
             return ""
-        return f"{min(means):.4f}..{max(means):.4f}"
+        return f"{min(vals):.4f}..{max(vals):.4f}"
 
-    fth = vals_of("faithfulness")
-    ac  = vals_of("answer_correctness")
-    det = vals_of("answer_correctness_detail")  # sparser: only questions with detail facts
+    fth_q = per_question_means("faithfulness")
+    ac_q  = per_question_means("answer_correctness")
+    det_q = per_question_means("answer_correctness_detail")  # sparser: only questions with detail facts
 
-    n = len(rows)
-    # n_scored = cells actually behind the means: total minus real errors and minus
-    # context-exceeded cells (both excluded from the means). AC is computed for
-    # every scored cell, so this is the AC mean's support; it also equals the
-    # faithfulness support whenever faithfulness is enabled.
-    n_scored = n - error_count - context_exceeded
     return {
+        "dataset":                 dataset,
         "representation":          representation,
         "question_type":           question_type,
         "n":                       n,
         "error_count":             error_count,
         "context_exceeded":        context_exceeded,
         "n_scored":                n_scored,
-        # coverage = scored fraction; a cell below ~0.8 has a survivorship-biased
-        # mean (see report.py) and must not be ranked on AC alone.
+        # Coverage is the scored fraction of raw evaluation instances.
         "coverage":                f"{n_scored / n:.4f}" if n else "",
-        "faithfulness_mean":       mean_of(fth),
-        "faithfulness_std":        std_of(fth),
-        "answer_correctness_mean": mean_of(ac),
-        "answer_correctness_std":  std_of(ac),
-        "answer_correctness_q_range": q_range_of("answer_correctness"),
-        "answer_correctness_detail_mean": mean_of(det),
-        "answer_correctness_detail_std":  std_of(det),
-        "n_detail":                       len(det),
+        "faithfulness_mean":       mean_of(fth_q),
+        "faithfulness_std":        std_of(fth_q),
+        "answer_correctness_mean": mean_of(ac_q),
+        "answer_correctness_std":  std_of(ac_q),
+        "answer_correctness_q_range": q_range_of(ac_q),
+        "answer_correctness_detail_mean": mean_of(det_q),
+        "answer_correctness_detail_std":  std_of(det_q),
+        # Number of distinct questions contributing detail scores.
+        "n_detail":                       len(det_q),
+    }
+
+
+def _operational_total_row(rows: list[dict]) -> dict:
+    """Synthetic cross-run operational counts; quality fields remain blank."""
+    context_exceeded = sum(1 for r in rows if is_context_exceeded(r["error"]))
+    error_count = sum(1 for r in rows if r["error"] and not is_context_exceeded(r["error"]))
+    n = len(rows)
+    n_scored = sum(1 for r in rows
+                   if not r["error"] and r["answer_correctness"] not in ("", None))
+    return {
+        "dataset":                 "ALL",
+        "representation":          "ALL",
+        "question_type":           "operational-total",
+        "n":                       n,
+        "error_count":             error_count,
+        "context_exceeded":        context_exceeded,
+        "n_scored":                n_scored,
+        "coverage":                f"{n_scored / n:.4f}" if n else "",
+        "faithfulness_mean":       "",
+        "faithfulness_std":        "",
+        "answer_correctness_mean": "",
+        "answer_correctness_std":  "",
+        "answer_correctness_q_range": "",
+        "answer_correctness_detail_mean": "",
+        "answer_correctness_detail_std":  "",
+        "n_detail":                       "",
     }

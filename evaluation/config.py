@@ -27,25 +27,21 @@ class EvalConfig:
     repetitions:        int                 = 1
     representations:    Optional[list[str]] = None   # None → auto-discover
     question_ids:       Optional[list[str]] = None   # None → all questions
-    # Run-cost control, not a scope declaration -- scope.py still decides what a rep CAN answer; this only restricts what gets spent.
+    # Run filter only; scope.py still determines answerability.
     question_types:     Optional[list[str]] = None
 
-    # Skip (rep × question) cells the rep cannot answer (scope.in_scope). On by
-    # default: it only removes structurally-meaningless cells that plots masked
-    # anyway. Set False to force the full cross product.
+    # Skip out-of-scope cells before generation. Thesis runs keep this enabled.
     scope_filter:       bool                = True
-    # Fail-closed guard: aborts the run if any rep/question-type lacks a REP_CAPS/TYPE_NEEDS entry, instead of running fail-open. Set True for any run whose numbers will be reported.
+    # Thesis-reportable runs require fail-closed scope validation.
     strict_scope:       bool                = False
-    # faithfulness is the secondary metric and costs an extra judge call per
-    # record. Turn off for screening passes to cut LLM calls by ~a third.
+    # Faithfulness is diagnostic only; disabling it avoids the extra judge call.
     compute_faithfulness: bool              = True
 
     embedding_model:    str                 = "all-MiniLM-L6-v2"
-    # Resume an interrupted run: skip (question, rep, repetition) cells already
-    # present and non-errored in output_dir/results.csv, and append to it.
+    # Resume by skipping completed, non-error cells already in results.csv.
     resume:             bool                = False
 
-    # Two-phase generate->judge so responder/judge never need to be co-resident in VRAM. score_only=True skips generation and judges an existing responses_path cache.
+    # Judge cached responses from responses_path without generating new ones.
     score_only:         bool                = False
     responses_path:     Optional[Path]      = None
 
