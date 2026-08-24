@@ -5,28 +5,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NamedTuple
 
-# floor/ceiling anchor each axis card; candidate (synthesis) is reported separately since it answers a different question.
-FLOOR = "inventory"
-# Minified: as denominator of the cost claim, un-minified whitespace would overstate every derived view's saving.
-CEILING = "json_mini"
+# non-spatial/full-record anchors bound each axis card; candidate (synthesis) is reported separately since it answers a different question.
+NON_SPATIAL_ANCHOR = "inventory"
+# json_mini is the cost denominator; pretty-printing would inflate apparent savings of derived representations.
+FULL_RECORD_ANCHOR = "json_mini"
 CANDIDATE = "synthesis"
-
-# Multi-view combos (e.g. topology+metric_relations) are retired and purged; neither has a REP_CAPS entry, so a strict run aborts if one is referenced.
 
 
 def rep_role(rep: str) -> str:
     """Reporting role of a representation (drives where it is shown)."""
-    if rep == FLOOR:
-        return "floor"
-    if rep == CEILING:
-        return "ceiling"
+    if rep == NON_SPATIAL_ANCHOR:
+        return "non_spatial_anchor"
+    if rep == FULL_RECORD_ANCHOR:
+        return "full_record_anchor"
     if rep == CANDIDATE:
         return "candidate"
     return "pole"
 
 
-# n < SMALL_N is screening-only (too noisy to rank); coverage < MIN_COVERAGE is not rank-eligible (AC is conditioned on a survivor subset -- the context_exceeded survivorship trap).
-SMALL_N = 6
+# n < MIN_OBSERVATIONS: screening-only (sample too small to rank). coverage < MIN_COVERAGE: not rank-eligible (accuracy only on non-overflow cases, biased subset).
+MIN_OBSERVATIONS = 6
 MIN_COVERAGE = 0.80
 
 # Paired per-scene deltas, no CI (an interval would imply a precision this design cannot support at 3 scenes).
@@ -46,14 +44,11 @@ CAPPED_VERDICT = VERDICT_DIRECTIONAL
 
 @dataclass(frozen=True)
 class Axis:
-    id: str                       # descriptive slug ("spatial_encoding", ...): the
-                                  # machine key for filenames (axis_card_<id>.png) and
-                                  # AXIS_BY_ID. Axes are named, not lettered -- there is
-                                  # no A/B/D/F/G scheme (and thus no confusing C/E gap).
+    id: str                       # descriptive slug ("spatial_encoding", ...): machine key for filenames and AXIS_BY_ID
     label: str                    # short human label
     host: str                     # primary host dataset (procthor | 3rscan | gibson)
-    ladder: list[str]             # reps in rung/ladder order (poles; floor/ceiling
-                                  # are anchored separately by the renderer)
+    ladder: list[str]             # reps in rung/ladder order (poles; the non-spatial/
+                                  # full-record anchors are anchored separately by the renderer)
     probe_types: list[str]        # question types this axis is read on
     headline_pair: tuple[str, str] | None = None  # within-axis contrast for the
                                   # paired-delta chart; None = pure ladder, no pair
@@ -68,10 +63,13 @@ class Axis:
     confound_kind: str = ""
 
     def confound_for(self, rep_a: str, rep_b: str) -> str:
-        """Declared confound capping this pair's verdict, or "" (floor/ceiling comparisons are exempt -- they're anchor comparisons, not the axis's own contrast)."""
+        """Declared confound capping this pair's verdict, or "".
+
+        Reference-anchor comparisons are exempt from the axis confound.
+        """
         if not self.confound:
             return ""
-        if FLOOR in (rep_a, rep_b) or CEILING in (rep_a, rep_b):
+        if NON_SPATIAL_ANCHOR in (rep_a, rep_b) or FULL_RECORD_ANCHOR in (rep_a, rep_b):
             return ""
         if not self.confound_reps:
             return self.confound
@@ -80,13 +78,13 @@ class Axis:
         return ""
 
 
-# Retired density/source-fidelity axes are absent (named axes have no letter gap to explain). Five entries carry kind="axis" (thesis 4.2); the rest are companions/exhibits.
+# Five entries carry kind="axis" (thesis 4.2); the rest are companions/exhibits.
 AXES: list[Axis] = [
     Axis("spatial_encoding", "Spatial encoding", "procthor",
          ["inventory", "topology_inventory", "metric_relations", "json_mini"],
          ["connectivity", "proximity", "direction"],
          note="ladder is per-type: only in-scope rungs are drawn; inventory is the "
-              "spatial-prior floor, not a competitor. See the Spatial encoding "
+              "spatial-prior anchor, not a competitor. See the Spatial encoding "
               "(metric rung) card for the Gibson metric-rung companion (axis cards "
               "are single-host)."),
     Axis("metric_rung", "Spatial encoding (metric rung)", "gibson",
@@ -94,7 +92,7 @@ AXES: list[Axis] = [
          ["proximity"],
          note="Gibson companion to the spatial-encoding axis: the cleanest metric-rung "
               "exhibit in the study lives on this host, not ProcTHOR (a consistent "
-              "advantage over the json_mini ceiling across all three scenes), so it "
+              "advantage over the json_mini anchor across all three scenes), so it "
               "needs its own card rather than being folded into the main "
               "spatial-encoding card.",
          kind="companion"),
@@ -112,7 +110,6 @@ AXES: list[Axis] = [
               "prose keeps its readings elsewhere: the Gibson content_verbosity "
               "exhibit, the relation-linearization family, planning, and as the "
               "synthesis backbone.)"),
-    # RETIRED pairing "metric_relations vs navigation" (never fact-matched, ~1.43x length mismatch) -- a pairing retirement, not a representation one; metric_relations keeps its metric_rung role. Replacement lives at `framing_gibson`, below.
     Axis("structure_presentation", "Graph-structure representation", "procthor",
          ["topology", "room_tree", "graph_digest"],
          ["connectivity"],
@@ -143,8 +140,7 @@ AXES: list[Axis] = [
                   "re-cut and the matched within-fact-set comparison",
          confound_reps=("relations_digest",),
          confound_kind="vocabulary"),
-    # connectivity (18 stems/scene) is the well-powered read; route/direction (4/scene) are underpowered checks on it.
-    # route has no bearing in any key fact; direction bundles the figure-ground reversal with framing register (not separable). Never egocentric/allocentric.
+    # Connectivity (18 stems/scene) is well-powered; route/direction (4/scene) are underpowered checks. Route has no key-fact bearing; direction bundles figure-ground with framing register (not separable).
     Axis("framing", "Relational vs. navigational framing", "procthor",
          ["topology_metric", "navigation"],
          ["route", "direction", "connectivity"],
@@ -202,27 +198,14 @@ AXES: list[Axis] = [
               "else, so prose and json_mini are matched on everything the question uses "
               "and json_mini's remaining channels are pure distractor -- which makes "
               "this a clean verbosity reading rather than a format one. Read it that "
-              "way: on set_logic and containment prose ties the inventory floor exactly "
-              "(see the `vs floor` column), so what separates is json_mini's cost, not "
-              "prose's form; only aggregation puts prose above the floor. "
+              "way: on set_logic and containment prose ties the inventory anchor exactly "
+              "(see the `vs anchor` column), so what separates is json_mini's cost, not "
+              "prose's form; only aggregation puts prose above the anchor. "
               "metric_relations is held out of the ladder despite scoring well here -- "
               "it carries channels the questions do not need, which is the superset "
               "confound this card exists without."),
-    # --- formatting ablation: json_pretty vs the json_mini ceiling -------------
-    # Declared BEFORE any json_mini cells existed, so neither outcome can be read
-    # post-hoc. The two members are the same parse() output under two
-    # serializations, so they are matched on every channel by construction --
-    # hence no confound (confound_for exempts any pair containing CEILING
-    # anyway), and no headline_pair: a single-rung ladder plus the ceiling anchor
-    # already yields exactly the one pair, so a bar would restate the card.
-    #
-    # 3RScan is deliberately not hosted: json_pretty is CONTEXT_EXCEEDED on two of
-    # its three scenes, so its coverage there falls under MIN_COVERAGE and the pair
-    # is not rank-eligible. The host filter is the belt; that gate is the braces.
-    #
-    # probe_types is every non-planning question type on the host -- a stated rule,
-    # not a chosen subset, which is what a two-sided null-hypothesis ablation needs
-    # (planning has its own report section). All counts clear SMALL_N.
+    # json_pretty vs json_mini: same parse() output, two serializations. No confound; anchor + single rung define the pair.
+    # 3RScan omitted: json_pretty fails coverage (CONTEXT_EXCEEDED). probe_types covers all non-planning types (stated rule).
     Axis("json_formatting", "JSON formatting (pretty vs minified)", "procthor",
          ["json_pretty"],
          ["connectivity", "direction", "route", "aggregation", "proximity",
@@ -251,7 +234,8 @@ AXES: list[Axis] = [
 
 AXIS_BY_ID = {a.id: a for a in AXES}
 
-# host/probe_types ride along deliberately: filtering on pole names alone would admit any question both poles happen to support, wider than the axis actually declares.
+# host/probe_types travel with a pair to prevent accidental expansion: filtering poles alone would admit questions both happen to support,
+# wider than the axis declares.
 class AxisPair(NamedTuple):
     label: str                    # bar label (Axis.label)
     a: str                        # first pole (subtrahend: the delta is b - a)
@@ -268,7 +252,11 @@ AXIS_PAIRS = [
 
 
 def dataset_of(scene_id: str) -> str:
-    """Host dataset from a scene id; anything not procthor_*/3rscan_* falls into gibson (Gibson scenes are named, not prefixed)."""
+    """Host dataset from a scene ID.
+
+    Scene IDs starting with 'procthor_' or '3rscan_' map to those datasets.
+    All others (Gibson scene IDs are named, not prefixed) fall back to Gibson.
+    """
     s = (scene_id or "").lower()
     if s.startswith("procthor"):
         return "procthor"
@@ -278,9 +266,11 @@ def dataset_of(scene_id: str) -> str:
 
 
 def tier_of(judge_model: str) -> str:
-    """Reporting tier from the judge model. Strong cloud judges (Gemini/GPT/Claude)
-    produce confirmatory numbers; local screening judges (gemma2/qwen/...) produce
-    exploratory ones reliable for ranking but not for reported effect sizes."""
+    """Reporting tier from the judge model.
+
+    Cloud judges (Gemini/GPT/Claude) produce confirmatory effect sizes.
+    Local judges (gemma2/qwen/...) are ranking-reliable but not for reported effect sizes.
+    """
     j = (judge_model or "").lower()
     if any(k in j for k in ("gemini", "gpt", "claude", "anthropic", "openai")):
         return "confirmatory"

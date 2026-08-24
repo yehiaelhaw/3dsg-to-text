@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from evaluation.axes import (
-    AXES, AXIS_BY_ID, CANDIDATE, CAPPED_VERDICT, CEILING, FLOOR, MIN_COVERAGE,
-    MIN_SCENES_SHOWING, PRACTICAL_MARGIN, SMALL_N,
+    AXES, AXIS_BY_ID, CANDIDATE, CAPPED_VERDICT, FULL_RECORD_ANCHOR, MIN_COVERAGE,
+    MIN_OBSERVATIONS, MIN_SCENES_SHOWING, NON_SPATIAL_ANCHOR, PRACTICAL_MARGIN,
     VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
     VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED,
     dataset_of, rep_role, tier_of,
@@ -154,19 +154,20 @@ def _tok_str(p) -> str:
 
 
 def _axis_reps(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[str]:
-    """Anchored, ladder-ordered rep list for one axis x type: floor first, the
-    in-scope poles in rung order, ceiling last -- keeping only those with data.
-    Returns [] when there is no real ladder (fewer than two reps present)."""
+    """Anchored, ladder-ordered rep list for one axis x type: non-spatial anchor
+    first, the in-scope poles in rung order, full-record anchor last -- keeping
+    only those with data. Returns [] when there is no real ladder (fewer than two
+    reps present)."""
     reps: list[str] = []
-    if (FLOOR, qt) in cells:
-        reps.append(FLOOR)
+    if (NON_SPATIAL_ANCHOR, qt) in cells:
+        reps.append(NON_SPATIAL_ANCHOR)
     for p in axis.ladder:
-        if p in (FLOOR, CEILING):
+        if p in (NON_SPATIAL_ANCHOR, FULL_RECORD_ANCHOR):
             continue
         if in_scope(p, qt) and (p, qt) in cells:
             reps.append(p)
-    if (CEILING, qt) in cells and CEILING not in reps:
-        reps.append(CEILING)
+    if (FULL_RECORD_ANCHOR, qt) in cells and FULL_RECORD_ANCHOR not in reps:
+        reps.append(FULL_RECORD_ANCHOR)
     return reps if len(reps) >= 2 else []
 
 
@@ -180,25 +181,25 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
     """
     cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == axis.host])
     # Question-matched, from the one pairing primitive -- NOT this cell's mean minus
-    # the floor cell's mean, which would difference two different question sets
-    # wherever a rep answered fewer questions than the floor did.
-    lifts = {(p.qt, p.rep_b): p for p in floor_lifts(rows, axis.host)}
+    # the anchor cell's mean, which would difference two different question sets
+    # wherever a rep answered fewer questions than the anchor did.
+    lifts = {(p.qt, p.rep_b): p for p in non_spatial_anchor_lifts(rows, axis.host)}
     body: list[str] = []
     for qt in axis.probe_types:
         reps = _axis_reps(axis, qt, cells)
         if not reps:
             continue
-        floor = cells.get((FLOOR, qt))
-        has_floor = bool(floor and floor.n_scored)
+        anchor = cells.get((NON_SPATIAL_ANCHOR, qt))
+        has_anchor = bool(anchor and anchor.n_scored)
         trows = []
         for rep in reps:
             c = cells[(rep, qt)]
-            dfloor = ("+0.00" if rep == FLOOR and has_floor
-                      else _lift_str(lifts.get((qt, rep))))
+            d_anchor = ("+0.00" if rep == NON_SPATIAL_ANCHOR and has_anchor
+                        else _lift_str(lifts.get((qt, rep))))
             trows.append([rep, rep_role(rep), str(c.n), f"{c.coverage * 100:.0f}",
-                          _ac_str(c), _range_str(c), dfloor])
+                          _ac_str(c), _range_str(c), d_anchor])
         body.append(f"**{qt}** (host: {axis.host})")
-        body += _table(["rep", "role", "n", "cov%", "AC", "q-range", "vs floor"], trows)
+        body += _table(["rep", "role", "n", "cov%", "AC", "q-range", "vs non-spatial anchor"], trows)
         body.append("")
     if not body:
         return []
@@ -207,12 +208,12 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
 
 
 def _planning_section(rows: list[dict]) -> list[str]:
-    """Planning / real-world-utility probe, reported on its own (not an axis pole). Split per host dataset, never pooled -- planning's floor/ceiling meaning differs by dataset (e.g. 3RScan planning needs the raw relation channel, not just inventory)."""
+    """Planning / real-world-utility probe, reported on its own (not an axis pole). Split per host dataset, never pooled -- planning's reference-anchor meaning differs by dataset (e.g. 3RScan planning needs the raw relation channel, not just inventory)."""
 
     def order(cells, rep):
-        """Floor first, poles by AC descending (rank-eligible before sub-threshold), then ceiling -- row order is a de facto ranking, so a sub-coverage cell must never sit above a full-coverage one."""
+        """Non-spatial anchor first, poles by AC descending (rank-eligible before sub-threshold), then full-record anchor -- row order is a de facto ranking, so a sub-coverage cell must never sit above a full-coverage one."""
         c = cells[(rep, "planning")]
-        block = {"floor": 0, "ceiling": 2}.get(rep_role(rep), 1)
+        block = {"non_spatial_anchor": 0, "full_record_anchor": 2}.get(rep_role(rep), 1)
         return (block, 0 if c.rank_eligible else 1, -c.ac_mean)
 
     out: list[str] = []
@@ -221,21 +222,22 @@ def _planning_section(rows: list[dict]) -> list[str]:
         reps = sorted({rep for (rep, qt) in cells if qt == "planning"})
         if not reps:
             continue
-        lifts = {(p.qt, p.rep_b): p for p in floor_lifts(rows, ds)}
-        floor = cells.get((FLOOR, "planning"))
-        has_floor = bool(floor and floor.n_scored)
+        lifts = {(p.qt, p.rep_b): p for p in non_spatial_anchor_lifts(rows, ds)}
+        anchor = cells.get((NON_SPATIAL_ANCHOR, "planning"))
+        has_anchor = bool(anchor and anchor.n_scored)
         trows = []
         for rep in sorted(reps, key=lambda r: order(cells, r)):
             c = cells[(rep, "planning")]
-            dfloor = ("+0.00" if rep == FLOOR and has_floor
-                      else _lift_str(lifts.get(("planning", rep))))
+            d_anchor = ("+0.00" if rep == NON_SPATIAL_ANCHOR and has_anchor
+                        else _lift_str(lifts.get(("planning", rep))))
             trows.append([rep, rep_role(rep), str(c.n), f"{c.coverage * 100:.0f}",
-                          _ac_str(c), _range_str(c), dfloor])
+                          _ac_str(c), _range_str(c), d_anchor])
         out += [f"## Planning / real-world utility (separate probe, host: {ds})",
                 "_Goal-framed questions: the model must infer the objects a goal needs, not be "
                 "handed them. Reported on its own -- not an axis pole, and never pooled across "
-                f"datasets. {FLOOR} = floor, {CEILING} = ceiling._", ""]
-        out += _table(["rep", "role", "n", "cov%", "AC", "q-range", "vs floor"], trows) + [""]
+                f"datasets. {NON_SPATIAL_ANCHOR} = non-spatial anchor, "
+                f"{FULL_RECORD_ANCHOR} = full-record anchor._", ""]
+        out += _table(["rep", "role", "n", "cov%", "AC", "q-range", "vs non-spatial anchor"], trows) + [""]
     return out
 
 
@@ -253,7 +255,7 @@ class Paired:
     host: str
     qt: str
     rep_a: str                      # earlier rung / baseline
-    rep_b: str                      # later rung, or the ceiling
+    rep_b: str                      # later rung, or the full-record anchor
     scene_deltas: dict[str, float]
     n_questions: int                # paired questions summed across scenes
     verdict: str
@@ -320,9 +322,9 @@ def _verdict(scene_deltas: dict[str, float], confound: str, ineligible: str) -> 
 
 
 def _paired_pairs(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[tuple[str, str]]:
-    """Contrasts for one axis x question type: ladder baseline vs each later rung, the declared headline pair, and each rung vs the ceiling. Deduplicated, always ordered (earlier, later)."""
+    """Contrasts for one axis x question type: ladder baseline vs each later rung, the declared headline pair, and each rung vs the full-record anchor. Deduplicated, always ordered (earlier, later)."""
     rungs = [p for p in axis.ladder
-             if p not in (FLOOR, CEILING) and in_scope(p, qt) and (p, qt) in cells]
+             if p not in (NON_SPATIAL_ANCHOR, FULL_RECORD_ANCHOR) and in_scope(p, qt) and (p, qt) in cells]
     pairs: list[tuple[str, str]] = []
     if rungs:
         base = rungs[0]
@@ -331,8 +333,8 @@ def _paired_pairs(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[tup
         a, b = axis.headline_pair
         if (a, qt) in cells and (b, qt) in cells and in_scope(a, qt) and in_scope(b, qt):
             pairs.append((a, b))
-    if (CEILING, qt) in cells:
-        pairs += [(r, CEILING) for r in rungs]
+    if (FULL_RECORD_ANCHOR, qt) in cells:
+        pairs += [(r, FULL_RECORD_ANCHOR) for r in rungs]
     seen: set[tuple[str, str]] = set()
     out = []
     for p in pairs:
@@ -381,7 +383,7 @@ def _gates(cells: dict[tuple[str, str], Cell], qt: str, reps: tuple[str, ...],
     reasons = [f"{rep} coverage {cells[(rep, qt)].coverage * 100:.0f}%"
                for rep in reps
                if (rep, qt) in cells and not cells[(rep, qt)].rank_eligible]
-    if n_q < SMALL_N:
+    if n_q < MIN_OBSERVATIONS:
         reasons.append(f"only {n_q} {unit}")
     return "; ".join(reasons)
 
@@ -436,15 +438,15 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
     return out
 
 
-# --- the floor comparison ---------------------------------------------------
-# A floor comparison isn't a design decision an axis isolates, so `_paired_pairs` never pairs a rung against it -- but it still gets the same graded treatment here, not a weaker one of its own.
-FLOOR_LIFT_ID = "floor"
+# --- the anchor comparison ---------------------------------------------------
+# An anchor comparison isn't a design decision an axis isolates, so `_paired_pairs` never pairs a rung against it -- but it still gets the same graded treatment here, not a weaker one of its own.
+NON_SPATIAL_ANCHOR_LIFT_ID = "non_spatial_anchor"
 
 
-def floor_lifts(rows: list[dict], host: str) -> list[Paired]:
-    """Every representation against the `inventory` floor on one host, question-matched. The floor is exempt from the scope filter and so answers every question, while other reps routinely don't (JSON views overflow on dense scenes) -- a plain mean-vs-mean subtraction would read those missing questions as an effect of the representation.
+def non_spatial_anchor_lifts(rows: list[dict], host: str) -> list[Paired]:
+    """Every representation against the `inventory` non-spatial anchor on one host, question-matched. The anchor is exempt from the scope filter and so answers every question, while other reps routinely don't (JSON views overflow on dense scenes) -- a plain mean-vs-mean subtraction would read those missing questions as an effect of the representation.
 
-    Returns every type the floor has data on, not just control types; restricting to control types is the chart's job.
+    Returns every type the anchor has data on, not just control types; restricting to control types is the chart's job.
     """
     host_rows = [r for r in rows if dataset_of(r["scene_id"]) == host]
     if not host_rows:
@@ -457,18 +459,18 @@ def floor_lifts(rows: list[dict], host: str) -> list[Paired]:
 
     out: list[Paired] = []
     for qt in sorted(qids_by_type):
-        if (FLOOR, qt) not in cells:
+        if (NON_SPATIAL_ANCHOR, qt) not in cells:
             continue
         reps = sorted({rep for (rep, t) in cells
-                       if t == qt and rep != FLOOR and in_scope(rep, qt)})
+                       if t == qt and rep != NON_SPATIAL_ANCHOR and in_scope(rep, qt)})
         for rep in reps:
-            by_scene = paired_deltas(q_mean, scene_of, qids_by_type[qt], FLOOR, rep)
+            by_scene = paired_deltas(q_mean, scene_of, qids_by_type[qt], NON_SPATIAL_ANCHOR, rep)
             if not by_scene:
                 continue
             scene_deltas, n_q, q_deltas = _summarise(by_scene)
-            ineligible = _gates(cells, qt, (FLOOR, rep), n_q)
-            ca, cb = cells.get((FLOOR, qt)), cells.get((rep, qt))
-            out.append(Paired(FLOOR_LIFT_ID, host, qt, FLOOR, rep, scene_deltas, n_q,
+            ineligible = _gates(cells, qt, (NON_SPATIAL_ANCHOR, rep), n_q)
+            ca, cb = cells.get((NON_SPATIAL_ANCHOR, qt)), cells.get((rep, qt))
+            out.append(Paired(NON_SPATIAL_ANCHOR_LIFT_ID, host, qt, NON_SPATIAL_ANCHOR, rep, scene_deltas, n_q,
                               _verdict(scene_deltas, "", ineligible), "", False,
                               ineligible,
                               ca.tokens_mean if ca else None,
@@ -478,7 +480,7 @@ def floor_lifts(rows: list[dict], host: str) -> list[Paired]:
 
 
 def _lift_str(p: Paired | None) -> str:
-    """The `vs floor` cell: a question-matched delta, or the reason instead of a number for a sub-threshold cell -- a number a reader must remember not to use is a number that gets used."""
+    """The `vs non-spatial anchor` cell: a question-matched delta, or the reason instead of a number for a sub-threshold cell -- a number a reader must remember not to use is a number that gets used."""
     if p is None:
         return ""
     if p.verdict == VERDICT_NOT_LICENSED:
@@ -548,9 +550,9 @@ def _recut_rows(rows: list[dict]) -> dict[tuple[str, str, str, str], dict[str, "
     keyed: dict[tuple[str, str, str, str], dict[str, Paired]] = collections.defaultdict(dict)
     for s in STYLES:
         for p in by_style[s]:
-            # Only the comparisons the cap actually fires on. An anchor comparison
-            # against the floor or ceiling carries no vocabulary confound, so it has
-            # nothing for the re-cut to resolve and would only pad the table.
+            # Only the comparisons the cap actually fires on. A comparison against
+            # the non-spatial or full-record anchor carries no vocabulary confound,
+            # so it has nothing for the re-cut to resolve and would only pad the table.
             axis = AXIS_BY_ID[p.axis_id]
             if not axis.confound_for(p.rep_a, p.rep_b):
                 continue
@@ -963,10 +965,10 @@ def _coverage_section(rows: list[dict]) -> list[str]:
 
 def _small_n_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
     trows = [[rep, qt, str(c.n), _ac_str(c)]
-             for (rep, qt), c in sorted(cells.items()) if 0 < c.n < SMALL_N]
+             for (rep, qt), c in sorted(cells.items()) if 0 < c.n < MIN_OBSERVATIONS]
     if not trows:
         return []
-    return (["## Small-n register (n < %d -- screening-only)" % SMALL_N,
+    return (["## Small-n register (n < %d -- screening-only)" % MIN_OBSERVATIONS,
              "_These cells are too small to rank on; treat as directional only._", ""]
             + _table(["rep", "type", "n", "AC"], trows) + [""])
 
@@ -979,7 +981,7 @@ def _small_n_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
 
 
 def _candidate_section(rows: list[dict]) -> list[str]:
-    """Synthesis candidate-default vs the json_mini ceiling, with token cost. Split per host dataset, never pooled -- floor/ceiling scope semantics and synthesis's own composition are both host-dependent."""
+    """Synthesis candidate-default vs the json_mini full-record anchor, with token cost. Split per host dataset, never pooled -- reference-anchor scope semantics and synthesis's own composition are both host-dependent."""
     out: list[str] = []
     for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
         cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == ds])
@@ -989,15 +991,15 @@ def _candidate_section(rows: list[dict]) -> list[str]:
         trows = []
         for qt in qts:
             s = cells[(CANDIDATE, qt)]
-            j = cells.get((CEILING, qt))
+            j = cells.get((FULL_RECORD_ANCHOR, qt))
             st = f"{s.tokens_mean:.0f}" if s.tokens_mean else "-"
             jt = f"{j.tokens_mean:.0f}" if j and j.tokens_mean else "-"
             trows.append([qt, _ac_str(s), _ac_str(j) if j else "n/a", st, jt])
-        out += [f"## Candidate default ({CANDIDATE} vs {CEILING}, host: {ds})",
-                f"_Can one compact view match the {CEILING} ceiling at a fraction of the "
-                "tokens? Never pooled across datasets._", ""]
-        out += _table(["type", f"{CANDIDATE} AC", f"{CEILING} AC",
-                       f"{CANDIDATE} tok", f"{CEILING} tok"], trows) + [""]
+        out += [f"## Candidate default ({CANDIDATE} vs {FULL_RECORD_ANCHOR}, host: {ds})",
+                f"_Can one compact view match the {FULL_RECORD_ANCHOR} full-record anchor "
+                "at a fraction of the tokens? Never pooled across datasets._", ""]
+        out += _table(["type", f"{CANDIDATE} AC", f"{FULL_RECORD_ANCHOR} AC",
+                       f"{CANDIDATE} tok", f"{FULL_RECORD_ANCHOR} tok"], trows) + [""]
     return out
 
 

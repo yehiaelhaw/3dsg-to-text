@@ -43,7 +43,7 @@ def _qa(scene_id: str) -> str:
 # were circular).
 _PROCTHOR_REPS = [
     "inventory", "topology_inventory", "topology", "room_tree", "graph_digest",
-    # json_mini is the ceiling; json_pretty is the same content pretty-printed (the
+    # json_mini is the full-record anchor; json_pretty is the same content pretty-printed (the
     # formatting ablation's raw pole). The bare name `json` is retired -- name
     # explicitly.
     "prose", "metric_relations", "navigation", "json_mini", "json_pretty", "synthesis",

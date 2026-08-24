@@ -128,7 +128,7 @@ def generate_responses(config: EvalConfig) -> Path:
                 config.scene_contexts_dir, question.scene_id
             )
             for representation in representations:
-                # Skip out-of-scope cells except `inventory`, which is deliberately posed spatial questions it can't answer so its guessing forms the spatial-encoding floor.
+                # Skip out-of-scope cells except `inventory`, which is deliberately posed spatial questions it can't answer so its guessing forms the spatial-encoding non-spatial anchor.
                 if (config.scope_filter
                         and representation != "inventory"
                         and not scope.in_scope(representation, question.question_type)):

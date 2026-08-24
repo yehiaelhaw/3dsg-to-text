@@ -1,4 +1,4 @@
-"""inventory — the floor of the spatial-encoding axis; room + object containment only, no
+"""inventory — the non-spatial anchor of the spatial-encoding axis; room + object containment only, no
 coordinates, distances, directions, or connectivity. Universal, runs on every scene."""
 
 import sys

@@ -10,15 +10,15 @@ from pathlib import Path
 # AXIS_PAIRS deltas are restricted to the axis's declared host/probe_types with both poles in scope, matching what the axis cards already show.
 from evaluation.scope import in_scope as _in_scope
 from evaluation.axes import (
-    AXES, AXIS_PAIRS, CANDIDATE, CEILING, FLOOR, MIN_COVERAGE,
-    MIN_SCENES_SHOWING, PRACTICAL_MARGIN, SMALL_N,
+    AXES, AXIS_PAIRS, CANDIDATE, FULL_RECORD_ANCHOR, MIN_COVERAGE,
+    MIN_OBSERVATIONS, MIN_SCENES_SHOWING, NON_SPATIAL_ANCHOR, PRACTICAL_MARGIN,
     VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
     VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED, dataset_of, rep_role,
 )
 # report.py owns the analysis contract; imported rather than reimplemented so a chart and report.md can't drift apart.
 from evaluation.report import (
     _cells, _gates, _load_pairs, _paired_rows, _q_means, _summarise, _verdict,
-    floor_lifts, paired_deltas,
+    non_spatial_anchor_lifts, paired_deltas,
 )
 
 
@@ -79,17 +79,17 @@ def axis_pair_questions(pair, qtype_of: dict, host_of: dict) -> list[str]:
 # Stable per-rep colours, reused across every chart so a representation keeps the
 # same colour in all figures (lets a thesis reader cross-reference). Grouped by
 # axis family: grey control, blue connectivity/structure, green metric/frame,
-# warm relations (relation linearization), purple/black prose+json_mini ceiling.
+# warm relations (relation linearization), purple/black prose+json_mini anchor.
 # tab10 carries only 10 hues, so the old resampling collapsed the 16-rep set into
 # duplicates; a fixed map avoids that and stays stable as reps come and go.
 REP_COLORS: dict[str, str] = {
-    "inventory":                     "#9e9e9e",  # control / floor
-    "json_mini":                     "#1f1f1f",  # raw-coordinate ceiling (inherits
-                                                 # the old `json` black, so every
-                                                 # existing figure keeps its ceiling
-                                                 # colour across the migration)
+    "inventory":                     "#9e9e9e",  # control / non-spatial anchor
+    "json_mini":                     "#1f1f1f",  # raw-coordinate full-record anchor
+                                                 # (inherits the old `json` black, so
+                                                 # every existing figure keeps its
+                                                 # anchor colour across the migration)
     "json_pretty":                   "#5c5c5c",  # same content, pretty-printed --
-                                                 # a lighter grey of the ceiling's
+                                                 # a lighter grey of the anchor's
                                                  # own hue, clear of inventory's
     "prose":                         "#6a3d9a",  # natural language
     # narrative's the content-matched sibling of prose (format axis, replacing
@@ -132,11 +132,11 @@ def _colors(reps: list[str]):
 
 # --- ordering and selection (the two places a ranking could sneak in) ------
 
-_ROLE_BLOCK = {"floor": 0, "pole": 1, "candidate": 2, "ceiling": 3}
+_ROLE_BLOCK = {"non_spatial_anchor": 0, "pole": 1, "candidate": 2, "full_record_anchor": 3}
 
 
 def registry_rep_order(reps) -> list[str]:
-    """Row order for the AC matrix: floor, poles in registry ladder order, unlisted reps, candidate, ceiling.
+    """Row order for the AC matrix: non-spatial anchor, poles in registry ladder order, unlisted reps, candidate, full-record anchor.
 
     Derived purely from axes.AXES/rep_role (no results read), so position never implies a ranking -- the matrix is an overview, not a verdict; ranking lives in report.md's paired separation table.
     """
@@ -161,24 +161,25 @@ def efficiency_frontier(xy: dict[str, tuple[float, float]], eligible) -> list[st
 # --- axis cards (the headline reporting chart) -----------------------------
 
 def _axis_card_reps(axis, qt: str, points: dict) -> list[str]:
-    """Anchored, ladder-ordered reps for one axis x type with data: floor first,
-    in-scope poles in rung order, ceiling last. [] when fewer than two are present.
-    Mirrors report._axis_reps so the chart and the table list the same cells."""
+    """Anchored, ladder-ordered reps for one axis x type with data: non-spatial
+    anchor first, in-scope poles in rung order, full-record anchor last. [] when
+    fewer than two are present. Mirrors report._axis_reps so the chart and the
+    table list the same cells."""
     reps = []
-    if points.get((qt, FLOOR)):
-        reps.append(FLOOR)
+    if points.get((qt, NON_SPATIAL_ANCHOR)):
+        reps.append(NON_SPATIAL_ANCHOR)
     for p in axis.ladder:
-        if p in (FLOOR, CEILING):
+        if p in (NON_SPATIAL_ANCHOR, FULL_RECORD_ANCHOR):
             continue
         if _in_scope(p, qt) and points.get((qt, p)):
             reps.append(p)
-    if points.get((qt, CEILING)) and CEILING not in reps:
-        reps.append(CEILING)
+    if points.get((qt, FULL_RECORD_ANCHOR)) and FULL_RECORD_ANCHOR not in reps:
+        reps.append(FULL_RECORD_ANCHOR)
     return reps if len(reps) >= 2 else []
 
 
 def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str]:
-    """One figure per axes.AXES entry -> axis_card_<id>.png: bars in ladder order against a floor/ceiling band, restricted to the entry's host and probe types.
+    """One figure per axes.AXES entry -> axis_card_<id>.png: bars in ladder order against a non-spatial/full-record anchor band, restricted to the entry's host and probe types.
 
     Whisker is a descriptive min-max spread, not a confidence interval -- overlap is never a tie rule (thesis 4.6).
     """
@@ -197,18 +198,18 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
                                 figsize=(max(4.0, 2.6 * len(groups) + 0.4 * sum(len(r) for _, r in groups)), 4.6))
         for gi, (qt, reps) in enumerate(groups):
             ax = axs[0][gi]
-            floor_ac = statistics.mean(points[(qt, FLOOR)]) if points.get((qt, FLOOR)) else None
-            ceil_ac = statistics.mean(points[(qt, CEILING)]) if points.get((qt, CEILING)) else None
-            if floor_ac is not None:
-                ax.axhline(floor_ac, color=color.get(FLOOR, "grey"), linestyle="--",
+            ns_anchor_ac = statistics.mean(points[(qt, NON_SPATIAL_ANCHOR)]) if points.get((qt, NON_SPATIAL_ANCHOR)) else None
+            fr_anchor_ac = statistics.mean(points[(qt, FULL_RECORD_ANCHOR)]) if points.get((qt, FULL_RECORD_ANCHOR)) else None
+            if ns_anchor_ac is not None:
+                ax.axhline(ns_anchor_ac, color=color.get(NON_SPATIAL_ANCHOR, "grey"), linestyle="--",
                            linewidth=1.0, alpha=0.7, zorder=1)
-            if ceil_ac is not None:
-                ax.axhline(ceil_ac, color=REP_COLORS.get(CEILING, "black"), linestyle=":",
+            if fr_anchor_ac is not None:
+                ax.axhline(fr_anchor_ac, color=REP_COLORS.get(FULL_RECORD_ANCHOR, "black"), linestyle=":",
                            linewidth=1.0, alpha=0.7, zorder=1)
             for xi, rep in enumerate(reps):
                 vals = points[(qt, rep)]
                 m = statistics.mean(vals)
-                small = len(vals) < SMALL_N
+                small = len(vals) < MIN_OBSERVATIONS
                 ax.bar(xi, m, 0.72, color=color.get(rep, "grey"), alpha=0.85,
                        hatch="//" if small else None,
                        edgecolor="black" if small else "none", linewidth=0.4, zorder=2)
@@ -230,11 +231,12 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
             if gi == 0:
                 ax.set_ylabel("Answer correctness")
         kind = "" if axis.kind == "axis" else f" [{axis.kind}]"
-        # Anchor names come from the registry, never a literal: the ceiling was
-        # renamed once already (json -> json_mini) and a hardcoded label here would
-        # have kept printing the retired name over correct data.
+        # Anchor names come from the registry, never a literal: the full-record
+        # anchor was renamed once already (json -> json_mini) and a hardcoded label
+        # here would have kept printing the retired name over correct data.
         fig.suptitle(f"{axis.label}{kind}   (host: {axis.host}; "
-                     f"{FLOOR}=dashed, {CEILING}=dotted, hatch = n<{SMALL_N})", fontsize=11)
+                     f"{NON_SPATIAL_ANCHOR}=dashed, {FULL_RECORD_ANCHOR}=dotted, "
+                     f"hatch = n<{MIN_OBSERVATIONS})", fontsize=11)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
         stem = f"axis_card_{axis.id}.png"
         fig.savefig(out_dir / stem, dpi=150, bbox_inches="tight")
@@ -244,7 +246,7 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
     return written
 
 
-# --- aggregate-level charts (AC by axis, lift over floor) -------------------
+# --- aggregate-level charts (AC by axis, lift over non-spatial anchor) -------------------
 
 def _license(cells: dict, rep: str, qt: str) -> tuple[bool, float]:
     """(rank_eligible, coverage) for one cell -- fail-open where there is no cell.
@@ -341,17 +343,17 @@ def _plot_ac_by_type(results_path: Path, rows: list[dict], ds: str,
     return {name}
 
 
-def _plot_floor_lift(rows: list[dict], ds: str, out_dir: Path, color: dict) -> set[str]:
-    """AC lift over the `inventory` floor -- matched per-question, one host per figure: the floor's meaning is host-dependent, so pooling would average incomparable things.
+def _plot_non_spatial_anchor_lift(rows: list[dict], ds: str, out_dir: Path, color: dict) -> set[str]:
+    """AC lift over the `inventory` non-spatial anchor -- matched per-question, one host per figure: the anchor's meaning is host-dependent, so pooling would average incomparable things.
 
-    Drawn only where inventory is a genuine no-information control; on content types it's a legitimate format rather than a floor, so those belong in the head-to-head chart instead.
+    Drawn only where inventory is a genuine no-information control; on content types it's a legitimate format rather than a non-spatial anchor, so those belong in the head-to-head chart instead.
     """
     import matplotlib.pyplot as plt
     import numpy as np
     from matplotlib.patches import Patch
     rng = np.random.default_rng(42)
 
-    lifts = [p for p in floor_lifts(rows, ds) if not _in_scope(FLOOR, p.qt)]
+    lifts = [p for p in non_spatial_anchor_lifts(rows, ds) if not _in_scope(NON_SPATIAL_ANCHOR, p.qt)]
     if not lifts:
         return set()
     by_type: dict[str, dict[str, object]] = collections.defaultdict(dict)
@@ -384,10 +386,10 @@ def _plot_floor_lift(rows: list[dict], ds: str, out_dir: Path, color: dict) -> s
 
     ax.set_xticks(range(len(ctrl_types)))
     ax.set_xticklabels([t.replace("_", " ") for t in ctrl_types], rotation=20, ha="right")
-    ax.set_ylabel(f"AC lift over the {FLOOR} floor  (matched questions)")
+    ax.set_ylabel(f"AC lift over the {NON_SPATIAL_ANCHOR} non-spatial anchor  (matched questions)")
     ax.set_ylim(-1.1, 1.1)
     ax.set_title(f"Value of spatial structure - host: {ds}  (paired per-question AC "
-                 f"difference vs the no-spatial {FLOOR} floor, averaged within scene; "
+                 f"difference vs the {NON_SPATIAL_ANCHOR} non-spatial anchor, averaged within scene; "
                  ">0 = it helped, <0 = it hurt)")
     ax.axhline(0, color="black", linewidth=0.8)
     ax.grid(axis="y", linestyle="--", alpha=0.4)
@@ -450,12 +452,12 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
                 label = f"{M[i, j]:.2f}\nn={n}" + ("" if ok else f"\nn/l cov {cov:.0%}")
                 ax.text(j, i, label, ha="center", va="center", color="black",
                         fontsize=7, zorder=5)
-                if 0 < n < SMALL_N:  # screening-only cell: red outline
+                if 0 < n < MIN_OBSERVATIONS:  # screening-only cell: red outline
                     ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
                                                edgecolor="red", linewidth=1.4, zorder=4))
-    # A rule at each reporting-role boundary (floor / poles / candidate / ceiling):
-    # the candidate answers a different question than the axis poles, and the two
-    # anchors bound them rather than competing with them.
+    # A rule at each reporting-role boundary (non-spatial anchor / poles / candidate /
+    # full-record anchor): the candidate answers a different question than the axis
+    # poles, and the two anchors bound them rather than competing with them.
     for i in range(1, len(ordered_reps)):
         if (_ROLE_BLOCK.get(rep_role(ordered_reps[i]), 1)
                 != _ROLE_BLOCK.get(rep_role(ordered_reps[i - 1]), 1)):
@@ -465,8 +467,9 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
     ax.set_yticks(range(len(ordered_reps)))
     ax.set_yticklabels(ordered_reps)
     ax.set_title(f"Answer correctness matrix - host: {ds}  (mean per rep x type; grey = "
-                 f"out of scope, red outline = n<{SMALL_N}, red hatch = not licensed)\n"
-                 "Rows in registry order (floor / poles / candidate / ceiling) - "
+                 f"out of scope, red outline = n<{MIN_OBSERVATIONS}, red hatch = not licensed)\n"
+                 "Rows in registry order (non-spatial anchor / poles / candidate / "
+                 "full-record anchor) - "
                  "NOT a ranking; separation is decided in report.md", fontsize=10)
     fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02, label="mean AC")
     fig.tight_layout()
@@ -510,11 +513,11 @@ GATED_BG = "#f5f6f7"    # backs the `not licensed` block in the separation fores
 
 # Reps excluded from the ceiling-premium candidate pool, each with a reason (visible here and printed in the figure's footer) since exclusion is a reporting choice that moves the headline number.
 CEILING_PREMIUM_EXCLUDED = {
-    CEILING:       "is the comparator",
-    "json_pretty": "carries the ceiling's own parse() output, so beating it is not a "
-                   "derived-view result",
+    FULL_RECORD_ANCHOR: "is the comparator",
+    "json_pretty": "carries the full-record anchor's own parse() output, so beating "
+                   "it is not a derived-view result",
     CANDIDATE:     "reported as the candidate default in report.md's candidate section",
-    FLOOR:         "the no-information control, not a derived view",
+    NON_SPATIAL_ANCHOR: "the no-information control, not a derived view",
     # Temporary: navigation's prompt changed under the 2026-08-21 block-layout fix and results.csv hasn't been regenerated against it yet; remove once rerun.
     "navigation":  "excluded pending its fresh rerun after the 2026-08-21 "
                    "block-layout fix; not a permanent exclusion",
@@ -522,7 +525,7 @@ CEILING_PREMIUM_EXCLUDED = {
 
 
 def ceiling_premium_rows(rows: list[dict]) -> list[dict]:
-    """One row per (host, question type): the best OBSERVED derived view vs the ceiling, using the same paired/gated/graded functions as the separation table so the two never disagree.
+    """One row per (host, question type): the best OBSERVED derived view vs the full-record anchor, using the same paired/gated/graded functions as the separation table so the two never disagree.
 
     `k` discloses that the winner is chosen post-hoc from the in-scope candidates (an oracle, not a declared representation); a gated row keeps its scene deltas and is marked `not licensed` rather than dropped.
     """
@@ -536,26 +539,26 @@ def ceiling_premium_rows(rows: list[dict]) -> list[dict]:
         pool = sorted({rep for rep, _q in q_mean} - set(CEILING_PREMIUM_EXCLUDED))
 
         for qt in sorted({qtype_of[q] for _rep, q in q_mean}):
-            if (CEILING, qt) not in cells:
+            if (FULL_RECORD_ANCHOR, qt) not in cells:
                 continue                      # nothing to be a premium over
             qids = {q for _rep, q in q_mean if qtype_of[q] == qt}
             cands = []
             for rep in pool:
                 if not _in_scope(rep, qt) or (rep, qt) not in cells:
                     continue
-                by_scene = paired_deltas(q_mean, scene_of, qids, CEILING, rep)
+                by_scene = paired_deltas(q_mean, scene_of, qids, FULL_RECORD_ANCHOR, rep)
                 if not by_scene:
                     continue
                 scene_deltas, n_q, q_deltas = _summarise(by_scene)
-                ineligible = _gates(cells, qt, (CEILING, rep), n_q)
+                ineligible = _gates(cells, qt, (FULL_RECORD_ANCHOR, rep), n_q)
                 tok_rep = cells[(rep, qt)].tokens_mean
-                tok_ceil = cells[(CEILING, qt)].tokens_mean
+                tok_anchor = cells[(FULL_RECORD_ANCHOR, qt)].tokens_mean
                 cands.append(dict(
                     host=host, qt=qt, rep=rep, scene_deltas=scene_deltas,
                     mean=statistics.mean(list(scene_deltas.values())),
                     n_questions=n_q, q_deltas=q_deltas, ineligible=ineligible,
                     verdict=_verdict(scene_deltas, "", ineligible),
-                    tok_ratio=(tok_ceil / tok_rep) if tok_rep and tok_ceil else None))
+                    tok_ratio=(tok_anchor / tok_rep) if tok_rep and tok_anchor else None))
             if not cands:
                 continue
             best = dict(max(cands, key=lambda c: c["mean"]))
@@ -614,7 +617,7 @@ def _plot_ceiling_premium(prem: list[dict], out_dir: Path,
     ax.set_yticklabels(list(reversed(ylabels)), fontsize=8.5)
     ax.set_ylim(-0.8, n - 0.2)
     ax.set_xlabel("Scene-paired AC delta:  best observed derived view  -  "
-                  f"{CEILING} ceiling\n(per-question deltas averaged within scene, "
+                  f"{FULL_RECORD_ANCHOR} full-record anchor\n(per-question deltas averaged within scene, "
                   "then over the scene values)", fontsize=9)
     ax.grid(axis="x", linestyle=":", alpha=0.45, zorder=0)
     ax.set_axisbelow(True)
@@ -649,26 +652,27 @@ def _plot_ceiling_premium(prem: list[dict], out_dir: Path,
     wins = sum(1 for r in graded if r["verdict"] == VERDICT_CONSISTENT)
     pos = sum(1 for r in graded if r["verdict"] != VERDICT_CONSISTENT and r["mean"] > 0)
     flat, gated_n = len(graded) - wins - pos, len(prem) - len(graded)
-    fig.suptitle(f"Does a compact derived view beat the full-information "
-                 f"{CEILING} ceiling?", fontsize=13.5, fontweight="bold",
+    fig.suptitle(f"Does a compact derived view beat the full-record "
+                 f"{FULL_RECORD_ANCHOR} anchor?", fontsize=13.5, fontweight="bold",
                  x=0.035, ha="left", y=1 - 0.26 / H)
     # A directory where nothing is gradeable is a result, not an empty figure, and
     # "0 of 0 cells reach a consistent advantage" states it as though the derived
-    # views had been tried and lost. They were never comparable: the ceiling is the
-    # member that failed.
+    # views had been tried and lost. They were never comparable: the full-record
+    # anchor is the member that failed.
     if graded:
         caption = (f"{wins} of {len(graded)} graded host x question-type cells reach a "
-                   f"CONSISTENT ADVANTAGE over {CEILING} under the declared rule.\n"
+                   f"CONSISTENT ADVANTAGE over {FULL_RECORD_ANCHOR} under the declared rule.\n"
                    f"{pos} more have a positive mean the rule does not license as a "
                    f"win; {flat} {'is' if flat == 1 else 'are'} negative or flat; "
                    f"{gated_n} {'is' if gated_n == 1 else 'are'} drawn with scene "
                    f"deltas but {VERDICT_NOT_LICENSED} (the gate is on the row).")
     else:
-        caption = (f"No cell here can be graded against {CEILING}: the ceiling itself "
-                   f"fails the coverage gate on every one of the {gated_n} cells "
-                   f"below.\nThe derived views are drawn with their scene deltas, and "
-                   f"the gate that withheld each grade is printed on its row. This is "
-                   f"a fact about the ceiling, not about the views beside it.")
+        caption = (f"No cell here can be graded against {FULL_RECORD_ANCHOR}: the "
+                   f"anchor itself fails the coverage gate on every one of the "
+                   f"{gated_n} cells below.\nThe derived views are drawn with their "
+                   f"scene deltas, and the gate that withheld each grade is printed "
+                   f"on its row. This is a fact about the anchor, not about the "
+                   f"views beside it.")
     fig.text(0.035, 1 - 0.60 / H, caption,
              fontsize=9.2, color="#4a5058", va="top", ha="left")
 
@@ -897,14 +901,14 @@ def plot_aggregate(aggregate_path: Path) -> None:
     # head-to-head below covers the content/general types no axis ladder probes.
     written_cards = _plot_axis_cards(results_path, out_dir, color)
 
-    # -- Charts 1-3: per-host head-to-head, floor lift, and the AC matrix --
+    # -- Charts 1-3: per-host head-to-head, non-spatial anchor lift, and the AC matrix --
     # One figure per host each. In a single-host directory (a per-scene report, or
     # _aggregate/procthor) that is one figure; in _aggregate/all it is three, and
     # they are three separate readings rather than one averaged one.
     written: set[str] = set()
     for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
         written |= _plot_ac_by_type(results_path, rows, ds, out_dir, color)
-        written |= _plot_floor_lift(rows, ds, out_dir, color)
+        written |= _plot_non_spatial_anchor_lift(rows, ds, out_dir, color)
         written |= _plot_heatmap(results_path, rows, ds, out_dir)
 
     # -- Chart 4: axis-contrast paired deltas (every AXES entry declaring a
@@ -955,7 +959,7 @@ def plot_aggregate(aggregate_path: Path) -> None:
     # -- Charts 5-6: the two graded figures --
     # Drawn last because they depend on nothing above them and on all of report.py:
     # `ceiling_premium` grades the headline claim (a compact derived view against the
-    # json_mini ceiling) and `paired_separation` draws the separation table itself.
+    # json_mini full-record anchor) and `paired_separation` draws the separation table itself.
     # Both carry the responder and judge in-figure -- a verdict is a verdict OF a
     # responder graded BY a judge, and these two figures travel out of their directory.
     responder = ", ".join(sorted({r.get("responder") or "" for r in rows} - {""})) or "?"

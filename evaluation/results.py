@@ -172,7 +172,7 @@ def _compute_aggregate(rows: list[dict]) -> list[dict]:
     for (rep, qt), group in sorted(groups.items()):
         out.append(_group_row(rep, qt, group))
 
-    # Operational total (n, error/context-exceeded counts, throughput), NOT a quality score -- pools floor+ceiling, in/out-of-scope, every type/dataset. report.py never surfaces it.
+    # Operational total (n, error/context-exceeded counts, throughput), NOT a quality score -- pools non-spatial+full-record anchors, in/out-of-scope, every type/dataset. report.py never surfaces it.
     out.append(_group_row("ALL", "operational-total", rows))
     return out
 

@@ -8,7 +8,7 @@ import statistics
 from pathlib import Path
 
 from evaluation.axes import (
-    AXES, CEILING, MIN_COVERAGE, MIN_SCENES_SHOWING, PRACTICAL_MARGIN,
+    AXES, FULL_RECORD_ANCHOR, MIN_COVERAGE, MIN_SCENES_SHOWING, PRACTICAL_MARGIN,
     VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
     VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED, dataset_of,
 )
@@ -27,8 +27,8 @@ TEXTWIDTH_IN = 418 * PT
 TEXTHEIGHT_IN = 658 * PT
 
 # The thesis's own host order (tab:meth-datasets, and the order chapter 6 reads them
-# in), not alphabetical. Alphabetical puts 3RScan -- the host where every ceiling row
-# is gated -- at the top of F1, so the figure opens on its five withheld grades.
+# in), not alphabetical. Alphabetical puts 3RScan -- the host where every full-record-
+# anchor row is gated -- at the top of F1, so the figure opens on its five withheld grades.
 HOST_ORDER = ["procthor", "gibson", "3rscan"]
 HOST_LABEL = {"procthor": "ProcTHOR", "gibson": "Gibson", "3rscan": "3RScan"}
 
@@ -79,22 +79,22 @@ def load_rows(results_path: Path) -> list[dict]:
 # --- row selection ----------------------------------------------------------
 
 def f1_rows(rows: list[dict]) -> list[dict]:
-    """The ceiling-anchored cells, in thesis host order."""
+    """The cells anchored against the full-record anchor, in thesis host order."""
     prem = ceiling_premium_rows(rows)
     return sorted(prem, key=lambda r: (HOST_ORDER.index(r["host"]), r["qt"]))
 
 
 def f2_rows(rows: list[dict]) -> list:
-    """The within-representation contrasts: `_paired_rows` minus the ceiling anchors.
+    """The within-representation contrasts: `_paired_rows` minus the full-record-anchor comparisons.
 
     The filter is the whole selection rule, and it is one line on purpose. Any list
     curated by which comparisons the prose happens to cite is a list a reader cannot
     check and an edit to chapter 6 can silently falsify; this one they can restate
-    ("every contrast the registry generates that is not against the ceiling") and
-    verify against the appendix catalogue.
+    ("every contrast the registry generates that is not against the full-record anchor")
+    and verify against the appendix catalogue.
     """
     prs = _paired_rows(rows, pairs=_load_pairs())
-    keep = [p for p in prs if CEILING not in (p.rep_a, p.rep_b)]
+    keep = [p for p in prs if FULL_RECORD_ANCHOR not in (p.rep_a, p.rep_b)]
     return sorted(keep, key=_f2_key)
 
 
@@ -201,7 +201,7 @@ def render_f1(prem: list[dict], out: Path) -> None:
     ax.set_yticklabels(list(reversed(labels)), fontsize=7.5)
     ax.set_ylim(-0.7, n - 0.3)
     ax.set_xlabel(f"Scene-paired AC delta:  best observed eligible view "
-                  f"{MINUS} {CEILING} reference", fontsize=8)
+                  f"{MINUS} {FULL_RECORD_ANCHOR} reference", fontsize=8)
     ax.grid(axis="x", linestyle=":", alpha=0.45, zorder=0)
     ax.set_axisbelow(True)
     for side in ("top", "right", "left"):
@@ -851,7 +851,7 @@ def caption_facts(prem: list[dict], f2: list, cat: list) -> str:
         % (len(over), len(graded)),
         # Printed in the convention the .tex uses, so a caption is transcribed from
         # here rather than re-rounded by hand into a third variant.
-        "F1  token reduction      : %.2fx to %.2fx  (about %d%%--%d%% of the ceiling)"
+        "F1  token reduction      : %.2fx to %.2fx  (about %d%%--%d%% of the full-record anchor)"
         % (min(ratios), max(ratios), round(100 / max(ratios)),
            round(100 / min(ratios))),
         "F1  delta range          : %+.3f to %+.3f"

@@ -1,6 +1,6 @@
-"""json_mini — the CEILING pole of the format axis; the same content as json_pretty
+"""json_mini — the full-record anchor of the format axis; the same content as json_pretty
 (shares its `parse()` by import) reserialized without indentation, as a cost-accounting
-correction so the ceiling isn't charged for meaningless whitespace tokens."""
+correction so the anchor isn't charged for meaningless whitespace tokens."""
 
 import sys
 import os
