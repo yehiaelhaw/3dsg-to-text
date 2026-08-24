@@ -107,14 +107,7 @@ Facts:
 {numbered_facts}"""
 
 
-# Facts split into two tiers by weight: the *core* tier (weight > 1) is what the
-# question explicitly asks for and is the ONLY thing the primary answer_correctness
-# scores; the *detail* tier (weight <= 1) is supporting information the question did
-# not ask for -- scored separately as a diagnostic (answer_correctness_detail), never
-# folded into the primary. Splitting here (rather than one Sum(weights)/Sum(all))
-# means a wrong core answer can no longer be masked by volunteered supporting detail.
-# The threshold is > 1 (not == 3) so a future intermediate weight still counts as core
-# and numeric weighting is preserved *within* the core tier.
+# Core tier (weight > 1) is what the question asks for and is the only thing answer_correctness scores; detail tier is diagnostic only, never folded in -- so a wrong core answer can't be masked by volunteered detail.
 _CORE_MIN_WEIGHT = 1.0
 
 
@@ -159,31 +152,13 @@ def rubric_correctness(
     return core_score, tier_score(detail), text
 
 
-# A verdict word only counts when the line ends there or continues into a reason.
-# Without that guard a fact RESTATEMENT whose text begins with "No"/"Yes" -- e.g.
-# "4. No other table is included in this shape group" -- parses as a verdict, and
-# silently records the OPPOSITE of the verdict the judge gives on the next line.
-# Nothing raises, so the row still looks scored. Seen on gemini-2.5-flash, which
-# restates each fact on the numbered line and puts YES/NO on an indented bullet.
+# A verdict word only counts when the line ends there or continues into a reason; otherwise a fact restatement beginning with "No"/"Yes" would parse as the opposite of the real verdict on the next line.
 _NUM_VERDICT = re.compile(r"^[\-\s]*(\d+)[.)]\s*(YES|NO)\b(.*)$", re.IGNORECASE)
 _REASON_SEP = re.compile(r"^\s*(?:[-–—:;,.!]|$)")
 _SUB_VERDICT = re.compile(r"^[\-•\*\s]*(YES|NO)\b", re.IGNORECASE)
 
-# Only an affirmation earns the fact. A numbered line carrying a short verdict
-# phrase that is NOT "YES" -- "MAYBE", "PARTIALLY YES", "IMPLIED YES" -- means the
-# judge considered the fact and declined to affirm it, which scores as NO. This is
-# deliberately vocabulary-free: no list of hedge words to maintain, and hedges
-# nobody has seen yet resolve the same way. The prompt asks for YES or NO, so a
-# reply that is neither has not met the bar the prompt sets.
-#
-# NOT the same as a fact the judge never mentioned -- that still raises below.
-# "evaluated but not affirmed" and "never evaluated" are different claims, and
-# scoring the second as absent is the silent-understatement bug the fail-closed
-# rule exists to catch (it caught a truncated verdict list at 4/10632 rows).
-#
-# The separator requirement is what keeps a fact RESTATEMENT from being read as a
-# verdict: "3. Bath cabinet [16]" has no reason clause, so it stays pending and
-# waits for the real verdict on the following line.
+# Only an affirmation earns the fact -- any non-"YES" verdict (hedge, "partially", etc.) scores NO, deliberately vocabulary-free so unseen hedges resolve the same way.
+# This differs from a fact the judge never mentions at all, which still raises below ("evaluated but not affirmed" vs "never evaluated" are different failure modes).
 _NUM_ANY = re.compile(r"^[\-\s]*(\d+)[.)]\s*(.+)$")
 _SEP_SPLIT = re.compile(r"\s*[-–—:;,.!]\s*")
 _MAX_VERDICT_WORDS = 3
@@ -233,13 +208,7 @@ def _parse_rubric(text: str, n: int) -> list[bool]:
                 seen.add(pending)
                 pending = None
     if n > 0 and len(seen) < n:
-        # EVERY fact must be ADDRESSED. A fact the judge skipped entirely is a
-        # format failure, not an implicit NO: defaulting it to absent silently
-        # understates the answer and biases AC downward, and it does so invisibly
-        # because the record still looks scored. Raise so the record errors and is
-        # re-judged on resume -- the same fail-closed contract the rest of the
-        # pipeline follows. Both the no-verdicts-at-all and the truncated-list
-        # cases land here. (An addressed-but-hedged fact does NOT: see _NUM_ANY.)
+        # Every fact must be ADDRESSED: defaulting a skipped fact to absent would silently understate AC. Raise so the record errors and is re-judged on resume.
         missing = [i + 1 for i in range(n) if i not in seen]
         raise ValueError(
             f"Judge gave no verdict at all for fact(s) {missing} of {n}: {text!r}"

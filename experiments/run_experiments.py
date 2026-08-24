@@ -1,28 +1,6 @@
-"""run_experiments.py -- run the responder x scene evaluation matrix.
-
-For every (ModelProfile in models.MODEL_PROFILES) x (Scene in scenes.SCENES) build
-one EvalConfig and run it, writing to results/<profile.name>/<scene_id>/. The
-default judge is the fixed gemma2:9b screening judge; pass --score-only with
---judge-backend/--judge-model to re-judge an existing responses.jsonl cache with
-a different judge instead (e.g. Gemini for final numbers) -- no regeneration, no
-responder VRAM. Runs are resumable (resume=True), so a crash -- or a
---models/--scenes subset -- can be re-run without redoing finished cells.
-
---types narrows a run to the question types a reported comparison actually reads.
-It filters GENERATION; the scoring phase judges whatever the cache holds, which is
-exactly the filtered set when generation was filtered (and the resume set skips
-anything already judged). Being in scope is not a reason to spend a cell.
-
-Usage:
-  python -m experiments.run_experiments                          # full matrix
-  python -m experiments.run_experiments --models qwen2.5-14b     # one model, all scenes
-  python -m experiments.run_experiments --scenes Brinnon,procthor_train1
-  python -m experiments.run_experiments --list                   # print matrix, run nothing
-  python -m experiments.run_experiments --models qwen2.5-14b --scenes Brinnon \\
-      --score-only --judge-backend gemini --judge-model gemini-2.5-flash --faithfulness
-  python -m experiments.run_experiments --models qwen2.5-14b \\
-      --scenes procthor_train1 --reps topology_metric --types route,direction \\
-      --generate-only                            # headline cells only, no diagnostics
+"""Run the responder x scene evaluation matrix: one EvalConfig per (model, scene),
+written to results/<profile>/<scene>/. Resumable, and --score-only re-judges a
+cached responses.jsonl under a different judge without regenerating.
 """
 from __future__ import annotations
 
@@ -63,17 +41,8 @@ def build_config(profile, scene, *, judge_backend=None, judge_model=None,
                   question_types=None):
     """One EvalConfig for a (model x scene) cell. Imports lazily so --list is cheap.
 
-    judge_backend/judge_model default to the fixed gemma2:9b screening judge;
-    pass overrides (e.g. from --score-only --judge-backend gemini) to re-judge
-    an existing cache with a different judge instead.
-
-    representations overrides the scene's rep set (from --reps) for subset runs --
-    e.g. a second responder on headline cells only, or refilling one purged rep.
-    scenes.py stays the source of truth for what a FULL run covers.
-
-    question_types (from --types) narrows generation to the types a reported
-    comparison actually reads. Being IN SCOPE is not a reason to spend a cell:
-    scope.py says what a rep can answer, this says what the argument needs.
+    question_types narrows generation to what a reported comparison reads; being
+    in scope (scope.py) is not a reason to spend a cell.
     """
     from evaluation.config import EvalConfig
     return EvalConfig(
@@ -97,10 +66,8 @@ def build_config(profile, scene, *, judge_backend=None, judge_model=None,
         compute_faithfulness=compute_faithfulness,
         resume=True,
         score_only=score_only,
-        # Fail-closed scope validation: abort before the
-        # first LLM call if any representation part or question type lacks a
-        # scope.py declaration. Free when declarations are complete; catches the
-        # silent-typo mis-scope class on every run, not just "final" ones.
+        # Fail-closed: aborts before the first LLM call if any rep/question type
+        # lacks a scope.py declaration (catches silent-typo mis-scope on every run).
         strict_scope=True,
     )
 

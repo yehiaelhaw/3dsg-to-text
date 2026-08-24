@@ -13,13 +13,7 @@ from typing import Optional
 csv.field_size_limit(2**31 - 1)
 
 
-# Sentinel stored in EvalRecord.error / the responses cache when the responder's
-# context window was too small to hold the representation -- the prompt filled or
-# was truncated to num_ctx, so the rep is clipped and any answer is unreliable.
-# It is a TERMINAL outcome: resume must not retry it and the judge must not score
-# it, and it is reported separately from real errors in the aggregate (a context
-# token-cost result, not a wrong answer). See evaluation/runner.py (the guard)
-# and evaluation/results.py (the aggregate split).
+# Sentinel for a responder context-window overflow (prompt clipped/truncated). Terminal: resume must not retry it, the judge must not score it.
 CONTEXT_EXCEEDED = "CONTEXT_EXCEEDED"
 
 
@@ -39,32 +33,10 @@ class Question:
     scene_id:       str
     text:           str
     question_type:  Optional[str] = None
-    # `natural` where a user could have asked this without ever having seen a
-    # derived view's output, `constructed` where the concept mirrors that output's
-    # computed vocabulary. Only the types exposed to a derived pole carry it
-    # (connectivity + the 3RScan relation family); None elsewhere. This is what the
-    # vocabulary-coupling re-cut in report.py splits on -- the remedy the declared
-    # confound points at (thesis 4.5 / 4.6).
+    # `natural`: a user could ask this without having seen a derived view's output. `constructed`: wording mirrors that output's computed vocabulary. Only set for types exposed to a derived pole.
     question_style: Optional[str] = None
-    # The balanced natural<->constructed design. A fact-set is one information request;
-    # its two members ask for the SAME answer in different registers, so register is
-    # manipulated within-item rather than between-item. `(scene_id, pair_id)` is the
-    # fact-set key, and it exists for exactly one purpose: letting report.py group the
-    # two members so their register effects can be differenced.
-    #
-    # It is NOT a provenance field and must not be used as one. Which member happens
-    # to carry the id that became `pair_id` -- i.e. which stem was authored first --
-    # is implementation history, not an experimental variable: it must never filter,
-    # group, or qualify a reported number, and all 134 scoped questions participate in
-    # every table. `natural` means natural and `constructed` means constructed
-    # regardless of when or why the stem was written.
-    #
-    # It is deliberately NOT in CSV_COLUMNS. It is a property of the authored
-    # question, not of a run, so report.py joins it from the QA files on
-    # (scene_id, question_id) at analysis time. That keeps every committed
-    # results.csv byte-identical and avoids the mixed-fieldnames failure in
-    # aggregate_results._pool_rows, which takes fieldnames from the last scene it
-    # reads and would reject rows carrying keys the header lacks.
+    # Fact-set key: (scene_id, pair_id) groups a natural/constructed pair so report.py can difference their register effect. NOT a provenance field -- never filter/group on which member was authored first.
+    # Deliberately excluded from CSV_COLUMNS; report.py joins it from the QA files at analysis time to keep results.csv byte-identical across runs.
     pair_id:        Optional[str] = None
     key_facts:      list[KeyFact] = field(default_factory=list)
 

@@ -1,12 +1,6 @@
-"""Shared geometry helpers for the metric parsers.
-
-`metric_relations` and `navigation` both derive spatial relations from raw
-coordinates at parse time — nothing here is stored on the
-model. The datasets disagree on which axis is "up" (Gibson is z-up; ProcTHOR
-room centroids sit on the x/z plane with a constant y), so the floor plane is
-*detected* from the data rather than hard-coded: within a set of positions the
-least-spread axis is treated as vertical and dropped.
-"""
+"""Shared geometry helpers for the metric parsers. The floor plane is detected per scene
+(least-spread axis = vertical) rather than hard-coded, since datasets disagree on which
+axis is "up"."""
 
 import math
 

@@ -1,14 +1,5 @@
-"""inventory — the no-spatial control.
-
-Lists each room and the objects it contains, with no spatial structure at all:
-no coordinates, no distances, no directions, no connectivity. It is the floor of
-the spatial-encoding axis — the baseline that answers "what is in room X" and
-"how many bathrooms" purely from containment plus the model's world knowledge.
-
-Comparing every spatial representation against `inventory` isolates the value of
-spatial structure itself: if a representation does not beat `inventory`, the
-spatial information it adds was not used. Universal — runs on every scene.
-"""
+"""inventory — the floor of the spatial-encoding axis; room + object containment only, no
+coordinates, distances, directions, or connectivity. Universal, runs on every scene."""
 
 import sys
 import os

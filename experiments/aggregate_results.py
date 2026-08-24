@@ -1,37 +1,5 @@
-"""aggregate_results.py -- pool per-scene results into cross-scene plots.
-
-Each scene's results.csv is written under experiments/results/<model>/<scene>/ by
-the runner. This concatenates the scenes of a *dataset* into a combined results.csv
-(question_id namespaced by scene so identities stay unique across scenes),
-recomputes aggregate.csv, and runs the same scope-aware charts from
-evaluation/plots.py -- so the cross-scene views are identical in form to the
-per-scene ones, just pooled over more questions.
-
-Pooling is **per dataset** because each dataset hosts a different representation
-set and different question types; pooling across datasets would
-average incomparable rep sets. A combined "all" group is also written for a global
-overview -- scope-masking keeps out-of-scope cells blank, but read it with the
-ALL-row caveat: compare within a question type, not across.
-
-Only scenes whose registry role is `primary` are pooled (scenes.PRIMARY_SCENE_IDS).
-A `stress` or `sensitivity` scene keeps its own per-scene results.csv/report.md and
-is reachable through --nonprimary, but it never enters a primary group -- its
-results answer a different question (an operational limit, or how much the verdict
-set depends on scene choice) and pooling it would put it inside axis verdicts and
-headline counts. Role lives in the
-registry, never in a directory name, so axes.dataset_of() still resolves an
-excluded scene to its host dataset.
-
-Output goes to experiments/results/<model>/_aggregate/<group>/ (the leading
-underscore keeps it sorted apart from real scene dirs). The pooled results.csv is
-kept too, so the combined cells can be inspected directly.
-
-Usage:
-  python -m experiments.aggregate_results                       # every model found
-  python -m experiments.aggregate_results --models qwen2.5-14b  # one model
-  python -m experiments.aggregate_results --diagnostics         # + latency diagnostic
-  python -m experiments.aggregate_results --nonprimary          # + nonprimary_<ds>/
-  python -m experiments.aggregate_results --allow-partial       # write short groups
+"""Pool primary-scene results.csv files into per-dataset (and cross-dataset)
+aggregate reports; stress/sensitivity scenes are pooled separately via --nonprimary.
 """
 from __future__ import annotations
 
@@ -51,12 +19,9 @@ OUTPUT_ROOT = Path("experiments/results")
 AGG_DIRNAME = "_aggregate"
 NONPRIMARY_PREFIX = "nonprimary_"
 
-# Every dataset hosts exactly three primary scenes, and scene is
-# the unit of replication for the separation rule. A per-dataset group built from
-# fewer than three is a TRANSITION STATE -- mid scene substitution, or a run that
-# only reached some scenes -- and writing it would silently replace a full report
-# with a partial one carrying the same filenames and no marker. Skipped by default,
-# leaving the existing aggregate intact; --allow-partial writes it anyway.
+# Each dataset has exactly 3 primary scenes; a group with fewer is a transition
+# state and is skipped by default (see --allow-partial) rather than silently
+# overwriting a full report.
 SCENES_PER_DATASET = 3
 
 
@@ -72,10 +37,7 @@ def _scene_dirs(model_dir: Path) -> list[Path]:
 def _split_by_role(scene_dirs: list[Path]) -> tuple[list[Path], list[tuple[Path, str]]]:
     """Partition scene dirs into (primary_dirs, [(dir, role), ...]).
 
-    Fails closed on a directory with no registry entry. An unregistered results dir
-    is exactly the silent-inclusion case this split exists to prevent: nothing in the
-    pooled output names its scenes, so a stray scene would enter every mean and chart
-    and read as more replication rather than as a mistake.
+    Fails closed on an unregistered scene so it can't silently enter the pooled means.
     """
     primary: list[Path] = []
     excluded: list[tuple[Path, str]] = []
@@ -133,9 +95,8 @@ def _write_group(group_dir: Path, fieldnames: list[str], rows: list[dict],
     plots.plot_aggregate(aggregate_path)
     plots.plot_per_question(detail_path, diagnostics=diagnostics)
 
-    # Numeric report (coverage/rank-eligibility, small-n register, axis cards). For
-    # the cross-dataset 'all' group the axis cards self-restrict to each axis's host
-    # dataset (axes.dataset_of), so no axis ladder is pooled across datasets.
+    # Axis cards self-restrict to each axis's host dataset (axes.dataset_of), so
+    # none is pooled across datasets in the 'all' group.
     from evaluation.report import write_report
     write_report(detail_path, aggregate_path)
 
@@ -147,9 +108,8 @@ def aggregate_model(model_dir: Path, diagnostics: bool = False,
         print(f"  (no scene results under {model_dir})")
         return
 
-    # Role split BEFORE any grouping. Every exclusion is named on stdout, so a scene
-    # leaving the primary pool is always visible in the run log -- the point is that
-    # non-primary scenes stay out of the aggregate, not that they stay out of sight.
+    # Role split before grouping; exclusions are printed so they stay out of the
+    # aggregate without staying out of sight.
     primary_dirs, excluded = _split_by_role(scene_dirs)
     if excluded:
         print(f"  non-primary, excluded from every pooled group: "
@@ -163,9 +123,7 @@ def aggregate_model(model_dir: Path, diagnostics: bool = False,
     for d in primary_dirs:
         groups.setdefault(dataset_of(d.name), []).append(d)
 
-    # Non-primary scenes are pooled only on request, into their own clearly named
-    # groups. They are never added to `all` and never share a directory with a
-    # primary group, so nothing downstream can read them as replication.
+    # Pooled into their own groups on request, never into `all`.
     if nonprimary and excluded:
         for d, _role in excluded:
             groups.setdefault(NONPRIMARY_PREFIX + dataset_of(d.name), []).append(d)
@@ -189,11 +147,8 @@ def aggregate_model(model_dir: Path, diagnostics: bool = False,
 def partial_groups(groups: dict[str, list[Path]]) -> dict[str, str]:
     """Which primary groups are under-filled, and why (group -> reason).
 
-    A per-dataset group is partial below SCENES_PER_DATASET. `all` is partial
-    whenever any dataset group is, because it pools them -- otherwise the guard would
-    protect each dataset report and still let the cross-dataset overview be rewritten
-    from a short pool. The nonprimary_* groups have no three-scene expectation and are
-    never judged partial.
+    `all` is marked partial whenever any dataset group it pools is, so the guard
+    can't be bypassed by rewriting the cross-dataset overview from a short pool.
     """
     out: dict[str, str] = {}
     for group, dirs in groups.items():

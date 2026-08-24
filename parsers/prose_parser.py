@@ -26,13 +26,8 @@ def _degree(connectivity: dict | None, rooms: dict, rid: str) -> int:
 
 def _room_line(room: Room, connectivity: dict | None, rooms: dict,
                show_count: bool = True) -> str:
-    """One room as a sentence. `show_count` prints the explicit object tally.
-
-    The tally is prose's own (`contains 22 objects: ...`); `topology_inventory`
-    states only the list. `narrative` passes False so the format pair is a pure
-    rendering flip -- see parsers/narrative_parser.py. The default keeps `prose`
-    and `synthesis` byte-identical.
-    """
+    """One room as a sentence. `show_count` prints the explicit object tally; `narrative`
+    passes False so its format-axis pairing with topology_inventory is a pure rendering flip."""
     label = _room_label(room)
     obj_str = _object_inventory(room)
     parts = [label]

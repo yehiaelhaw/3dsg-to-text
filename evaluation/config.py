@@ -27,23 +27,14 @@ class EvalConfig:
     repetitions:        int                 = 1
     representations:    Optional[list[str]] = None   # None → auto-discover
     question_ids:       Optional[list[str]] = None   # None → all questions
-    # Restrict generation to these question types. None → every type the reps are
-    # in scope for. This is a *run-cost* control, not a scope declaration: scope.py
-    # still decides what a rep CAN answer, and being in scope is not a reason to
-    # spend a cell. Used to run only the types a reported exhibit reads (e.g.
-    # route+direction for the navigation/topology_metric pair) and leave the rest
-    # of that rep's in-scope surface as an optional diagnostic.
+    # Run-cost control, not a scope declaration -- scope.py still decides what a rep CAN answer; this only restricts what gets spent.
     question_types:     Optional[list[str]] = None
 
     # Skip (rep × question) cells the rep cannot answer (scope.in_scope). On by
     # default: it only removes structurally-meaningless cells that plots masked
     # anyway. Set False to force the full cross product.
     scope_filter:       bool                = True
-    # Fail-closed guard for final scored runs: before generating, verify every
-    # representation (each "+" part of a combo) has a REP_CAPS entry and every
-    # question type a TYPE_NEEDS entry (scope.validate_declared); an undeclared
-    # name aborts the run instead of silently running fail-open. Leave False for
-    # exploratory runs; set True for any run whose numbers will be reported.
+    # Fail-closed guard: aborts the run if any rep/question-type lacks a REP_CAPS/TYPE_NEEDS entry, instead of running fail-open. Set True for any run whose numbers will be reported.
     strict_scope:       bool                = False
     # faithfulness is the secondary metric and costs an extra judge call per
     # record. Turn off for screening passes to cut LLM calls by ~a third.
@@ -54,14 +45,7 @@ class EvalConfig:
     # present and non-errored in output_dir/results.csv, and append to it.
     resume:             bool                = False
 
-    # Two-phase execution (generate -> judge). Generation streams responses to
-    # a cache so the responder and judge never need to be co-resident in VRAM:
-    # the responder is unloaded before the judge loads.
-    #   score_only=True   -> skip generation; judge an existing responses cache
-    #                        (e.g. re-score the same answers with Gemini later).
-    #   responses_path    -> where the cache lives; defaults to
-    #                        output_dir/responses.jsonl. Point it at a prior
-    #                        run's cache to re-judge without regenerating.
+    # Two-phase generate->judge so responder/judge never need to be co-resident in VRAM. score_only=True skips generation and judges an existing responses_path cache.
     score_only:         bool                = False
     responses_path:     Optional[Path]      = None
 

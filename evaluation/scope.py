@@ -1,25 +1,4 @@
-"""scope.py — which representations can answer which question types.
-
-A representation only carries certain information channels (connectivity, metric,
-...); a question type needs certain channels to be answerable at all. A rep is
-*in scope* for a type when it covers what the type needs. This is the single source
-of truth shared by the runner (which skips out-of-scope cells so they are never
-computed) and plots.py (which would otherwise mask them after the fact).
-
-The model is fail-open: an unknown representation defaults to all channels, and an
-undeclared question type is never filtered — so new parsers/types are run and shown
-until their scope is declared here. That is the right default for exploration, but
-it silently scores structurally-impossible cells when a name is missing (this bit
-once: relations_tree/relations_digest were scored on arbitrary-pair questions before
-their channels were split). Final scored runs should therefore set
-`EvalConfig.strict_scope=True`, which calls `validate_declared` before generating
-and aborts on any undeclared representation or question type.
-
-TYPE_NEEDS values may be a plain set[str] (all channels required) or a
-list[set[str]] (any one alternative suffices — disjunctive OR). The OR form is
-used when a question type is grounded in different channels across datasets, e.g.
-planning: room-level inventory on Gibson/ProcTHOR, object_relations on 3RScan.
-"""
+"""Which representations can answer which question types: a rep is in-scope for a type when it covers the channels the type needs."""
 
 from __future__ import annotations
 
@@ -32,48 +11,7 @@ from __future__ import annotations
 # about distances between unconnected rooms (e.g. bathroom-to-bathroom proximity
 # when no two bathrooms are adjacent), so it must not be in scope for them.
 #
-# The object-relation channel is split in three, because the five relations_*
-# views do NOT all carry the same granularity despite linearizing the same edge
-# set (relations_tree and relations_digest are lossy derived presentations, the
-# object-level analogs of graph_digest/room_tree on the structure-presentation axis):
-#   - "object_relations_raw": individual triples are stated (support, proximity,
-#     directional, comparative) -- arbitrary specific-pair lookups are answerable.
-#     relations_flat/subject/predicate carry this; relations_tree and
-#     relations_digest do not (see below). Exact for relations_flat (one line per
-#     edge) and relations_predicate (its clique/symmetric collapses drop no
-#     membership). BOUNDED for relations_subject, and for prose/synthesis which
-#     reuse the same renderer: they cap each subject's comparative and
-#     shared-attribute lists at 3 + a "(+N more)" count, leaving 109/42/424 triples
-#     unprinted on 02b33dfb/7f30f36c/d7d40d62. Shared-attribute membership survives
-#     that cap (the full clique is recoverable by unioning the printed per-object
-#     lines -- verified for all 14 cliques); comparative "... than" edges cut in both
-#     directions do not (0/4/118 triples genuinely absent). No evaluated question's
-#     key facts were found to depend on one of those, which is an absence of
-#     demonstrated impact rather than a proof of none. The declaration is left as
-#     scored -- the run it describes is frozen -- but read it as "spatial edges in
-#     full, attribute edges under a per-object bound", not as "every triple".
-#   - "object_relations_support": the support/containment sub-graph specifically,
-#     drawn *exhaustively* -- relations_tree's entire content (every parent/child
-#     edge, so any support/containment question is answerable, not just curated
-#     highlights).
-#   - "object_relations_derived": relations_digest's precomputed summary content
-#     -- deepest-nesting depth + the single deepest chain (guaranteed correct,
-#     since it is explicitly "deepest first"), the printed top-N receptacle
-#     counts, the top 8 proximity clusters by size together with the total cluster
-#     count stated in that block's header, full shared-attribute-clique
-#     membership, and the relation-type census. Cluster membership beyond the
-#     printed 8 is NOT carried: 7f30f36c has 18 clusters and prints 8, so the
-#     header's total is the reliable part there and the unprinted memberships are
-#     not. (The live cluster questions on that scene target clusters inside the
-#     printed 8, so no scoring error is demonstrated -- but the channel should not
-#     be read as promising full membership.) This is NOT a general "digest can
-#     answer any support question" flag either: relations_digest's chain list is a
-#     curated top-N capped at 8, not an exhaustive enumeration (the scenes hold
-#     12/51/18; e.g. on 3rscan_02b33dfb it omits several real 2-hop chains like
-#     basket[26]->bath cabinet[16]), so arbitrary non-highlighted support facts
-#     stay under object_relations_raw only. Any new question relying on
-#     relations_digest for a specific fact must still be verified against the
-#     actual printed text before being admitted.
+# object_relations splits into three tiers: "raw" (arbitrary triples, exact for flat/predicate, per-object-capped for subject/prose), "support" (containment forest, drawn exhaustively), "derived" (digest's precomputed summary -- a curated top-N, NOT an exhaustive enumeration, so an arbitrary non-highlighted fact must stay under "raw" only).
 
 # Every channel there is. Defined before REP_CAPS so the full-information views can
 # reference it instead of restating the list: "identical content ⇒ identical
@@ -90,14 +28,7 @@ REP_CAPS: dict[str, set[str]] = {
     "topology":         {"connectivity"},
     "graph_digest":     {"connectivity"},
     "room_tree":        {"connectivity"},
-    # The door graph with per-edge metric, in locative framing -- the matched
-    # counterpart to `navigation` on ProcTHOR route/direction. Its channel set is
-    # deliberately IDENTICAL to navigation's: it carries `metric_edges` (distance
-    # and bearing along connections) and NOT `metric`, because it says nothing
-    # about pairs that are not directly connected, and NOT `inventory`, because it
-    # prints no objects. Any addition here would un-match the pair -- the whole
-    # point of the view is that the two sides differ in figure-ground assignment
-    # and framing, not in what they know.
+    # Channel set deliberately IDENTICAL to navigation's (metric_edges only, no inventory) -- any addition here would un-match the fact-matched pair.
     "topology_metric":  {"connectivity", "metric_edges"},
     # The content-matched prose pole of the format axis: `topology_inventory`'s
     # facts (inventory + connectivity only, nothing else), rendered as sentences.
@@ -109,29 +40,11 @@ REP_CAPS: dict[str, set[str]] = {
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
     "metric_relations": {"inventory", "metric", "metric_edges"},
     "navigation":       {"connectivity", "metric_edges"},
-    # NOTE: `connectivity` is declared host-invariantly here even though Gibson
-    # has no door graph -- on Gibson this representation actually renders
-    # K-nearest-neighbour proximity, not real doorway adjacency (see
-    # navigation_parser.py's own docstring, "framed honestly as proximity").
-    # Harmless today only because no `connectivity`-typed question is authored
-    # on Gibson, so no in_scope() decision is currently wrong because of it --
-    # a known documentation debt, not fixed here (REP_CAPS has no per-host
-    # axis). Do NOT copy this declaration into a new representation by analogy
-    # for symmetry's sake -- see `metric_framing` below, which declares only
-    # what it actually carries.
+    # NOTE: `connectivity` is declared host-invariantly even though Gibson renders K-NN proximity here, not real doorway adjacency -- harmless only because no `connectivity`-typed question is authored on Gibson. Do NOT copy this pattern into a new rep; see `metric_framing` below, which declares only what it actually carries.
     #
-    # The matched Gibson counterpart to `navigation` on `direction`:
-    # K-nearest-neighbour room geometry, in locative framing. Channel set is
-    # deliberately NARROWER than navigation's declaration above: states
-    # `metric_edges` only, not `connectivity`, since Gibson has no door graph
-    # and this representation makes no claim to carry one. Proven fact-for-fact
-    # against independently recomputed source geometry in
-    # evaluation/tests/test_metric_framing_equivalence.py.
+    # Gibson counterpart to `navigation` on `direction`: deliberately NARROWER than navigation's declaration (metric_edges only, no connectivity), since Gibson has no door graph.
     "metric_framing":   {"metric_edges"},
-    # relation-linearization family: five presentations of one object-relation graph.
-    # flat/predicate print the edge set in full; subject prints it under a per-object
-    # attribute cap (see the "object_relations_raw" note above). All three are declared
-    # at the three tiers, as scored.
+    # flat/predicate print the edge set in full; subject is capped per-object (see the "raw" tier note above). All three declared at all three tiers, as scored.
     "relations_flat":      {"object_relations", "object_relations_raw", "object_relations_support", "object_relations_derived"},
     "relations_subject":   {"object_relations", "object_relations_raw", "object_relations_support", "object_relations_derived"},
     "relations_predicate": {"object_relations", "object_relations_raw", "object_relations_support", "object_relations_derived"},
@@ -143,62 +56,15 @@ REP_CAPS: dict[str, set[str]] = {
     # support-chain coverage is curated (see note above), so it gets only the
     # "derived" tier, not "support".
     "relations_digest":    {"object_relations", "object_relations_derived"},
-    # The two serializations of one parse() output. They are the same object printed
-    # two ways, so they carry exactly the same channels -- expressed by referencing
-    # ALL_CAPS rather than restating it, so the two entries cannot drift apart.
-    # json_mini is the ceiling (axes.CEILING); json_pretty is the raw pole of the
-    # json_formatting ablation. The bare name `json` is gone: no REP_CAPS entry,
-    # and deliberately no alias, so a strict run aborts instead of resolving it to
-    # either view (the resume cache keys on representation, so an alias would let
-    # one logical cell exist under two keys and quietly double a rep group).
+    # Same parse() output, two serializations -- reference ALL_CAPS so they can't drift apart. The bare name `json` has no entry and no alias (deliberately): an alias would let one cell exist under two resume-cache keys and double a rep group.
     "json_mini":        set(ALL_CAPS),
     "json_pretty":      set(ALL_CAPS),
-    # synthesized best-of-axes default: prose backbone + derived connectivity
-    # (graph_digest) + salient metric (metric_relations) + derived object-relation
-    # structure (relations_digest), so it carries every channel on a fully-equipped
-    # scene. Egocentric routing is deliberately left to navigation, but synthesis
-    # still carries metric_edges (per-room bearings), so it stays in scope for
-    # direction/route -- the gap to navigation there is a result to measure, not a
-    # cell to mask.
-    #
-    # object_relations_derived is earned, not assumed: `synthesis_parser.parse`
-    # folds in `relations_digest_parser.object_relations_digest` (the standalone
-    # view's body without its head line, byte-identical to it), appended after the
-    # raw section. Declaring the channel without that fold-in is an over-claim --
-    # prose's raw enumeration alone carries none of the guaranteed derived content
-    # (deepest chain, top-N receptacles, cluster membership, relation-type census).
-    # The fold-in deliberately does not restate prose's own "Shared attributes"
-    # clique rollup: that trailing block is cut from the raw tier, since the
-    # derived section always supplies it whenever both are present.
-    #
-    # NB: `prose` also declares this channel, and that is NOT the same kind of
-    # claim. The channel is declared by every view that states the triples
-    # exhaustively, because raw enumeration is
-    # what makes the derived content derivable -- that is why relations_flat/
-    # subject/predicate carry it (above), and prose enumerates the same way. The
-    # synthesis defect was a BUILD defect, not a scope-convention question: the
-    # candidate's whole claim is to carry each channel in its winning form, and the
-    # assembled document was silently missing a component it advertised, so the fix
-    # belonged in the parser rather than in this table. Checked against results
-    # rather than left as an argument: on 3RScan relation_aggregate -- the type that
-    # needs this channel and nothing else -- prose scores 0.76, level with
-    # relations_predicate and above relations_flat (0.72) and relations_subject
-    # (0.67), i.e. it derives the aggregate content as well as the enumerating views
-    # whose declaration is not in question. Declaration stands; REP_CAPS unchanged,
-    # which also keeps the published relation-linearization numbers interpretable.
-    # Written out rather than referencing ALL_CAPS: this entry's channel list was
-    # contested (see the object_relations_derived history above), so an auditor
-    # should be able to read the declaration itself, not a constant.
+    # object_relations_derived is earned, not assumed: synthesis_parser folds in relations_digest's derived content explicitly rather than this being an over-claim. Written out rather than referencing ALL_CAPS, since this entry's channel list should be auditable directly.
     "synthesis":        {"inventory", "connectivity", "metric", "metric_edges", "object_relations",
                           "object_relations_raw", "object_relations_support", "object_relations_derived"},
 }
 
-# What each question type needs to be answerable at all. Spatial family needs a
-# spatial channel; the general-reasoning family only needs room/object content
-# (inventory), so the discriminating variable there is format/density, not encoding.
-# proximity needs pairwise metric data; direction/route questions only ask about
-# bearings along connections, so edge-level metric suffices.
-#
+# Spatial family needs a spatial channel; general-reasoning only needs inventory (discriminator = format/density, not encoding). proximity needs pairwise metric; direction/route need only edge-level metric.
 # Values may be set[str] (all required) or list[set[str]] (any alternative suffices).
 TYPE_NEEDS: dict[str, set[str] | list[set[str]]] = {
     # spatial family
@@ -211,14 +77,7 @@ TYPE_NEEDS: dict[str, set[str] | list[set[str]]] = {
     # highlights) -- excludes relations_tree and relations_digest, neither of
     # which states arbitrary triples.
     "object_relation": {"object_relations_raw"},
-    # support/containment identification (a specific parent/child edge or a
-    # chain's depth) -- answerable either by relations_tree's exhaustive drawn
-    # forest, or by relations_digest where the fact is one of its guaranteed
-    # highlights (the deepest chain + its depth, or a printed top-N receptacle).
-    # Only tag a question this way once both are verified against the actual
-    # printed text -- relations_digest does not get object_relations_support,
-    # so a question needing an arbitrary non-highlighted chain must stay
-    # "object_relation" (raw only) even though relations_tree could answer it.
+    # Answerable via relations_tree's exhaustive forest OR relations_digest's guaranteed highlights -- verify against the actual printed text before tagging, since digest's content is curated, not exhaustive.
     "relation_structure": [{"object_relations_support"}, {"object_relations_derived"}],
     # digest-only aggregate content: proximity-cluster composition, shared-
     # attribute-clique membership, relation-type census. relations_tree carries

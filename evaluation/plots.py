@@ -1,81 +1,4 @@
-"""plots.py — Generate comparison charts from evaluation results.
-
-Charts are **scope-aware**: a representation is only drawn for a question type it
-can actually answer. Each question type requires certain information channels
-(connectivity, metric, ...); each representation carries some; a rep is in-scope
-when it covers what the type needs. Plotting an out-of-scope rep (e.g. navigation,
-which has no object inventory, on a containment question) would show a structural
-zero as if it were a result — so those cells are masked out.
-
-The model is fail-open: an unknown representation or question type is never
-masked, so new parsers/types are shown until their scope is declared here.
-
-Charts are also **host-separated**: every chart from which a comparison between two
-representations is read is drawn once per host dataset, never pooled. ProcTHOR,
-Gibson and 3RScan pose different questions over different scenes, and the reps are
-not all present on all three (the relations_* family is 3RScan's, navigation is
-not 3RScan's at all), so a pooled bar can be built from a question set the bar
-beside it never saw. `_<host>` in a filename means exactly that.
-
-The third rule is **rank-eligibility**: a cell whose coverage falls below
-MIN_COVERAGE has an AC conditioned on the questions it survived, so it cannot be
-compared on AC against a full-coverage cell. Those cells are drawn -- hidden data
-is worse than flagged data -- but marked `not licensed`, excluded from every
-ordering, and kept off the efficiency frontier. The threshold, the gates and every
-paired delta come from `evaluation/report.py`, which owns the analysis contract;
-this module draws it and does not restate it.
-
-Charts produced
----------------
-plot_aggregate (reads results.csv + aggregate.csv):
-  axis_card_<id>.png           one figure per axis in evaluation.axes.AXES (named,
-                               e.g. axis_card_spatial_encoding.png)
-  ac_by_axis_<host>.png        AC per question type, in-scope reps, bars+std+dots
-  value_of_spatial_structure_<host>.png  matched AC lift over the inventory floor
-                               (the spatial-encoding result)
-  ac_heatmap_<host>.png        rep x type mean-AC matrix, out-of-scope cells greyed
-  axis_contrasts.png           paired per-question AC delta for each axis with a
-                               headline pair (evaluation.axes.AXIS_PAIRS); already
-                               per-axis-host by construction, so it is not split
-  ceiling_premium.png          the headline claim, graded: the best OBSERVED derived
-                               view against the json_mini ceiling, one row per
-                               host x question type
-  paired_separation.png        report.md's separation table drawn: one row per
-                               comparison from report._paired_rows, faceted by host,
-                               graded rows and `not licensed` rows in separate blocks
-
-The last two carry every host in one file, like axis_contrasts.png and for the same
-reason: each ROW is single-host by construction (its deltas come from one host's
-scenes and are labelled with it), so nothing is pooled by putting them on one canvas.
-Both are drawn straight off report.py -- `ceiling_premium` through the same pairing,
-gate and verdict functions, `paired_separation` off the `Paired` objects themselves --
-so a mark in either figure and a row in report.md are the same computation. Neither
-lets the SIGN of a delta decide anything: the verdict chooses the marker, and a
-positive mean the rule does not license is drawn hollow, exactly like a negative one.
-
-A gated comparison keeps its scene deltas in both. Licensing applies to the VERDICT,
-not to whether the difference exists: `not licensed` means the design cannot grade
-this pair, so the row is drawn with its data, greyed, and excluded from every count
-of wins. Hiding the deltas would be a second, undeclared filter on top of the gate.
-
-plot_per_question (reads results.csv):
-  cost_quality_<host>.png      mean AC vs mean prompt tokens, with efficiency frontier
-  faith_vs_ac.png              per-observation guess detector (only if faithfulness on)
-
-Diagnostics -- drawn only with `diagnostics=True`, deliberately outside the
-production figure set:
-  latency_diagnostic.png       wall-clock latency per representation. Not an
-                               inferential chart and not the cost axis: prompt
-                               tokens are. Latency is confounded by batch
-                               composition, GPU contention and model residency at
-                               call time -- a contended GPU silently falls back to
-                               CPU and the same representation then reads an order
-                               of magnitude slower -- none of which is a property
-                               of the representation. It is deliberately NOT split
-                               per host: host separation would fix the shallowest
-                               of those confounds and make the chart look
-                               comparable when it is not.
-"""
+"""Generate scope-aware, host-separated comparison charts from evaluation results."""
 
 from __future__ import annotations
 
@@ -84,19 +7,7 @@ import collections
 import statistics
 from pathlib import Path
 
-# --- scope + axis model ----------------------------------------------------
-# scope.py: which rep can answer which type (the structural mask, shared with the
-# runner, which skips out-of-scope cells before they are computed). axes.py: how
-# reps group into axis ladders for reporting (ladder order, floor/ceiling roles,
-# host dataset) -- so the charts and report.md tell the same axis story.
-#
-# AXIS_PAIRS (the same-information contrast pairs for axis_contrasts.png) is now
-# derived in axes.py from the AXES registry, and each entry carries the axis's host
-# and probe_types as well as its two poles. A delta is averaged only over questions
-# on that host, of those types, with *both* poles in scope -- the same restriction
-# the axis cards already apply, so a bar and its card describe one question set. The
-# spatial-encoding axis is a ladder (covered by axis_cards / value_of_spatial_-
-# structure), so it contributes no pair. A pair with no such questions draws no bar.
+# AXIS_PAIRS deltas are restricted to the axis's declared host/probe_types with both poles in scope, matching what the axis cards already show.
 from evaluation.scope import in_scope as _in_scope
 from evaluation.axes import (
     AXES, AXIS_PAIRS, CANDIDATE, CEILING, FLOOR, MIN_COVERAGE,
@@ -104,17 +15,7 @@ from evaluation.axes import (
     VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
     VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED, dataset_of, rep_role,
 )
-# report.py owns the analysis contract (thesis 4.6): what a cell's coverage is,
-# whether it is rank-eligible, and how a difference between two representations is
-# computed. Imported rather than reimplemented -- a chart and report.md are read
-# side by side, and a second copy of these rules would agree today and drift later.
-# `_cells` is private to report's own callers, not to the reporting layer.
-#
-# `ceiling_premium` and `paired_separation` below take that further and import the
-# gate and the verdict themselves (`_gates`, `_verdict`, `paired_deltas`,
-# `_summarise`, `_q_means`, `_paired_rows`). They state a GRADE, not a quantity, and
-# a grading rule reimplemented in a drawing module is a rule that will disagree with
-# report.md the first time either side is edited.
+# report.py owns the analysis contract; imported rather than reimplemented so a chart and report.md can't drift apart.
 from evaluation.report import (
     _cells, _gates, _load_pairs, _paired_rows, _q_means, _summarise, _verdict,
     floor_lifts, paired_deltas,
@@ -124,14 +25,7 @@ from evaluation.report import (
 # --- shared loading --------------------------------------------------------
 
 def _per_question_ac(results_path: Path, dataset: str | None = None):
-    """Return (points, types, reps).
-
-    points[(qtype, rep)] = list of one mean answer_correctness per question
-    (averaged over repetitions). This is the basis for means, error bars, dots.
-
-    `dataset` (procthor|3rscan|gibson) restricts to one host dataset -- the axis
-    cards use it so an axis ladder is never pooled across non-comparable datasets.
-    """
+    """Return (points, types, reps); points[(qtype, rep)] = one mean AC per question, averaged over repetitions."""
     rows = [r for r in csv.DictReader(results_path.open(encoding="utf-8")) if not r["error"]]
     if dataset:
         rows = [r for r in rows if dataset_of(r["scene_id"]) == dataset]
@@ -155,16 +49,7 @@ def _per_question_ac(results_path: Path, dataset: str | None = None):
 
 
 def _per_qid_ac(results_path: Path):
-    """Return (ac, qtype_of, host_of).
-
-    ac[(qid, rep)] = mean answer_correctness over that cell's repetitions.
-    qtype_of[qid]  = the question's type. Keeps question identity (which
-    _per_question_ac drops) so paired per-question deltas can be computed.
-    host_of[qid]   = the question's host dataset, so a caller can restrict a
-    contrast to the host its axis declares. Read off `scene_id` (which the
-    aggregate leaves bare -- only `question_id` is namespaced), because a qid
-    alone does not carry its host and the alternative is pooling by default.
-    """
+    """Return (ac, qtype_of, host_of) keyed by question id, keeping identity (unlike _per_question_ac) so paired per-question deltas can be computed."""
     rows = [r for r in csv.DictReader(results_path.open(encoding="utf-8")) if not r["error"]]
     by_qr: dict[tuple, list[float]] = collections.defaultdict(list)
     qtype_of: dict[str, str] = {}
@@ -180,18 +65,9 @@ def _per_qid_ac(results_path: Path):
 
 
 def axis_pair_questions(pair, qtype_of: dict, host_of: dict) -> list[str]:
-    """The qids one axis-contrast bar may be computed from, in sorted order.
+    """The qids one axis-contrast bar may be computed from: the axis's declared host and probe types, restricted to both poles being in scope.
 
-    Three filters, all required: the axis's declared host, its declared probe
-    types, and the structural scope mask on BOTH poles. The first two come from
-    the axis registry and say what the comparison IS; the third says what could
-    be asked at all, and is kept because an axis may declare a type one pole
-    cannot answer -- an empty bar is the correct outcome there, not a silent
-    substitution of whatever else was in scope.
-
-    Public (not underscored) because the leakage test drives this exact function
-    rather than reimplementing the rule: a copy could agree with a broken
-    original. See tests/test_axis_contrasts_scope.py.
+    Public (not underscored) so the leakage test exercises this exact function instead of a copy that could agree with a broken original.
     """
     return [qid for qid in sorted(qtype_of)
             if host_of.get(qid) == pair.host
@@ -260,26 +136,9 @@ _ROLE_BLOCK = {"floor": 0, "pole": 1, "candidate": 2, "ceiling": 3}
 
 
 def registry_rep_order(reps) -> list[str]:
-    """Row order for the AC matrix: floor, poles in registry ladder order, reps no
-    ladder names, the synthesis candidate, then the ceiling.
+    """Row order for the AC matrix: floor, poles in registry ladder order, unlisted reps, candidate, ceiling.
 
-    Derived entirely from `axes.AXES` and `axes.rep_role` -- it reads no results at
-    all. That is the point, and it is what makes "below-coverage cells cannot enter
-    a ranking" true by construction here rather than by a filter someone has to
-    remember to apply.
-
-    The previous order was "best-first by the rep's overall in-scope mean", which
-    fails three ways at once. It is the ALL/ALL grand mean the reporting rules
-    forbid quoting (thesis 4.6) -- expressed as a row position instead of a printed
-    number, but a reader still takes the top row as the best representation. It was
-    incomparable row to row, because each rep's mean was taken over the question
-    types THAT rep is in scope for: `navigation` (3 types) and `json_mini` (all of
-    them) were ordered against each other on different question mixes, and a rep's
-    position moved when a type was added to the run. And it pooled hosts, so a rep
-    evaluated only on 3RScan was ranked against one evaluated only on ProcTHOR.
-
-    The matrix is an overview, not a verdict. Ranking lives in report.md's paired
-    separation table, where the comparison is matched, gated and graded.
+    Derived purely from axes.AXES/rep_role (no results read), so position never implies a ranking -- the matrix is an overview, not a verdict; ranking lives in report.md's paired separation table.
     """
     ladder_rank: dict[str, int] = {}
     for axis in AXES:
@@ -291,18 +150,7 @@ def registry_rep_order(reps) -> list[str]:
 
 
 def efficiency_frontier(xy: dict[str, tuple[float, float]], eligible) -> list[str]:
-    """The Pareto frontier of (mean tokens, mean AC): minimise x, maximise y.
-
-    Computed over the RANK-ELIGIBLE points only. A point below MIN_COVERAGE is
-    still drawn and still labelled, but it may not join the frontier, because the
-    frontier is a ranking claim -- "nothing is both cheaper and at least as
-    accurate" -- and a sub-coverage AC is conditioned on the questions that rep
-    survived. This is the survivorship trap in its most persuasive form: the view
-    that overflows the window on the dense scenes looks like the efficient choice
-    precisely BECAUSE the questions that broke it are missing from its mean, and it
-    is cheap for the same reason it is incomplete. An ineligible point cannot be
-    dominated either -- it is not on the plane the frontier is drawn on at all.
-    """
+    """Pareto frontier (min tokens, max AC) over RANK-ELIGIBLE points only: a sub-coverage point can look artificially efficient because the questions that broke it are missing from its mean (the survivorship trap), so it can neither join the frontier nor be dominated."""
     pts = {r: p for r, p in xy.items() if r in eligible}
     front = [r for r in pts if not any(
         o != r and pts[o][0] <= pts[r][0] and pts[o][1] >= pts[r][1]
@@ -330,19 +178,9 @@ def _axis_card_reps(axis, qt: str, points: dict) -> list[str]:
 
 
 def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str]:
-    """One figure *per* registry entry (axes.AXES) -> axis_card_<id>.png: a subplot per
-    probe type, reps drawn as bars in ladder order with the floor (inventory) and
-    ceiling (json_mini) as a dashed/dotted band so a pole is read against them. Each rep
-    is a readable x-tick label; the y-axis starts at 0. Restricted to the entry's
-    host dataset (never pooled) and its probe types. Only what a ladder declares is
-    drawn, so synthesis never appears unless an entry names it (everything else
-    stays in report.md's own candidate table). Entries that
-    are not one of the five design axes say so in the suptitle, from Axis.kind, so
-    a card is never mistaken for an axis. Bars hatch when n < SMALL_N
-    (screening-only); whisker = min-max range of the per-question means (a
-    descriptive spread, NOT an interval -- overlap is never a tie rule, see
-    thesis 4.6 and report.py's paired table); dots = per-question means. Returns the
-    figure stems written, so the caller can clean up any axis that lost its data.
+    """One figure per axes.AXES entry -> axis_card_<id>.png: bars in ladder order against a floor/ceiling band, restricted to the entry's host and probe types.
+
+    Whisker is a descriptive min-max spread, not a confidence interval -- overlap is never a tie rule (thesis 4.6).
     """
     import matplotlib.pyplot as plt
     import numpy as np
@@ -441,15 +279,7 @@ LATENCY_DIAGNOSTIC_NOTE = (
 
 def _plot_ac_by_type(results_path: Path, rows: list[dict], ds: str,
                      out_dir: Path, color: dict) -> set[str]:
-    """AC per question type, in-scope reps side by side -- ONE host per figure.
-
-    This was a single pooled figure. A `proximity` group then averaged ProcTHOR,
-    Gibson and 3RScan questions into each bar, and the reps are not present on all
-    three hosts, so two bars in one group could be built from disjoint question
-    sets over different scenes and still be read as the head-to-head comparison
-    this chart exists to support. Splitting by host is the only thing that makes
-    the side-by-side reading true.
-    """
+    """AC per question type, in-scope reps side by side -- ONE host per figure (pooling hosts would let two bars in one group come from disjoint question sets over different scenes)."""
     import matplotlib.pyplot as plt
     import numpy as np
     from matplotlib.patches import Patch
@@ -512,29 +342,9 @@ def _plot_ac_by_type(results_path: Path, rows: list[dict], ds: str,
 
 
 def _plot_floor_lift(rows: list[dict], ds: str, out_dir: Path, color: dict) -> set[str]:
-    """AC lift over the `inventory` floor -- matched questions, one host per figure.
+    """AC lift over the `inventory` floor -- matched per-question, one host per figure: the floor's meaning is host-dependent, so pooling would average incomparable things.
 
-    Two things were wrong here and they compounded.
-
-    The lift was `mean(rep) - mean(inventory)`: two cell means over two question
-    sets. The floor is the one representation deliberately exempted from the scope
-    filter (runner.py), so it answers every question of every type, while the reps
-    it is subtracted from routinely do not -- the JSON views fail closed on the
-    dense scenes and lose precisely the questions with the most content in them.
-    The subtraction then charged the representation for the questions missing from
-    its own mean. Every bar now comes from `report.floor_lifts`, which differences
-    only the questions BOTH members answered and averages within scene, so the
-    chart and report.md's `vs floor` column are the same computation.
-
-    And it pooled hosts, which for this chart is worse than elsewhere: the floor's
-    meaning is host-dependent. `inventory` on a ProcTHOR connectivity question is a
-    room list against a door graph; on 3RScan it is an object list against a
-    relation graph. One bar cannot average those and still be "the value of spatial
-    structure".
-
-    Drawn only where inventory is a genuine no-information control -- a type that
-    needs a channel inventory lacks. On the content types inventory is a legitimate
-    compact format rather than a floor, so those belong in the head-to-head chart.
+    Drawn only where inventory is a genuine no-information control; on content types it's a legitimate format rather than a floor, so those belong in the head-to-head chart instead.
     """
     import matplotlib.pyplot as plt
     import numpy as np
@@ -598,15 +408,7 @@ def _plot_floor_lift(rows: list[dict], ds: str, out_dir: Path, color: dict) -> s
 
 def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
                   out_dir: Path) -> set[str]:
-    """The rep x type mean-AC matrix for one host.
-
-    In-scope cells are coloured by mean AC; out-of-scope cells are greyed/hatched (a
-    structural gap, not a zero); an in-scope cell with no data stays white; a cell
-    below MIN_COVERAGE is red-hatched and labelled `n/l`.
-
-    Rows are in `registry_rep_order` -- fixed by axes.py, reading no results. See
-    that function for what the old best-first ordering was actually claiming.
-    """
+    """Rep x type mean-AC matrix for one host: coloured by mean AC, out-of-scope cells greyed/hatched (a structural gap, not a zero), sub-coverage cells red-hatched and labelled `n/l`. Rows in `registry_rep_order`."""
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -676,13 +478,7 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
 
 
 # --- the two graded figures (ceiling premium, separation forest) -----------
-# Everything above this line draws a QUANTITY and leaves the reader to judge it.
-# These two draw a VERDICT, so they are held to a stricter rule: every number and
-# every grade comes from report.py, and the sign of a delta is never allowed to
-# stand in for the grade. A positive mean that the declared rule does not license
-# is drawn exactly like a negative one -- hollow, in the verdict's own colour --
-# because "it went up" and "it went up in a way this design can attest" are
-# different claims and only the second is what the figure exists to make.
+# Unlike the charts above (which draw a quantity), these draw a VERDICT from report.py: an unlicensed positive delta is drawn hollow, exactly like a negative one -- the sign never stands in for the grade.
 
 # Deliberately not a red/green scale. A delta's sign is not good or bad, and
 # colouring it that way would restate the sign the markers already refuse to grade on.
@@ -712,57 +508,23 @@ BAND = "#e8eaed"        # the +-PRACTICAL_MARGIN region
 SCENE_MARK = "#4a5058"  # the individual scene deltas
 GATED_BG = "#f5f6f7"    # backs the `not licensed` block in the separation forest
 
-# Reps held out of the ceiling-premium candidate pool, each with the reason. Kept as
-# a visible mapping (and printed in the figure's own footer) rather than inlined as a
-# set literal, because the exclusion is a reporting CHOICE that moves the headline
-# number: `synthesis` is both cheap and strong, so withholding it makes the premium
-# look smaller, and a reader must be able to see that it was withheld and why.
+# Reps excluded from the ceiling-premium candidate pool, each with a reason (visible here and printed in the figure's footer) since exclusion is a reporting choice that moves the headline number.
 CEILING_PREMIUM_EXCLUDED = {
     CEILING:       "is the comparator",
     "json_pretty": "carries the ceiling's own parse() output, so beating it is not a "
                    "derived-view result",
     CANDIDATE:     "reported as the candidate default in report.md's candidate section",
     FLOOR:         "the no-information control, not a derived view",
-    # Temporary, not permanent like the four above: navigation's rendered prompt on
-    # ProcTHOR (and, via the retired Spatial-anchoring pairing, on Gibson) changed
-    # under the block-layout fix (thesis Sec. 6.3.3), and results.csv has not been
-    # regenerated against the corrected prompt yet. Excluding it here keeps
-    # the ceiling-premium/cost-quality reporting from presenting a stale value as a
-    # current best-observed result. Remove this entry once the fresh ProcTHOR and
-    # Gibson reruns are filled, judged, and folded into results.csv.
+    # Temporary: navigation's prompt changed under the 2026-08-21 block-layout fix and results.csv hasn't been regenerated against it yet; remove once rerun.
     "navigation":  "excluded pending its fresh rerun after the 2026-08-21 "
                    "block-layout fix; not a permanent exclusion",
 }
 
 
 def ceiling_premium_rows(rows: list[dict]) -> list[dict]:
-    """One row per (host, question type): the best OBSERVED derived view vs the ceiling.
+    """One row per (host, question type): the best OBSERVED derived view vs the ceiling, using the same paired/gated/graded functions as the separation table so the two never disagree.
 
-    The delta is `rep - json_mini`, question-matched and averaged within scene by
-    `report.paired_deltas`/`_summarise`, gated by `report._gates` and graded by
-    `report._verdict` -- the same four functions the separation table calls, so a
-    mark here and a `json_mini - rep` row in report.md are one computation with one
-    sign flip between them (`_verdict` is symmetric under negation: the margin is on
-    |mean| and reversal/disagreement are defined on the scene values' signs, so
-    flipping every sign flips the direction and leaves the grade alone).
-
-    NO CONFOUND IS PASSED, and that is not an omission: `Axis.confound_for` returns
-    "" whenever the floor or the ceiling is a member, because an anchor comparison is
-    not the design decision an axis isolates. Passing one here would cap a verdict
-    report.md leaves uncapped.
-
-    Two selections happen per row and both are disclosed in the figure. `k` counts
-    the in-scope candidates the winner was chosen from -- the choice is POST-HOC on
-    the same data, an oracle, not a representation anyone declared in advance. And
-    the winner is the largest mean, taken over candidates in sorted-name order so
-    `max` resolves a tie deterministically at the first name rather than by dict order.
-
-    A row whose gate fires is returned WITH its scene deltas and marked
-    `not licensed`. The gate says the design cannot grade the comparison; it does not
-    say the difference is unknown, and dropping the deltas would be a second filter
-    the analysis contract never declared. This is what makes the 3RScan rows legible:
-    json_mini overflows one dense scene there, so its rows are gated on coverage while
-    the derived views behind them sit at full coverage.
+    `k` discloses that the winner is chosen post-hoc from the in-scope candidates (an oracle, not a declared representation); a gated row keeps its scene deltas and is marked `not licensed` rather than dropped.
     """
     out: list[dict] = []
     for host in sorted({dataset_of(r["scene_id"]) for r in rows}):
@@ -963,23 +725,7 @@ _COL_NOTE, _SEPARATION_RECT_RIGHT = 1.005, 0.82
 
 def _plot_paired_separation(prs: list, out_dir: Path,
                             responder: str, judge: str) -> set[str]:
-    """paired_separation.png -- report.md's separation table, drawn.
-
-    One row per `report.Paired`, faceted by host, and within a host split into two
-    BLOCKS: the graded comparisons, then the `not licensed` ones on a shaded ground
-    below a rule. The split is the point of the figure on 3RScan, where json_mini
-    overflows a dense scene: every `json_mini - X` row there is gated on coverage
-    while the relations_* rows beside them are at full coverage on all three scenes.
-    Sorted together they interleave, and a reader scanning marks would take a gated
-    row for a graded one. Separated, the licensed axis reads as the licensed axis.
-
-    Gated rows keep their scene deltas and their mean marker -- they are the evidence
-    the gate exists to qualify, not to hide -- and they are excluded from the graded
-    counts in every heading.
-
-    Nothing is recomputed here: the Paired objects arrive fully decided, and the
-    figure only chooses positions and colours.
-    """
+    """paired_separation.png -- report.md's separation table, drawn: one row per report.Paired, faceted by host, split into graded vs `not licensed` blocks (interleaved, a reader would mistake a gated row for a graded one). Gated rows keep their scene deltas -- they qualify the evidence, not hide it."""
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
@@ -1262,26 +1008,8 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
     colors = _colors(representations)
     rng = np.random.default_rng(42)
 
-    # -- Cost vs Quality: accuracy per prompt token (the operational trade-off) --
-    # One PANEL PER QUESTION TYPE, and one figure per host dataset. The y-axis must
-    # never pool AC across question types: that is the `ALL` row the reporting rules
-    # forbid quoting (thesis 4.6), and it averages across exactly the boundaries the
-    # axis design exists to hold apart -- a single pooled point per rep silently
-    # ranks a rep that is strong on connectivity against one strong on set_logic.
-    # The x-axis IS legitimately pooled: the representation is the same serialized
-    # file whatever question is asked of it, so its token cost does not vary by type.
-    # Within a panel: the dashed line is the efficiency frontier (no rep is both
-    # cheaper and more accurate than a point on it) -- where the derived-view-vs-
-    # ceiling question is read: same AC, far fewer tokens = the derived view wins.
-    #
-    # Coverage comes from report.py's own cell statistics, per (rep, question type)
-    # and per host -- the same number report.md gates on, so a point flagged here and
-    # a row flagged there are the same claim. It used to be computed locally as one
-    # rate per rep over ALL that host's rows, which is a different denominator: a rep
-    # that overflows only on the object-relation types read as ~90% covered
-    # everywhere, diluting exactly the panel where it fails. Below MIN_COVERAGE the
-    # marker shrinks, gains a red edge, is labelled `not licensed`, and is excluded
-    # from the efficiency frontier -- the AC alone would read as a clean point.
+    # One panel per question type, one figure per host: AC is never pooled across types (thesis 4.6), since a single point per rep would rank one strong on connectivity against one strong on set_logic. Token cost (x-axis) is legitimately pooled -- same file regardless of question.
+    # Coverage is report.py's per-(rep, type, host) rate, not a local global one -- a rep that overflows only on one type would otherwise read as mostly covered, diluting the panel where it actually fails.
     all_rows = list(csv.DictReader(results_path.open(encoding="utf-8")))
     for stale_name in ("cost_quality.png",):   # pooled-AC predecessor of this chart
         stale = out_dir / stale_name
@@ -1415,15 +1143,7 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
             stale.unlink()
 
     # -- Latency per representation (OPERATIONAL DIAGNOSTIC, not a result) --
-    # Off unless asked for, and renamed away from `latency_comparison`: the
-    # comparison it appeared to license is not supported. Two representations'
-    # boxes differ by batch composition, GPU contention and whether the model was
-    # resident at call time as much as by anything the representation does -- a
-    # contended GPU falls back to CPU silently, so a box can move an order of
-    # magnitude with the serialization held constant. Splitting per host would fix
-    # only the shallowest of those confounds while making the chart look repaired,
-    # so it stays pooled and stays labelled. Prompt tokens are the cost axis
-    # (cost_quality_<host>.png); this is here to spot a run that went wrong.
+    # Off by default and renamed from `latency_comparison` -- the old name implied a comparison this diagnostic doesn't support (see LATENCY_DIAGNOSTIC_NOTE).
     #
     # The previous production filename is swept whether or not diagnostics are on:
     # it exists in every results directory written before this rule.

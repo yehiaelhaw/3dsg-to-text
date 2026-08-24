@@ -1,22 +1,6 @@
-"""topology — the room adjacency graph alone (structured).
-
-`topology_inventory` minus the per-room inventories: exactly the door graph,
-stated room-by-room, with no object lists, no coordinates, no distances. Same
-room order (degree desc, ties by id), same labels, same "connects to" blocks —
-the only difference from `topology_inventory` is the dropped inventory content.
-
-Axis role: the content-matched raw-adjacency pole of the structure-presentation
-axis. `room_tree` and `graph_digest` are deliberately connectivity-only, so
-the raw pole must be too — otherwise a structure-presentation delta could be caused
-by `topology_inventory`'s inventory content (distractor text + token load) rather
-than by how the same graph is presented. Full `topology_inventory` keeps its
-spatial-encoding and format roles; the
-side pair (`topology_inventory` vs `topology`) additionally reads as a free
-does-irrelevant-content-hurt contrast on connectivity questions.
-
-Runs only where a room connection graph (doors + open-plan passages) exists
-(ProcTHOR); refuses elsewhere (Gibson, 3RScan).
-"""
+"""topology — the content-matched raw-adjacency pole of the structure-presentation axis;
+topology_inventory minus the per-room inventories, so a delta against room_tree/graph_digest
+(both connectivity-only) isolates presentation rather than inventory content."""
 
 import sys
 import os

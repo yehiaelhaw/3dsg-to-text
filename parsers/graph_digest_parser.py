@@ -1,30 +1,7 @@
-"""graph_digest — derived global structure of the room connectivity graph.
-
-Every other connectivity parser (`topology_inventory`, `prose`, `navigation`) states *local*
-adjacency: "Bedroom [6] connects to ...". The reader must then traverse that list to
-answer global questions — which rooms are mutually reachable, which room is a
-bottleneck, how many connections separate two rooms — exactly the transitive-closure
-reasoning LLMs are weakest at. This parser pre-computes those facts instead:
-
-  * reachability groups (connected components),
-  * hub rooms (highest connection degree),
-  * bottleneck rooms (articulation points) and what they cut off,
-  * multi-step distances, printed as the shortest-path route itself ("Kitchen [2] ->
-    LivingRoom [3] -> ..."). The hop count is implicit in that chain rather than
-    printed as a number: the section header names the quantity ("connections to
-    cross") and the route makes it countable, but no numeric count is emitted per
-    line. Describe this as routes from which the number of connections can be
-    determined, not as stated hop counts.
-
-It opens a new evaluation axis — *raw adjacency* (`topology_inventory`) vs *derived
-structure* (here) — orthogonal to the format axis (`topology_inventory` vs `prose`).
-It is deliberately metric-free (connection counts, not metres; keeps it on the
-connectivity rung, not the metric one) and carries no per-room object inventory
-(that is `topology_inventory`'s job;
-omitting it is what stops this from being a sixth restatement of the same primitives).
-
-Runs only where a room connection graph exists (ProcTHOR); refuses elsewhere.
-"""
+"""graph_digest — the derived-structure pole of the raw-adjacency/derived-structure axis
+(topology_inventory being the raw pole); pre-computes reachability groups, hub rooms,
+articulation-point bottlenecks, and multi-step shortest-path routes over the room
+connectivity graph. Metric-free and carries no object inventory."""
 
 import sys
 import os
@@ -97,12 +74,8 @@ def _path(parent: dict[str, str], src: str, dst: str) -> list[str]:
 
 
 def _articulation_points(adj: dict[str, set[str]]) -> dict[str, list[list[str]]]:
-    """Rooms whose removal splits their group, mapped to the pieces left behind.
-
-    Brute force (graphs here are tiny): drop each room, and if its component breaks
-    into two or more pieces, record those pieces. The room is then a bottleneck — the
-    only way between the pieces.
-    """
+    """Rooms whose removal splits their group, mapped to the pieces left behind (brute
+    force: graphs here are tiny)."""
     base = len(_components(adj))
     cuts: dict[str, list[list[str]]] = {}
     for node in adj:
@@ -122,13 +95,8 @@ def _degree(adj: dict[str, set[str]], rid: str) -> int:
 
 
 def connectivity_digest(building: Building) -> list[str]:
-    """The derived-structure section without the head line: reachability groups,
-    hubs, bottlenecks and multi-step distances.
-
-    Split out so the synthesized representation can fold these exact facts into a
-    larger document (one head, shared inventory) instead of restating local
-    adjacency. `parse` prepends the head and returns the same text as before.
-    """
+    """The derived-structure section without the head line, split out so `synthesis` can fold
+    these exact facts into its own document instead of restating local adjacency."""
     rooms = building.rooms
     adj = _adjacency(building.connectivity, rooms)
 

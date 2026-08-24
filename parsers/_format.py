@@ -49,12 +49,8 @@ def room_type_summary(rooms) -> str:
 
 
 def is_attribute_predicate(predicate: str) -> bool:
-    """True for low-value symmetric/comparative edges (``same color``, ``brighter than``).
-
-    These form large symmetric cliques (every wall is ``same material`` as every
-    other wall) that drown the high-value spatial/support edges (``standing on``,
-    ``close by``) if left unchecked.
-    """
+    """True for low-value symmetric/comparative edges (``same color``, ``brighter than``)
+    that form large cliques and would drown the high-value spatial/support edges."""
     return predicate.startswith("same ") or predicate.endswith(" than")
 
 

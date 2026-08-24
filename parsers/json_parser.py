@@ -1,11 +1,5 @@
-"""json — the full scene graph as structured JSON. Shared library, no entry point.
-
-This module builds the object (`parse`) and offers both serializations of it
-(`to_json_string`, `to_json_mini_string`), but it is no longer a runnable parser:
-the bare name `json` is retired and the two shipped views are
-`json_pretty_parser` and `json_mini_parser`. Keeping the single `parse` here is
-what makes them content-identical by construction rather than by convention.
-"""
+"""json — shared library building the scene-graph dict and both its serializations; not a
+runnable parser itself (the shipped views are json_pretty_parser and json_mini_parser)."""
 
 import json
 import sys
@@ -88,10 +82,7 @@ def to_json_string(data: dict[str, Any], indent: int = 2) -> str:
     return json.dumps(data, indent=indent, ensure_ascii=False)
 
 
-# Same object, no whitespace. `separators` is load-bearing, not cosmetic: dropping
-# `indent` alone leaves json.dumps' default `(", ", ": ")` and gives back only part
-# of the saving (measured on 3rscan_7f30f36c: 113,925 chars vs 102,468 with explicit
-# separators). `ensure_ascii` must match to_json_string's, or the two forms stop
-# being comparable once whitespace is out of the picture.
+# `separators` is load-bearing: dropping `indent` alone leaves json.dumps' default
+# `(", ", ": ")` and only recovers part of the saving.
 def to_json_mini_string(data: dict[str, Any]) -> str:
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False)

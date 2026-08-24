@@ -1,63 +1,4 @@
-"""thesis_figures.py — page-sized renders of the graded figures, for the thesis body.
-
-This module exists because a figure that is *correct* and a figure that is *readable
-at 418pt* are two different artifacts, and the production set in `plots.py` is the
-first kind. `ceiling_premium.png` is 13.2in wide and `paired_separation.png` is
-13.6 x 29.6in; dropped into a `\\textwidth` float they scale by 0.44 and 0.43, which
-turns their 8.5pt and 7.2pt labels into 3.7pt and 3.1pt. Nothing here shrinks those
-files. They stay exactly as they are, as the audit artifacts a reader checks the
-thesis against, and this module draws SEPARATE figures at final page dimensions with
-native type.
-
-Three renders and three LaTeX tables are wired into the thesis by `main()`, all
-written from the same rows the production figures use — `plots.ceiling_premium_rows`
-and `report._paired_rows` — so a mark here, a mark there and a row in report.md are
-one computation:
-
-  fig_ceiling_premium   F1. 19 host x question-type cells, best OBSERVED eligible
-                        representation against the json_mini reference, selected
-                        DESCRIPTIVELY after seeing the tested representations for
-                        that cell -- not a fixed representation declared in advance,
-                        not a representation axis, and not a claim about a
-                        prospective selection policy (thesis 6.3). The declared axis
-                        comparisons of the sections that follow remain the primary
-                        evidence for RQ1; this figure is a supporting overview only.
-                        `navigation` is temporarily excluded from the candidate pool
-                        (`plots.CEILING_PREMIUM_EXCLUDED`) pending its fresh rerun,
-                        so no cell here can show a stale, pre-block-layout-fix value.
-  fig_paired_separation F2. The WITHIN-representation contrasts. Not "every
-                        comparison": every (rung, CEILING) anchor belongs to F1 by
-                        the same rule `Axis.confound_for` already applies -- an
-                        anchor comparison is not the design decision an axis
-                        isolates -- so drawing them again here would be F1 twice.
-                        Split into the declared axis contrasts and the exhibits,
-                        because thesis 6.1.2 says an exhibit is never read as an
-                        axis contrast and a shared panel would invite exactly that.
-                        NOT currently written by `main()`: in this draft it is
-                        entirely suppressed pending the framing reruns (its retired
-                        axis and stale navigation rows make the whole image
-                        unusable), so `render_f2` is left defined for internal
-                        inspection or for reinstating the full image later.
-  fig_cost_quality      The GRADEABLE F1 cells as a scatter: token reduction against
-                        the paired AC delta, for the same descriptively-selected
-                        best-observed view per cell. One point per host x question
-                        type; nothing is pooled across question types.
-
-  tab_ceiling_premium   F1's detail columns: the candidate pool and selected view.
-  tab_comparison_catalogue  ALL 63 rows of the separation table, landscape. The
-                        exhaustive catalogue F2 no longer carries.
-  tab_cost_quality      The scatter's points as numbers -- the numerical companion
-                        to fig_cost_quality, in the appendix rather than beside the
-                        figure to avoid repeating the same cells twice on one page.
-
-  fig_vocab_sensitivity The natural/constructed/matched vocabulary-robustness triad
-                        (rendered only when `vocab_sensitivity_rows` finds data).
-
-Fonts are set so nothing renders below 7pt at final size, and no figure carries a
-title, caption or footnote: those are `\\caption` in LaTeX, where they reflow, get a
-number, and are searchable. Everything a caption must say is returned by
-`caption_facts()` rather than typed twice.
-"""
+"""Page-sized renders of the graded figures (matching plots.py's underlying data), for the thesis body."""
 
 from __future__ import annotations
 
@@ -94,17 +35,12 @@ HOST_LABEL = {"procthor": "ProcTHOR", "gibson": "Gibson", "3rscan": "3RScan"}
 _AXIS = {a.id: a for a in AXES}
 _AXIS_POS = {a.id: i for i, a in enumerate(AXES)}
 
-# Short verdict codes for the LaTeX tables. `no practically meaningful separation` is
-# 36 characters and there is no column in a 418pt text block that holds it; the key is
-# printed in each table's own notes rather than left to the reader.
+# Short verdict codes: `no practically meaningful separation` doesn't fit a 418pt column; each table's own notes carry the key.
 VERDICT_SHORT = {
     VERDICT_CONSISTENT:    "CA",
     VERDICT_DIRECTIONAL:   "dir",
     VERDICT_MIXED:         "mixed",
-    # `no sep.`, not `null`: the chapter says "no practically meaningful separation"
-    # everywhere and never "null", and the two are not synonyms -- a null result is
-    # read as evidence of no effect, which is precisely the reading the decision rule
-    # of thesis 4.6 refuses to license from three scenes.
+    # "no sep.", not "null" -- a null result implies evidence of no effect, which thesis 4.6 refuses to license from three scenes.
     VERDICT_NO_SEPARATION: "no sep.",
     VERDICT_NOT_LICENSED:  "n.l.",
 }
@@ -198,17 +134,7 @@ _KEY_ORDER = (VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
 
 
 def _verdict_key(present, win_sz: float, other_sz: float, tick_sz: float) -> list:
-    """The legend, keyed to the verdicts THIS figure actually draws.
-
-    In the production figures a verdict COLUMN spelled each row's grade out in words
-    beside the marker; those columns are now LaTeX tables, which leaves marker shape
-    and colour (`VERDICT_MARKER`/`VERDICT_COLOR`) as the in-figure cues, and an
-    unkeyed one is a distinction the reader can see but not decode. Keying a verdict
-    that does not appear is the opposite failure: `not licensed` (grey pentagon) and
-    `no practically meaningful separation` (grey hollow circle) are close enough in
-    both channels that listing the absent one sends a reader hunting for a mark that
-    is not in the figure.
-    """
+    """Legend keyed to the verdicts THIS figure actually draws -- keying an absent verdict is a failure too: `not licensed` and `no practically meaningful separation` are close enough in shape/colour that listing the wrong one sends a reader hunting for a mark that isn't there."""
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
 
@@ -476,38 +402,9 @@ _VOCAB_KEY_ORDER = (VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
 
 
 def render_vocab_sensitivity(groups: list[dict], out: Path) -> None:
-    """Does a derived pole's apparent lead survive when the question is not
-    phrased in its own vocabulary? Three comparisons, three rows each:
+    """Does a derived pole's apparent lead survive when the question isn't phrased in its own vocabulary? Three rows (natural, constructed, constructed-natural matched) share one x-axis so the natural/constructed gap can be read directly against sampling noise.
 
-      natural       -- the representation-effect delta on naturally-phrased
-                        questions (cap lifted; a user could have asked these
-                        without ever seeing the derived view).
-      constructed   -- the same representation-effect delta on questions whose
-                        vocabulary mirrors the derived pole's own printed output.
-      constructed - natural (matched)
-                    -- a DIFFERENT quantity: the within-request difference
-                        BETWEEN those two representation effects, isolating the
-                        wording manipulation from which facts each half asks
-                        about. The row label alone carries this distinction --
-                        see thesis_figures.py's module docstring on this
-                        figure's one job.
-
-    All three rows share one x-axis (an AC delta), which is exactly the
-    juxtaposition the section needs: whether the natural/constructed gap is
-    bigger than sampling noise is the reading, and splitting them across panels
-    would hide that. The row label states which quantity each one is; nothing on
-    this axis is unlabeled.
-
-    Marker SHAPE, not colour, carries every row's verdict, matched row
-    included: filled circle for consistent advantage, hollow triangle for
-    directional, hollow diamond for mixed, hollow circle for no practically
-    meaningful separation (`VERDICT_MARKER`, evaluation/plots.py) -- the same
-    mapping F1 and F2 draw their mean marks with, so a verdict has one shape
-    everywhere in the thesis rather than a figure-local convention a reader
-    has to relearn. The matched row does not get its own enclosure or shape:
-    its row label already states it is a different quantity, so the mark
-    itself is free to spend its one channel on the verdict, exactly like the
-    rows above it.
+    Marker SHAPE (not colour) carries each row's verdict, using the same VERDICT_MARKER mapping as F1/F2, so a verdict has one shape everywhere in the thesis.
     """
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
@@ -607,35 +504,20 @@ def render_vocab_sensitivity(groups: list[dict], out: Path) -> None:
 
 HOST_MARK = {"procthor": "o", "gibson": "^", "3rscan": "s"}
 
-# Cosmetic label placement only, keyed by (host, question type). Every point is drawn
-# from the data; these move the TEXT off a neighbour it would otherwise overprint.
-# Six of the fourteen cells sit inside x in [4.07, 4.14] -- a 2% spread on a log axis
-# -- so a uniform offset is not an option and an automatic declutter would move labels
-# on data that has not changed. Offsets are in points, (dx, dy).
+# Cosmetic label placement only, keyed by (host, question type) -- every point is drawn from the data; these move the TEXT off a neighbour it would otherwise overprint. Offsets are in points, (dx, dy).
 CQ_NUDGE = {
-    # the x ~ 4.1 cluster: six cells inside a 2% spread of each other
     ("gibson", "containment"):   (-7, 0),
     ("procthor", "aggregation"): (7, -1),
     ("gibson", "planning"):      (7, 1),
     ("gibson", "proximity"):     (7, 0),
     ("procthor", "planning"):    (7, 0),
     ("procthor", "set_logic"):   (7, 0),
-    # x ~ 8: connectivity and proximity differ by 0.003 in AC and 0.6x in tokens
     ("procthor", "connectivity"): (-7, 0),
     ("procthor", "proximity"):    (7, 0),
     ("procthor", "containment"):  (7, 0),
-    # x ~ 14: set logic and aggregation, likewise
     ("gibson", "set_logic"):     (-7, 0),
     ("gibson", "aggregation"):   (7, 0),
-    # ProcTHOR route (~23x, +0.458) and 3RScan relation structure (~16x, +0.454)
-    # sit close enough in both x and y, after navigation's exclusion moved route
-    # off its old ~25x/+0.75 position, that their default right-pointing labels
-    # overlapped. Moving route's label above its marker clears the row instead.
     ("procthor", "route"): (7, 9),
-    # 3RScan aggregation (x~4.44) sits close enough to connectivity's leftward
-    # label (x~7.93, nudged -7) that their two rightward/leftward text runs
-    # overlapped ("aggregationconnectivity"). Moving this one above its own
-    # marker, rather than sideways, clears the row instead of narrowing it.
     ("3rscan", "aggregation"):   (0, 8),
 }
 
@@ -740,13 +622,7 @@ def _save(fig, out: Path) -> None:
 # --- LaTeX tables -----------------------------------------------------------
 
 def _esc(s: str) -> str:
-    """LaTeX-escape free text coming out of the analysis layer.
-
-    The gate strings are the reason this exists: `_gates` composes them from rep names
-    and percentages, so `json_mini coverage 67%` carries both an underscore and a
-    percent sign -- one of which is a subscript error and the other of which silently
-    comments out the rest of the row.
-    """
+    """LaTeX-escape free text from the analysis layer -- gate strings like "json_mini coverage 67%" carry an underscore (subscript error) and percent sign (comments out the row) that must be escaped."""
     for a, b in (("\\", "\\textbackslash{}"), ("_", "\\_"), ("%", "\\%"),
                  ("&", "\\&"), ("#", "\\#"), ("$", "\\$")):
         s = s.replace(a, b)
@@ -758,16 +634,7 @@ def _tt(s: str) -> str:
 
 
 def token_range(ratios: list[float]) -> tuple[str, str]:
-    """(ratio phrase, share phrase) for the best-observed winners, from the SAME
-    unrounded ratios, in the one convention the table and chapter 7 both use.
-
-    The share is deliberately approximate and integer. Carried to a decimal it is
-    3.96--24.54%, which invites `4.0--24.5` in one place and `4.0--24.6` in another
-    from the same numbers -- a discrepancy that looks like a disagreement about the
-    data and is only a disagreement about rounding. There is no question in this study
-    that a tenth of a percent of a token budget answers, so the share is stated as
-    `about 4--25%` and the precise figure is carried by the ratio beside it.
-    """
+    """(ratio phrase, share phrase) for the best-observed winners, in the one convention the table and chapter 7 both use. Share is deliberately approximate/integer -- a decimal invites inconsistent rounding across mentions that reads as a data disagreement rather than a rounding one."""
     lo, hi = min(ratios), max(ratios)
     return (f"${lo:.2f}\\times$--${hi:.2f}\\times$",
             f"about {round(100 / hi)}--{round(100 / lo)}\\,\\% of the "

@@ -1,50 +1,4 @@
-"""token_count.py — exact prompt token counts for Ollama responders.
-
-The runner needs to know, *before* spending a generation, whether a prompt fits
-the responder's context window. The old answer was `len(prompt) // 4`: a true
-lower bound (measured 0.597-0.914 of the real count over 2,103 cells, never
-above it), but loose enough that a prompt had to be ~36% past the window before
-it tripped. Everything between 100% and 136% was sent anyway and had to be
-caught after the fact — and the post-call guard cannot be relied on there,
-because an overflowing prompt is exactly the case where this server misreports
-`prompt_eval_count` (the 16,386 signature).
-
-This module closes that gap by tokenizing the prompt locally with the *same*
-tokenizer the server uses, so the pre-call number is not an estimate.
-
-How the tokenizer is obtained
------------------------------
-`POST /api/show {"verbose": true}` returns the tokenizer straight out of the
-GGUF blob being served — full `tokenizer.ggml.tokens` / `.merges` / `.token_type`
-arrays, plus the pretokenizer id, the BOS policy, the chat template and the
-model's default system prompt. That is the authoritative source: not tiktoken,
-not a HuggingFace download (Mistral-Nemo and Llama-3.1 are gated repos anyway),
-and not a fitted ratio. Rebuilding from those arrays reproduces the server's
-tokenization rather than approximating it.
-
-What Ollama adds after the prompt leaves the runner
----------------------------------------------------
-More than you would guess, and it is all reproduced here:
-  * the model's chat template (`<|im_start|>user` … etc.);
-  * a *default system prompt* baked into the Modelfile — qwen2.5 ships
-    "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.",
-    roughly 30 tokens on every single call;
-  * BOS, whose presence varies by model (qwen2.5 no, deepseek-r1/mistral yes).
-
-Note `/api/generate` renders the prompt as a one-message chat: of the models
-here only qwen2.5 even has a bare `.Prompt` template branch, and for it both
-branches emit byte-identical text, so the single rendering below is correct
-either way.
-
-Scope
------
-Deliberately narrow. `_FAMILIES` is an allowlist of the responder families whose
-counts were verified by replay against 13,320 recorded cells (max delta 0). An
-unrecognised model returns None and the caller falls back to the heuristic —
-a wrong exact count would be worse than an honest estimate, so anything
-unvalidated is not guessed at. `evaluation/tests/test_token_count_replay.py`
-re-proves the equality and is what should gate adding a family here.
-"""
+"""Exact prompt token counts for Ollama responders, tokenized locally with the same tokenizer the server uses."""
 
 from __future__ import annotations
 
@@ -215,16 +169,7 @@ UNSUPPORTED_REASON: dict[tuple[str, str, str], str] = {}
 
 
 def make_sizer(backend: str, model: str, options: dict) -> Callable[[str], Optional[int]]:
-    """Return `prompt -> exact token count`, or `prompt -> None` if unsupported.
-
-    Built once per (backend, model, host) and memoised: constructing the
-    tokenizer costs ~0.2 s and encoding a 186 KB context ~0.09 s, so a run pays
-    the build once and nothing measurable per cell.
-
-    Never raises. Any failure — server unreachable, `tokenizers` missing, an
-    unrecognised family — degrades to the None-sizer and the caller keeps its
-    heuristic.
-    """
+    """Return `prompt -> exact token count`, or `prompt -> None` if unsupported. Memoised per (backend, model, host); never raises -- any failure degrades to the None-sizer and the caller falls back to its heuristic."""
     host = (options or {}).get("host", _DEFAULT_HOST)
     key = (backend, model, host)
     if key in _SIZERS:

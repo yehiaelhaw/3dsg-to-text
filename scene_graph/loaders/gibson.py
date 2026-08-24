@@ -29,7 +29,6 @@ class GibsonLoader(DatasetLoader):
         data = np.load(npz_path, allow_pickle=True)["output"].item()
         bdata = data["building"]
 
-        # Group objects by parent_room before building rooms
         rooms_objects: dict[str, list[SceneObject]] = {}
         for object_id in np.unique(bdata["object_inst_segmentation"]):
             if object_id == 0:
@@ -48,7 +47,6 @@ class GibsonLoader(DatasetLoader):
             )
             rooms_objects.setdefault(parent_room, []).append(obj)
 
-        # Build rooms
         rooms: dict[str, Room] = {}
         for room_id in np.unique(bdata["room_inst_segmentation"]):
             if room_id == 0:

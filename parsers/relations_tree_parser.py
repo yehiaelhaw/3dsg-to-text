@@ -1,23 +1,7 @@
-"""relations_tree -- the support/containment relations drawn as an indented tree.
-
-The object-level analogue of `room_tree`: where the other `relations_*` views state
-each edge in a list, this one *draws* the support forest, so "what rests on / is
-contained in what" is carried by indentation and branch glyphs rather than by a
-"standing on" sentence the reader must thread together. Each base (floor, wall,
-free-standing receptacle) roots a tree; its children are the objects it carries, and
-their children in turn -- the multi-hop support chains (table -> tray -> cup) that are
-laborious to follow in a flat list become a single vertical path here.
-
-Honest about what a tree cannot hold. Only the support/containment edges form the
-drawing; the symmetric, directional, and attribute edges have no parent/child shape,
-so they are *counted* in a trailer rather than drawn -- the loss is quantified, never
-hidden, so a delta against `relations_flat`/`relations_subject` stays attributable to
-presentation. On ProcTHOR's pure `on` forest the drawing is lossless; on dense 3DSSG
-most edges fall to the trailer. A child with a second base, or an edge that would
-close a cycle, is listed as a back-edge (one parent per child keeps it a tree).
-
-Runs anywhere object relations are annotated; refuses on scenes that carry none.
-"""
+"""relations_tree — the object-level analogue of room_tree; draws the support/containment
+forest as an indented tree instead of a flat edge list. Only support/containment edges are
+drawn — everything else (proximity, directional, attribute) is quantified in a trailer, not
+hidden, so a delta against relations_flat/relations_subject stays attributable to presentation."""
 
 import sys
 import os

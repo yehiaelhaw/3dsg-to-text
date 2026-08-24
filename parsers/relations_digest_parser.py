@@ -1,37 +1,8 @@
-"""relations_digest -- derived consequences of the object-relation graph.
-
-The object-level analogue of `graph_digest`. Every other `relations_*` view states
-the edges and leaves the reader to derive the global facts; this one pre-computes the
-facts an LLM is weakest at threading out of a local edge list:
-
-  * support depth -- the multi-hop chains (floor -> table -> tray -> cup) and how deep
-    the stacking goes,
-  * receptacles -- which objects carry the most others (the support hubs),
-  * proximity clusters -- groups of objects that are mutually close by,
-  * shared-attribute groups -- the ``same material`` / ``same color`` cliques as sets,
-  * a relation census by structural class.
-
-It is a lossy summary by construction (it cannot answer a query whose fact it did not
-pre-compute), which is exactly its axis role: raw edges (`relations_flat`) vs derived
-structure (here), the object-level mirror of `topology_inventory` vs `graph_digest`.
-
-Three of those sections are display-capped, and the caps are part of what the
-responder saw in every reported run -- not a later change. At most 8 support chains
-are printed, deepest first, where the current primary trio (02b33dfb / 1d2f8518 /
-0cac762f) holds 12 / 19 / 35, exceeding the cap on every scene; at most 5
-receptacles, ranked by load; at most 8 proximity clusters, largest first, where the
-same trio holds 3 / 6 / 13 -- only 0cac762f exceeds the cap. Only the cluster block
-states its true total (in its header); the
-chain and receptacle blocks do not, and no block marks the entries it left out. So
-the number of chains printed here must not be read as the number in the scene. The
-"deepest first" / "carry the most" / largest-first orderings are what keep the top of
-each list trustworthy: the deepest chain and the heaviest receptacle are guaranteed
-present even though the tail is not. `evaluation/scope.py` narrows the digest's
-declared channel accordingly, and questions typed against it are authored from the
-printed file rather than from the underlying graph.
-
-Runs anywhere object relations are annotated; refuses on scenes that carry none.
-"""
+"""relations_digest — the object-level analogue of graph_digest; derived consequences of the
+object-relation graph (support depth, receptacles, proximity clusters, shared-attribute
+cliques, relation census). Support chains, receptacles, and proximity clusters are
+display-capped and only the cluster block states its true total, so a printed count is not
+the scene's true count."""
 
 import sys
 import os
@@ -65,14 +36,8 @@ def _root_to_leaf_paths(children: dict[str, list[str]], roots: list[str]) -> lis
 
 
 def object_relations_digest(building: Building) -> list[str]:
-    """The derived-structure section without the head line: support depth,
-    receptacles, proximity clusters, shared-attribute cliques and the relation
-    census.
-
-    Split out so the synthesized representation can fold these exact facts into
-    a larger document (one head, shared inventory) instead of carrying only raw
-    triples. `parse` prepends the head and returns the same text as before.
-    """
+    """The derived-structure section without the head line, split out so `synthesis` can fold
+    these exact facts into its own document instead of carrying only raw triples."""
     rels = building.object_relations
     _, lbl = resolve_labels(building)
     children, roots, _, edge_pred = support_forest(rels)

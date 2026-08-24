@@ -24,25 +24,9 @@ _AGGREGATE_COLUMNS = [
 
 
 def _compact_for_resume(path: Path) -> None:
-    """Drop rows a resumed run supersedes, in place.
+    """Drop rows a resumed run supersedes, in place: last write wins per (question_id, representation, repetition), real error rows are dropped (they're about to be retried), context_exceeded sentinels are kept (terminal by design). Without this, a retried cell duplicates in the CSV and coverage reads below 100% forever.
 
-    ResultsWriter appends on resume, and the scoring resume-skip
-    (runner._load_done_keys) re-attempts every real-error row -- so without this
-    a retried cell ends up in the CSV twice (the stale error row plus the fresh
-    scored one), and since no downstream aggregation dedups by key, coverage
-    reads below 100% forever after the retry already succeeded (observed on
-    3rscan_7f30f36c synthesis). Two rules, preserving file order:
-      1. last write wins per (question_id, representation, repetition);
-      2. real error rows are dropped -- they are exactly the rows the resumed
-         run is about to re-attempt (and re-append if they fail again).
-    Context-exceeded sentinels are terminal (fail-closed by design) and kept.
-
-    Fails loudly rather than compacting if the header doesn't match CSV_COLUMNS:
-    DictReader treats whatever is in row 1 as the fieldnames unconditionally, so
-    a file that has already lost its header (observed on
-    qwen2.5-7b_screening/3rscan_0cac762f -- interrupted mid-run)
-    would otherwise have its first data row silently adopted as the header and
-    rewritten that way, cementing the corruption on every subsequent resume.
+    Fails loudly on a header mismatch rather than compacting -- DictReader would otherwise silently adopt a corrupted first data row as the header and cement it.
     """
     with path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
@@ -188,11 +172,7 @@ def _compute_aggregate(rows: list[dict]) -> list[dict]:
     for (rep, qt), group in sorted(groups.items()):
         out.append(_group_row(rep, qt, group))
 
-    # Overall row across all groups. Labelled an *operational total* (n, error and
-    # context-exceeded counts, throughput), NOT a quality score: it pools floor +
-    # ceiling, in/out-of-scope, every type and dataset, so its AC mean answers no
-    # research question. report.py never surfaces it; read within a type instead
-    # within one question type.
+    # Operational total (n, error/context-exceeded counts, throughput), NOT a quality score -- pools floor+ceiling, in/out-of-scope, every type/dataset. report.py never surfaces it.
     out.append(_group_row("ALL", "operational-total", rows))
     return out
 
@@ -225,16 +205,7 @@ def _group_row(representation: str, question_type: str, rows: list[dict]) -> dic
         return f"{statistics.pstdev(vals):.4f}" if vals else ""
 
     def q_range_of(metric: str) -> str:
-        # Descriptive min-max spread over the k per-question means (the same
-        # per-question points plots.py draws), clustered by question because
-        # repetitions of one question are stochastic re-draws, not independent
-        # new evidence. Deliberately a RANGE and not a confidence interval: at
-        # this study's k an interval would imply a precision the design cannot
-        # support, and interval overlap is never a tie rule (thesis 4.6).
-        # Separation between two representations is decided by the paired
-        # scene-level table in report.py, never from this column.
-        # (Keyed by (question, representation) so the never-read ALL row does not
-        # pool one question's cells across representations into one cluster.)
+        # Descriptive min-max range over per-question means, clustered by (question, representation) so the ALL row doesn't pool across representations. Not a confidence interval -- see report.py.
         by_q: dict[tuple[str, str], list[float]] = {}
         for r in rows:
             v = r.get(metric, "")

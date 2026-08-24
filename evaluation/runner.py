@@ -1,21 +1,4 @@
-"""runner.py — Two-phase evaluation: generate all responses, then judge them.
-
-The two phases are split so the responder and judge never need to be co-resident
-in GPU VRAM (a hard limit on small cards):
-
-  Phase 1  generate_responses() — only the responder is loaded; every
-           (question x representation x repetition) answer is streamed to a
-           cache file (responses.jsonl). The responder is then unloaded *only*
-           if it shares an Ollama host with the judge (else the unload frees
-           nothing and just forces a cold reload — see the unload site below).
-  Phase 2  score_responses()    — only the judge is loaded; it reads the cache,
-           reloads each context (for faithfulness), and yields scored records.
-
-iter_records() runs both back-to-back so callers (and run scripts) are unchanged
-(`save(iter_records(config), config)`). Because the cache persists, the same
-answers can be re-judged later with a different judge (e.g. Gemini for the final
-numbers) via config.score_only — no regeneration, no responder VRAM.
-"""
+"""Two-phase evaluation: generate all responses, then judge them, so the responder and judge never need to be co-resident in GPU VRAM."""
 
 from __future__ import annotations
 
@@ -73,13 +56,7 @@ def iter_records(config: EvalConfig) -> Iterator[EvalRecord]:
 # --------------------------------------------------------------------------- #
 
 def _select_types(questions, types, source="dataset"):
-    """Narrow `questions` to `types` (None = keep all). Fails closed on empty.
-
-    A run restricted to no questions is always a mistake -- a typo'd type name, or
-    a host that has none of that family -- and it would otherwise look like a
-    successful zero-cell run. Raising costs nothing and is checked before the
-    responder is ever called.
-    """
+    """Narrow `questions` to `types` (None = keep all). Fails closed on empty -- a run matching no question is always a mistake and would otherwise look like a successful zero-cell run."""
     if not types:
         return questions
     wanted = set(types)
@@ -151,12 +128,7 @@ def generate_responses(config: EvalConfig) -> Path:
                 config.scene_contexts_dir, question.scene_id
             )
             for representation in representations:
-                # Skip cells this rep structurally cannot answer -- except the
-                # no-information control (inventory), which is deliberately posed
-                # the spatial questions it cannot answer so its prior-driven
-                # guessing forms the spatial-encoding floor. Without this exemption
-                # inventory is never scored on the spatial types and
-                # value_of_spatial_structure.png cannot populate.
+                # Skip out-of-scope cells except `inventory`, which is deliberately posed spatial questions it can't answer so its guessing forms the spatial-encoding floor.
                 if (config.scope_filter
                         and representation != "inventory"
                         and not scope.in_scope(representation, question.question_type)):
@@ -193,20 +165,12 @@ def generate_responses(config: EvalConfig) -> Path:
                         n_err += 1
                         print(f"  ERR   {question.id} | {representation} | rep{repetition}")
 
-    # Free the responder's VRAM before the judge loads (Phase 2) -- but ONLY when
-    # they share an Ollama host. On split hosts (responder remote, judge local)
-    # there is no shared device to free, so the unload buys nothing and forces a
-    # cold reload (weights + CUDA graph + empty KV cache) on the next scene's
-    # first prompt -- whose load time then leaks into that cell's latency_ms.
+    # Free VRAM before the judge loads, but only when responder and judge share an Ollama host -- otherwise unload buys nothing and forces a cold reload whose load time leaks into the next cell's latency_ms.
     if _responder_judge_colocated(config):
         responder.unload()
     print(f"PHASE 1/2  done — {n_new} generated, {n_err} errored, "
           f"{n_ctx} context-exceeded, {n_skip} already cached\n")
-    # A phase where EVERY attempt errored must not exit 0. It once did, so a run
-    # against three responders whose model was not on the host reported "[ok]"
-    # for 234 errors and zero rows -- indistinguishable from a clean run to any
-    # caller reading the exit code. Errors alongside successes stay non-fatal
-    # (resume re-attempts them); a total wipeout is a setup fault.
+    # A total-wipeout phase (every attempt errored) must not exit 0 -- indistinguishable from a clean run to any caller reading the exit code.
     if n_err and not n_new and not n_ctx:
         raise RuntimeError(
             f"generation produced no rows: all {n_err} attempted cells errored "
@@ -223,35 +187,12 @@ def _generate_one(question, representation, repetition, context, responder,
             context=context.strip(),
             question=question.text.strip(),
         )
-        # Pre-call guard. Two tiers, and the first is preferred wherever it is
-        # available:
-        #
-        #   exact  -- evaluation.token_count tokenizes the fully rendered prompt
-        #             (chat template, model default system prompt, BOS) with the
-        #             tokenizer read out of the GGUF blob the server is actually
-        #             serving. Verified equal to prompt_eval_count on 13,320
-        #             recorded cells, max delta 0.
-        #   len//4 -- the fallback for backends/models token_count does not
-        #             support. A true lower bound (measured 0.60-0.91 of the real
-        #             count, never above it) but loose: a prompt had to be ~36%
-        #             past the window before it tripped.
-        #
-        # Doing this before the call matters because the post-hoc guard below
-        # trusts the backend's reported count, and an overflowing prompt is
-        # precisely when this server misreports it -- observed 2026-07: the dense
-        # 3RScan `json` prompts (the rep is now `json_pretty`; measured 49,267 and
-        # 58,794 tokens on qwen2.5, not the ~45k estimated at the time) silently
-        # clipped to a reported 16,386 tokens (below the 32,768 threshold) and
-        # scored as real answers. Flagging here is terminal and spends no generation.
+        # Pre-call guard, two tiers: `exact` (evaluation.token_count, verified against prompt_eval_count) is preferred; `len//4` is a fallback lower bound for backends token_count doesn't support. Done pre-call because the post-hoc guard below trusts the backend's reported count, which can misreport exactly when a prompt overflows.
         exact_tokens = sizer(prompt) if sizer else None
         if num_ctx:
             limit = _ctx_limit(num_ctx)
             if exact_tokens is not None:
-                # Strict `>`, where the heuristic below uses `>=`. A prompt of
-                # exactly `limit` leaves exactly _CTX_RESERVE tokens for the
-                # answer, which is the reserve's definition of enough -- and an
-                # exact count is entitled to that boundary. The heuristic is a
-                # lower bound, so it must stay conservative.
+                # Strict `>` here (the heuristic below uses `>=`): a prompt of exactly `limit` leaves exactly _CTX_RESERVE tokens, which is enough by definition, and an exact count is entitled to that boundary.
                 if exact_tokens > limit:
                     return _gen_dict(
                         question, representation, repetition, responder_tag,
@@ -274,23 +215,13 @@ def _generate_one(question, representation, repetition, context, responder,
                                f"(representation cannot fit; not generated)"),
                     )
         gen = responder.generate(prompt)
-        # Post-call backstop, unchanged in effect: if the prompt filled (or was
-        # truncated to) the responder's window, the representation did not fit --
-        # mark the cell context-exceeded (terminal, unscored) rather than letting
-        # the judge score a clipped answer as a wrong one. With the exact guard in
-        # front of it this should now be unreachable; it stays because it is the
-        # only thing that catches a server whose *effective* window is smaller
-        # than the num_ctx it accepted.
+        # Post-call backstop: catches a server whose effective window is smaller than the num_ctx it accepted. Should be unreachable with the exact guard in front of it.
         error = None
         if (num_ctx and gen.prompt_tokens
                 and gen.prompt_tokens >= _ctx_limit(num_ctx)):
             error = (f"{CONTEXT_EXCEEDED}: prompt {gen.prompt_tokens} tokens "
                      f">= context window {num_ctx} (representation truncated; not scored)")
-        # Consistency check: the local count and the server's count must agree.
-        # A mismatch means the two have drifted apart -- an ollama upgrade that
-        # changed a chat template, a re-pull under the same tag, or the server
-        # silently truncating. Loud but non-fatal: the recorded prompt_tokens
-        # stays the server's own number either way.
+        # Local and server token counts must agree; a mismatch means they've drifted (template change, re-pull, silent truncation). Loud but non-fatal.
         elif exact_tokens is not None and gen.prompt_tokens and exact_tokens != gen.prompt_tokens:
             print(f"  WARN  {question.id} | {representation} | token count drift: "
                   f"predicted {exact_tokens}, server reported {gen.prompt_tokens} "
@@ -335,16 +266,7 @@ def _write(fh, rec: dict) -> None:
 
 
 def _compact_cache(path: Path) -> None:
-    """Drop cache lines a resumed generation supersedes, in place.
-
-    Generation appends, and _cached_keys does not mark real-error lines done --
-    so every resume re-appends retried cells and the stale lines pile up
-    (scoring already reads last-write-wins via _load_cache, but the file grows
-    unbounded and its keys stop mirroring results.csv, the same defect
-    results._compact_for_resume fixes on the CSV side). Same two rules,
-    preserving line order: last write wins per key, real-error lines dropped
-    (they are about to be re-attempted), context-exceeded sentinels kept.
-    """
+    """Drop cache lines a resumed generation supersedes, in place -- same two rules as results._compact_for_resume: last write wins per key, real-error lines dropped, context-exceeded sentinels kept."""
     parsed: list[tuple[str, dict]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -510,17 +432,7 @@ def _get_context(config, scene_id, representation, cache) -> str:
 
 
 def _load_done_keys(config: EvalConfig) -> set[tuple[str, str, str]]:
-    """(question_id, representation, repetition) already scored without error
-    by THIS config's judge.
-
-    Scoping the key to the judge is what makes a score_only pass with a new
-    judge (the Gemini confirmatory re-judge over screening-scored rows)
-    actually re-judge instead of resume-skipping every cell, while an
-    interrupted pass under the same judge still resumes past its own work.
-    Rows from another judge -- including its context-exceeded sentinels, which
-    _score_one re-emits without a judge call -- are rescored so the directory
-    ends up under a single judge tag.
-    """
+    """(question_id, representation, repetition) already scored without error by THIS config's judge -- scoping to the judge means a new judge (e.g. a Gemini confirmatory re-judge) rescores rather than resume-skipping rows another judge already scored."""
     path = Path(config.output_dir) / "results.csv"
     if not path.exists():
         return set()

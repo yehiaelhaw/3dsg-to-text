@@ -1,41 +1,17 @@
-"""scenes.py -- the scene registry consumed by the evaluation matrix.
-
-Each Scene names a scene_contexts/<scene_id>/ directory, the QA file authored for
-it under experiments/qa/<scene_id>/, and the representation set to score
-(None -> auto-discover every single file present; an explicit list is needed only
-to pin or exclude specific views). This is the single source
-of truth for the per-scene rep set -- run_experiments.py reads it, so the list
-lives here and nowhere else.
-
-No scene declares an "a+b" combo any more, and the two that once existed are named
-gone from REP_CAPS, so declaring one again aborts a strict run (see the note below
-the ProcTHOR list). The loader still parses the syntax; that path is now
-unexercised by the study.
-
-Each Scene also carries a `role` -- the pool it may enter when results are POOLED.
-It is a property of the study design, not of the data, so it lives here and not in a
-directory name: `aggregate_results.py` reads it, `axes.dataset_of()` never sees it,
-and a non-primary scene keeps its ordinary `3rscan_*` directory so it still resolves
-to its host dataset.
+"""The scene registry consumed by the evaluation matrix: each Scene names its
+scene_contexts/ dir, QA file, rep set, and pooling `role` (primary/stress/
+sensitivity) -- the single source of truth run_experiments.py and
+aggregate_results.py both read.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
 
-# --- scene roles -----------------------------------------------------------
-# PRIMARY   -- carries the confirmatory experiment. Every axis card, paired table,
-#              verdict, headline count and thesis figure is computed over these and
-#              only these.
-# STRESS    -- kept to demonstrate an OPERATIONAL limit (a representation that cannot
-#              fit the responder context at all). Reported as token fit/overflow only,
-#              never as accuracy.
-# SENSITIVITY -- kept so that "how much does the verdict set depend on which scenes
-#              were chosen?" can be answered from already-cached results, in its own
-#              section, outside the primary verdicts.
-#
-# The two non-primary roles are distinguished for the reader; the pooling layer treats
-# them identically, because the only property that matters there is `!= PRIMARY`.
+# PRIMARY: the confirmatory experiment (all axis cards/verdicts/figures).
+# STRESS: an operational limit (context overflow), reported as token fit only.
+# SENSITIVITY: how much the verdict set depends on scene choice, reported separately.
+# The pooling layer treats both non-primary roles identically (only `!= PRIMARY` matters).
 PRIMARY = "primary"
 STRESS = "stress"
 SENSITIVITY = "sensitivity"
@@ -60,55 +36,29 @@ def _qa(scene_id: str) -> str:
     return f"experiments/qa/{scene_id}/keyfact-qa.jsonl"
 
 
-# ProcTHOR rep set (shared across its scenes for gradient comparability): the
-# explicit list pins the full structure-presentation ladder
-# (topology -> room_tree -> graph_digest; all
-# connectivity-only, so full topology_inventory's inventories can't masquerade as a
-# presentation effect). relations_* are deliberately excluded
-# -- relation linearization is near-trivial on ProcTHOR's on-forest (its deep-dive
-# lives on 3RScan). metric_relations_full (the retracted density axis's exhaustive
-# pole) is retired: the axis was near-null (-0.043) and half its questions were
-# circular (only the exhaustive pole could answer the farthest-pair facts it was
-# scored on).
+# Explicit rep list pins the full structure-presentation ladder (topology ->
+# room_tree -> graph_digest, connectivity-only). relations_* is excluded --
+# linearization is near-trivial on ProcTHOR's forest (3RScan carries that axis).
+# metric_relations_full is retired (near-null axis, -0.043, half its questions
+# were circular).
 _PROCTHOR_REPS = [
     "inventory", "topology_inventory", "topology", "room_tree", "graph_digest",
-    # json_mini is the ceiling; json_pretty is the same content pretty-printed, kept
-    # as the formatting ablation's raw pole (axes.json_formatting). The bare name
-    # The bare name `json` is gone; name json_pretty or json_mini explicitly.
+    # json_mini is the ceiling; json_pretty is the same content pretty-printed (the
+    # formatting ablation's raw pole). The bare name `json` is retired -- name
+    # explicitly.
     "prose", "metric_relations", "navigation", "json_mini", "json_pretty", "synthesis",
-    # The matched counterpart to `navigation` on route/direction: the door graph
-    # with per-edge metric, in locative framing. Carries exactly navigation's
-    # channels {connectivity, metric_edges} -- proven fact-for-fact, not just by
-    # REP_CAPS, in evaluation/tests/test_topology_metric_equivalence.py.
+    # Matched counterpart to `navigation` on route/direction (door graph + per-edge
+    # metric) -- proven fact-for-fact in test_topology_metric_equivalence.py.
     "topology_metric",
-    # The content-matched counterpart to topology_inventory on the format axis:
-    # its facts rendered as prose sentences instead of labelled blocks. Carries
-    # exactly topology_inventory's channels {inventory, connectivity} -- proven
-    # fact-for-fact in evaluation/tests/test_format_axis_equivalence.py. `prose`
-    # (above) was the original partner but is a content superset, not a twin.
+    # Content-matched counterpart to topology_inventory (prose sentences, same
+    # channels) -- proven fact-for-fact in test_format_axis_equivalence.py.
     "narrative",
 ]
 
-# COMBOS ARE RETIRED AND PURGED.
-#
-# `topology+metric_relations` and `graph_digest+metric_relations` were scored on
-# all three ProcTHOR scenes under the Gemini judge. Those 242 rows have been
-# DELETED from experiments/results/ (one raw copy is kept under
-# experiments/backups/). No reporting, plotting or test path is combo-aware any
-# more, and neither name has a REP_CAPS entry, so re-declaring one aborts a strict
-# run instead of quietly re-entering the analysis.
-#
-# Why they went: the only comparison that REQUIRED a concatenation was the
-# ProcTHOR route baseline, because no single view carried connectivity and
-# per-edge metric together. `topology_metric` now does, by design and matched to
-# `navigation` fact-for-fact, so the requirement is gone. The combo's other
-# question -- "can salient views match the json_mini ceiling?" -- is already owned
-# by `synthesis`, which is a curated single document rather than a concatenation,
-# so no distinct research question is left that concatenation answers.
-#
-# The concatenation MECHANISM stays in scene_loader/scope -- it is small and
-# tested, and removing it would be a load-path change with no user. This list is
-# simply where it stops being used.
+# Combos are retired: neither `topology+metric_relations` nor
+# `graph_digest+metric_relations` has a REP_CAPS entry any more, so declaring one
+# aborts a strict run. The loader still parses the concatenation syntax; no scene
+# uses it.
 
 
 SCENES: list[Scene] = [
@@ -118,39 +68,27 @@ SCENES: list[Scene] = [
     Scene("procthor_train232", _qa("procthor_train232"), _PROCTHOR_REPS),
     Scene("procthor_train314", _qa("procthor_train314"), _PROCTHOR_REPS),
 
-    # 3RScan (relation-linearization axis): auto-discover the single files. No
-    # combos -- concatenating two relations_* views would mix poles of the same
-    # axis.
+    # 3RScan (relation-linearization axis): auto-discover; no combos, since
+    # concatenating two relations_* views would mix poles of the same axis.
     #
-    # The primary trio is an even sparse -> medium -> dense gradient in post-filter
-    # relation count (321 -> 647 -> 1304; consecutive ratios 2.016x / 2.015x), selected
-    # under gates frozen before any response was generated. It
-    # replaced the old trio, whose two dense scenes sat close together (1501 vs 1541)
-    # and whose json_mini ceiling could not be scored on either of them.
-    #
-    # Medium scene amended (still pre-responder): 38770ca1 -> 1d2f8518.
-    # 38770ca1's door-state relations were
-    # internally contradictory (all 7 door pairs asserted both "more open" and "more
-    # closed" between the same pair) -- rank 13/1335 worst in the corpus under the new
-    # G5 gate. 1d2f8518 is the G1-G5/P1-P4 argmin of the medium band, zero
-    # contradictions, confirmed by mechanical re-run, not by any responder result.
+    # Primary trio is a sparse -> medium -> dense gradient in relation count
+    # (321/647/1304), selected under gates frozen before any response was
+    # generated. 1d2f8518 is the medium scene: zero relation contradictions, the
+    # G1-G5/P1-P4 argmin of the medium band.
     Scene("3rscan_02b33dfb", _qa("3rscan_02b33dfb"), None, role=PRIMARY),
     Scene("3rscan_1d2f8518", _qa("3rscan_1d2f8518"), None, role=PRIMARY),
     Scene("3rscan_0cac762f", _qa("3rscan_0cac762f"), None, role=PRIMARY),
 
-    # Non-primary, kept for the two reporting artifacts defined in
-    # Both fail G1 (json_mini context headroom):
-    # 7f30f36c overflows the window outright (32,907 / 36,783 tokens against a 32,512
-    # budget), d7d40d62 fits with 2,202 tokens = 6.7% of num_ctx, under the 12% bar.
-    # They keep their ordinary 3rscan_* ids on purpose -- role is carried here, never
-    # in a directory name, so axes.dataset_of() still resolves them to the 3rscan host.
+    # Non-primary; kept for the STRESS/SENSITIVITY reporting artifacts (see ROLES
+    # above). Both fail G1 (json_mini context headroom): 7f30f36c overflows
+    # outright (STRESS); d7d40d62 fits under the 12% headroom bar (SENSITIVITY).
+    # Real 3rscan_* ids, so axes.dataset_of() still resolves them to the host.
     Scene("3rscan_7f30f36c", _qa("3rscan_7f30f36c"), None, role=STRESS),
     Scene("3rscan_d7d40d62", _qa("3rscan_d7d40d62"), None, role=SENSITIVITY),
 
-    # Gibson (spatial-encoding / reference-frame axes): auto-discover the 6 single
-    # files. No door graph, so no
-    # orthogonal channel to cross with the metric views -> no combos. The trio
-    # spans a floor-area gradient (Brinnon 35 rooms > Thrall > Donaldson 27).
+    # Gibson (spatial-encoding/reference-frame axes): auto-discover the 6 single
+    # files; no door graph so no combos. Trio spans a floor-area gradient
+    # (Brinnon 35 > Thrall > Donaldson 27 rooms).
     Scene("Brinnon", _qa("Brinnon"), None),
     Scene("Thrall", _qa("Thrall"), None),
     Scene("Donaldson", _qa("Donaldson"), None),
@@ -162,12 +100,8 @@ PRIMARY_SCENE_IDS: frozenset[str] = frozenset(
 
 
 class UnregisteredScene(KeyError):
-    """A scene id with no entry in SCENES.
-
-    Raised rather than defaulted, because every default is wrong here: treating an
-    unknown scene as primary lets a stress scene into the headline numbers the moment
-    someone forgets to register it, and treating it as non-primary silently drops a
-    real scene out of the aggregate. Both failures are invisible in the output.
+    """A scene id with no entry in SCENES; raised rather than defaulted because any
+    default role (primary or not) would silently corrupt the aggregate.
     """
 
 

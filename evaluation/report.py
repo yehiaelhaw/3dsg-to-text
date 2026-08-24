@@ -1,47 +1,4 @@
-"""report.py — auto-generated numeric report (the tabular half of reporting).
-
-The charts (`plots.py`) are the visual layer; this is the layer for the facts a
-chart cannot legibly carry: coverage / rank-eligibility (the context_exceeded
-survivorship trap), the small-n register, per-cell n, and the paired scene-level
-separation table that decides every axis verdict. It is regenerated
-from `results.csv` on every run/aggregation alongside the PNGs, so it never goes
-stale, and it is the seed for publication tables at thesis-writing time.
-
-Design rules enforced here (thesis 4.6 `sec:meth-analysis`):
-- No `ALL/ALL` grand mean is ever surfaced; every number is within one question
-  type, and axis cards are within one host dataset (no cross-dataset pooling).
-- Axis cards are floor/ceiling-anchored and ladder-ordered (evaluation/axes.py).
-- A cell with coverage < MIN_COVERAGE is flagged and marked not rank-eligible
-  (its AC is conditioned on the surviving subset). A cell with n < SMALL_N is
-  flagged screening-only. Where such a cell would enter a comparison or an
-  ordering, it is printed as `not licensed` with the reason rather than as a
-  number, and never sorted to the top of a block.
-- Every difference between two representations -- the separation table and the
-  `vs floor` columns alike -- is computed over the questions BOTH members
-  answered (`paired_deltas`). Two cell means are never subtracted: the floor is
-  exempt from the scope filter and answers everything, so that subtraction would
-  difference one rep's surviving questions against the other's whole set.
-- Combos and the `synthesis` candidate get their own tables, never mixed into a
-  pole card.
-
-The per-cell tables are descriptive *display* statistics over the same per-cell AC
-values and the same grouping as `results._group_row` -- no new analysis. The
-spread printed beside each mean is the min-max RANGE over the k per-question
-means: descriptive only, never an interval estimate. No confidence interval is
-computed anywhere and interval overlap is never used as a decision rule (see
-thesis 4.6) -- at three scenes and a handful of questions per cell an
-interval would imply a precision this design cannot support.
-
-Separation between two representations is decided in `_paired_section` instead,
-which is the actual analysis: paired per-question differences, averaged within
-each host scene, judged against a pre-declared practical margin with a
-consistency requirement across scenes (evaluation/axes.py).
-
-Two further sections read the question's authored register. `_recut_section`
-splits every capped comparison into its `natural` and `constructed` halves;
-`_matched_section` goes one step further and differences those two halves within
-each fact-set, which is what the balanced corpus was authored to make possible.
-"""
+"""Auto-generated numeric report: coverage, rank-eligibility, and the paired scene-level separation table that decides every axis verdict."""
 
 from __future__ import annotations
 
@@ -63,32 +20,13 @@ from evaluation.axes import (
 from evaluation.core import is_context_exceeded
 from evaluation.scope import in_scope
 
-# --- the authored fact-set map ---------------------------------------------
-# `pair_id` is a property of the authored question, not of a run, so it is not a
-# results.csv column (see the comment on core.Question). It is joined here from the
-# QA files at analysis time, on (scene_id, question_id), which keeps every committed
-# results.csv byte-identical.
-#
-# It is used for exactly ONE thing: grouping the two members of a fact-set so their
-# register effects can be differenced. It never filters, never groups a table, and
-# is never compared against the question's own id. Whether a stem was authored
-# before or during the matching exercise is history, not an experimental variable:
-# `natural` means natural and `constructed` means constructed regardless, and all
-# 134 scoped questions participate in every table.
+# pair_id is joined here from the QA files at analysis time (not a results.csv column) and used for exactly one purpose: grouping a fact-set's natural/constructed pair so their register effects can be differenced. Never filters or groups a table.
 QA_ROOT = Path(__file__).resolve().parents[1] / "experiments" / "qa"
 QA_FILENAME = "keyfact-qa.jsonl"
 
 
 def _load_pairs(qa_root: Path | None = None) -> dict[tuple[str, str], str]:
-    """(scene_id, question_id) -> pair_id, over every authored QA file.
-
-    Returns {} when the QA files are not reachable (a report rendered outside the
-    repo) -- the matched section then simply does not render, which is the honest
-    outcome rather than an import-time failure in a display layer.
-
-    `qa_root` is resolved at call time, not bound as a default, so a caller (the
-    smoke test) can point the module constant at a synthetic corpus.
-    """
+    """(scene_id, question_id) -> pair_id, over every authored QA file. Returns {} when the QA files aren't reachable, so the matched section just doesn't render rather than failing at import time."""
     root = Path(qa_root if qa_root is not None else QA_ROOT)
     pairs: dict[tuple[str, str], str] = {}
     if not root.is_dir():
@@ -106,13 +44,7 @@ def _load_pairs(qa_root: Path | None = None) -> dict[tuple[str, str], str]:
 
 
 def _row_key(r: dict) -> tuple[str, str]:
-    """A row's (scene_id, authored question id).
-
-    aggregate_results._pool_rows namespaces `question_id` as `<scene_id>:<id>` so
-    identities stay unique across pooled scenes, while leaving `scene_id` bare. The
-    _aggregate/ report is the one anyone actually reads, so a join that forgot this
-    would match nothing there and silently drop the matched section rather than fail.
-    """
+    """A row's (scene_id, authored question id) -- strips aggregate_results._pool_rows's `<scene_id>:` namespacing prefix from question_id so the join matches."""
     scene, qid = r["scene_id"], r["question_id"]
     prefix = f"{scene}:"
     return scene, (qid[len(prefix):] if qid.startswith(prefix) else qid)
@@ -214,10 +146,7 @@ def _range_str(c: Cell) -> str:
 
 
 def _tok_str(p) -> str:
-    """Mean prompt tokens of the two members, in the comparison's own order
-    (`rep_b` vs `rep_a`), with b's share of a. This is what the cost rule of
-    thesis 4.6 is read from: a pair that does not separate on correctness while
-    differing sharply here is a result, not the absence of one."""
+    """Mean prompt tokens of the two members (rep_b vs rep_a, with b's share of a) -- a pair that doesn't separate on correctness but differs sharply here is still a result."""
     a, b = p.tokens_a, p.tokens_b
     if not a or not b:
         return "-"
@@ -278,32 +207,10 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
 
 
 def _planning_section(rows: list[dict]) -> list[str]:
-    """The planning / real-world-utility probe, reported on its own (not an axis
-    pole). A planning question states a *goal*; the model must infer the objects it
-    needs (the affordance step) rather than being handed them -- that inference is
-    the extra reasoning vs a containment/set_logic question on the same objects.
-    inventory is the floor, json_mini the ceiling; in-scope reps carry the
-    inventory channel.
-
-    Split per host dataset (never pooled): planning's floor/ceiling meaning differs
-    by dataset (e.g. 3RScan planning needs the raw relation channel, not just
-    inventory -- QA_DESIGN 5), so a pooled `all` row would silently average across
-    incompatible scopes.
-
-    No filtering is needed here any more: the multi-view combos this table once had
-    to exclude by name were purged from the results tree, so every rep reaching this
-    point is part of the design."""
+    """Planning / real-world-utility probe, reported on its own (not an axis pole). Split per host dataset, never pooled -- planning's floor/ceiling meaning differs by dataset (e.g. 3RScan planning needs the raw relation channel, not just inventory)."""
 
     def order(cells, rep):
-        """Floor first, then the poles, then the ceiling -- and within the poles the
-        rank-eligible cells by AC descending, with the sub-threshold ones beneath
-        them rather than interleaved.
-
-        Row order is a ranking whether or not the word appears: a reader takes the
-        top pole for the best one. A cell below MIN_COVERAGE must therefore not be
-        able to claim that position on an AC its own coverage gate says cannot be
-        compared against a full-coverage cell.
-        """
+        """Floor first, poles by AC descending (rank-eligible before sub-threshold), then ceiling -- row order is a de facto ranking, so a sub-coverage cell must never sit above a full-coverage one."""
         c = cells[(rep, "planning")]
         block = {"floor": 0, "ceiling": 2}.get(rep_role(rep), 1)
         return (block, 0 if c.rank_eligible else 1, -c.ac_mean)
@@ -340,11 +247,7 @@ def _planning_section(rows: list[dict]) -> list[str]:
 class Paired:
     """One axis pair x question type, compared the way the design licenses.
 
-    `scene_deltas` maps scene_id -> the mean per-question AC difference
-    (rep_b - rep_a) over the questions BOTH members answered in that scene. The
-    scene is the unit of replication: questions are nested within scenes, so the
-    headline figure is the unweighted mean of the scene values, not a mean over
-    pooled questions (which would let a question-rich scene outvote the others).
+    scene_deltas: scene_id -> mean per-question AC diff (rep_b - rep_a), over questions BOTH members answered. Scene is the unit of replication, so the headline is the unweighted mean of scene values -- not pooled questions, which would let a question-rich scene outvote the others.
     """
     axis_id: str
     host: str
@@ -387,25 +290,9 @@ class Paired:
 
 
 def _verdict(scene_deltas: dict[str, float], confound: str, ineligible: str) -> str:
-    """The verdict scale of thesis 4.6, Table 4.5.
+    """Verdict scale of thesis 4.6, Table 4.5.
 
-    A scene whose delta is exactly 0.0 does not contradict a direction, but
-    neither does it supply one -- which is why consistency needs both `no scene
-    reversed` and `at least MIN_SCENES_SHOWING showing`. The margin-met but
-    under-replicated case (e.g. +0.30 / 0.0 / 0.0) is graded down to directional:
-    the direction is not contradicted but two scenes do not attest it, and the
-    conservative grade is the one the design can carry.
-
-    MIXED is decided on the scene values, not on their mean. Testing the mean
-    alone made cancellation -- the *strongest* form of scene disagreement -- read
-    as a null: +0.143 / -0.222 / -0.214 averages to -0.098, lands under the
-    margin, and printed as `no practically meaningful separation` even though one
-    scene clears the margin one way and two clear it the other. That is the
-    opposite of what this verdict exists to say, so disagreement is now tested as
-    `some scene clears +margin AND some scene clears -margin`, reusing the same
-    declared margin rather than introducing a second threshold. A single scene
-    moving while the others sit flat (+0.000 / +0.053 / -0.250) is still not a
-    reversal and still grades as no separation.
+    MIXED is decided on the scene values, not their mean -- testing the mean alone lets cancelling scene deltas (some clearing +margin, some -margin) average out to a false null. A margin-met-but-under-replicated direction (not enough scenes showing it) grades down to directional rather than consistent.
     """
     if ineligible or not scene_deltas:
         return VERDICT_NOT_LICENSED
@@ -433,13 +320,7 @@ def _verdict(scene_deltas: dict[str, float], confound: str, ineligible: str) -> 
 
 
 def _paired_pairs(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[tuple[str, str]]:
-    """Which contrasts to compute for one axis x question type.
-
-    The ladder baseline against each later rung (the axis's own story), the
-    declared headline pair, and each rung against the json_mini ceiling (the
-    anchor comparison). Deduplicated, always ordered (earlier, later) so the reported
-    delta's sign is unambiguous.
-    """
+    """Contrasts for one axis x question type: ladder baseline vs each later rung, the declared headline pair, and each rung vs the ceiling. Deduplicated, always ordered (earlier, later)."""
     rungs = [p for p in axis.ladder
              if p not in (FLOOR, CEILING) and in_scope(p, qt) and (p, qt) in cells]
     pairs: list[tuple[str, str]] = []
@@ -462,13 +343,7 @@ def _paired_pairs(axis, qt: str, cells: dict[tuple[str, str], Cell]) -> list[tup
 
 
 def _q_means(host_rows: list[dict]) -> tuple[dict[tuple[str, str], float], dict[str, str]]:
-    """((rep, question_id) -> mean AC over that question's scored rows,
-    question_id -> scene_id).
-
-    Errors and context-exceeded rows carry no AC, so they simply fail to appear --
-    an overflowing rep contributes no delta rather than a zero, and its coverage
-    gate catches it at the call site.
-    """
+    """((rep, question_id) -> mean AC, question_id -> scene_id). Errors/context-exceeded rows carry no AC, so an overflowing rep contributes no delta rather than a zero."""
     ac: dict[tuple[str, str], list[float]] = collections.defaultdict(list)
     scene_of: dict[str, str] = {}
     for r in host_rows:
@@ -481,27 +356,8 @@ def _q_means(host_rows: list[dict]) -> tuple[dict[tuple[str, str], float], dict[
 
 def paired_deltas(q_mean: dict[tuple[str, str], float], scene_of: dict[str, str],
                   qids, rep_a: str, rep_b: str) -> dict[str, list[tuple[float, str]]]:
-    """scene_id -> [(AC(rep_b) - AC(rep_a), question_id)] over the questions BOTH
-    members answered, questions in sorted order.
-
-    THE pairing primitive. Every difference this repo reports comes through here --
-    the separation table, the `vs floor` columns, and the lift chart in plots.py --
-    so that no two of them can disagree about which questions a delta was taken
-    over.
-
-    A question either member did not answer is DROPPED, never zero-filled. That is
-    the whole point: a difference of two cell MEANS is a difference between one
-    rep's surviving questions and the other's, and where a rep overflows the context
-    window on the hard half of a type those are not the same set. The subtraction
-    then silently reads `easy questions only, minus everything` as an effect of the
-    representation. Dropping is also not free -- it can leave too few pairs to grade
-    -- which is what the SMALL_N gate at each call site is for.
-
-    Sorted rather than set-ordered so the summation order (and therefore the last
-    bit of every mean) is reproducible: `qids` is a set of strings, and CPython
-    randomizes string hashing per process, so the unsorted form varied run to run.
-    Every figure is printed to 3 decimals, so this fixes an invisible instability
-    rather than changing any reported number.
+    """scene_id -> [(AC(rep_b) - AC(rep_a), question_id)] over questions BOTH members answered; a question either missed is DROPPED, never zero-filled -- subtracting cell means would attribute a rep's missing (overflowed) questions to the representation.
+    THE pairing primitive: every difference this repo reports comes through here. Sorted (not set-ordered) so summation order is reproducible across runs (CPython randomizes string hashing per process).
     """
     by_scene: dict[str, list[tuple[float, str]]] = collections.defaultdict(list)
     for q in sorted(qids):
@@ -521,13 +377,7 @@ def _summarise(by_scene: dict[str, list[tuple[float, str]]]):
 
 def _gates(cells: dict[tuple[str, str], Cell], qt: str, reps: tuple[str, ...],
            n_q: int, unit: str = "paired questions") -> str:
-    """Why this comparison is not rank-eligible, or "".
-
-    Applied to the COMPARISON rather than to either cell alone: a pair is only as
-    licensed as its weaker member, and the paired question count -- not either
-    cell's n -- is its real support. Shared by every caller so `not licensed` means
-    exactly one thing across the whole report.
-    """
+    """Why this comparison is not rank-eligible, or "" -- applied to the COMPARISON, not either cell alone: a pair is only as licensed as its weaker member, and the paired question count (not either cell's n) is its real support."""
     reasons = [f"{rep} coverage {cells[(rep, qt)].coverage * 100:.0f}%"
                for rep in reps
                if (rep, qt) in cells and not cells[(rep, qt)].rank_eligible]
@@ -541,23 +391,7 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
                  pairs: dict[tuple[str, str], str] | None = None) -> list[Paired]:
     """Every licensed axis contrast, compared per scene and graded.
 
-    `style` restricts to one question-style subset (`natural` / `constructed`) --
-    the vocabulary-coupling re-cut. The restriction is applied before `_cells`, so
-    the eligibility gates are evaluated on the subset actually being compared
-    rather than inherited from the pooled cell. `axes` narrows which axes are
-    walked (the re-cut only reads the ones carrying a declared confound).
-
-    `lift_confound` drops the cap. It exists for exactly one caller: the `natural`
-    half of the re-cut, where a vocabulary confound is resolved *by construction*
-    -- a natural question is one a user could have asked without ever having seen
-    the derived view's output, so its wording cannot be mirroring that output.
-    Capping there would suppress the very finding the re-cut was built to produce.
-    Never lift a `content` confound this way; no question-style split addresses it.
-
-    `pairs` is the authored fact-set map. It is used only to report how many
-    distinct information requests a comparison rests on: with a balanced corpus the
-    pooled table sees BOTH members of every fact-set, so `n_q` counts correlated
-    observations twice. It changes no delta and no verdict.
+    `style` restricts to one question-style subset for the vocabulary-coupling re-cut, applied before `_cells` so the eligibility gates see the actual subset compared. `lift_confound` drops the cap for the `natural` half of the re-cut only, where the confound is resolved by construction (a natural question can't mirror output it never saw) -- never for a `content` confound, which no style split addresses.
     """
     out: list[Paired] = []
     for axis in (AXES if axes is None else axes):
@@ -603,36 +437,14 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
 
 
 # --- the floor comparison ---------------------------------------------------
-# `_paired_pairs` deliberately never pairs a rung against the floor: a floor
-# comparison is not the design decision an axis isolates, so it does not belong in
-# the separation table. But it is still a difference between two representations,
-# and it is the headline of the spatial-encoding axis ("what does adding structure
-# buy over a no-information control?"), so it gets the same treatment here rather
-# than a second, weaker one of its own.
+# A floor comparison isn't a design decision an axis isolates, so `_paired_pairs` never pairs a rung against it -- but it still gets the same graded treatment here, not a weaker one of its own.
 FLOOR_LIFT_ID = "floor"
 
 
 def floor_lifts(rows: list[dict], host: str) -> list[Paired]:
-    """Every representation against the `inventory` floor on one host, question-matched.
+    """Every representation against the `inventory` floor on one host, question-matched. The floor is exempt from the scope filter and so answers every question, while other reps routinely don't (JSON views overflow on dense scenes) -- a plain mean-vs-mean subtraction would read those missing questions as an effect of the representation.
 
-    Same pairing primitive, same eligibility gates and same verdict scale as
-    `_paired_rows`. Both the `vs floor` columns below and
-    `plots.value_of_spatial_structure` read this one function, so a lift cannot
-    carry two different numbers in two artifacts describing the same run.
-
-    What this replaces is a subtraction of two cell means. That is wrong here more
-    often than anywhere else in the report, because the floor is the one rep that is
-    deliberately exempted from the scope filter (runner.py) and therefore answers
-    every question of every type, while the reps it is subtracted from routinely do
-    not -- the JSON views overflow the window on dense scenes and lose exactly the
-    questions with the most content in them. `mean(survivors) - mean(everything)`
-    then reads the missing questions as an effect of the representation.
-
-    Every type the floor has data on is returned, not only the control types where
-    inventory is out of scope: the axis cards print `vs floor` on content types too,
-    where inventory is a legitimate compact format rather than a no-information
-    control. Restricting to the control types is the CHART's job, and it says so in
-    its title.
+    Returns every type the floor has data on, not just control types; restricting to control types is the chart's job.
     """
     host_rows = [r for r in rows if dataset_of(r["scene_id"]) == host]
     if not host_rows:
@@ -666,14 +478,7 @@ def floor_lifts(rows: list[dict], host: str) -> list[Paired]:
 
 
 def _lift_str(p: Paired | None) -> str:
-    """The `vs floor` cell: a question-MATCHED delta, or an explicit `not licensed`.
-
-    A sub-threshold cell prints the reason instead of a number rather than
-    alongside it. A number a reader must remember not to use is a number that gets
-    used -- and unlike the AC column (where `0.70* (cov 38%)` still describes the
-    surviving answers honestly) a lift is a comparison, and this one is not
-    licensed to be made.
-    """
+    """The `vs floor` cell: a question-matched delta, or the reason instead of a number for a sub-threshold cell -- a number a reader must remember not to use is a number that gets used."""
     if p is None:
         return ""
     if p.verdict == VERDICT_NOT_LICENSED:
@@ -727,14 +532,7 @@ STYLES = ("natural", "constructed")
 
 
 def _recut_rows(rows: list[dict]) -> dict[tuple[str, str, str, str], dict[str, "Paired"]]:
-    """(axis_id, qt, rep_a, rep_b) -> {style: Paired}, the vocabulary re-cut's raw data.
-
-    Factored out of `_recut_section` so a caller other than the markdown table (the
-    thesis-figure renderer) can read the same natural/constructed split without
-    reimplementing the style-filtering and cap-lifting logic. Returns {} exactly
-    where `_recut_section` would render nothing: no style tag in `rows`, no
-    vocabulary-coupled axis, or no comparison the cap actually fires on.
-    """
+    """(axis_id, qt, rep_a, rep_b) -> {style: Paired}, the vocabulary re-cut's raw data -- factored out so the thesis-figure renderer can read the same split without reimplementing it."""
     if not any((r.get("question_style") or "") for r in rows):
         return {}   # results.csv predates the tag; nothing to re-cut
     coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
@@ -761,37 +559,9 @@ def _recut_rows(rows: list[dict]) -> dict[tuple[str, str, str, str], dict[str, "
 
 
 def _recut_section(rows: list[dict]) -> list[str]:
-    """The vocabulary-coupling re-cut -- the remedy the declared confound points at.
+    """Vocabulary-coupling re-cut -- the remedy the declared confound points at: splits each capped comparison by question style (natural/constructed), since a pole leading only on `constructed` questions is reciting its own vocabulary rather than reasoning better.
 
-    Two axes carry a derived pole whose own computed output states the concept the
-    question asks for (`graph_digest`'s hub/bottleneck, `relations_digest`'s chain
-    depth/clusters). The cap on those pairs says the pooled figure cannot settle
-    whether the pole reasons better or merely recites; this splits the same paired
-    comparison by the question's authored style tag, which is what settles it:
-    `natural` = a user could have asked it without ever having seen the derived
-    view, `constructed` = the concept mirrors that view's vocabulary.
-
-    Only the comparisons the cap actually fires on are walked: axes whose confound
-    is a `vocabulary` one (the two with a derived pole), and within them only the
-    pairs touching that pole. No axis currently declares a `content` confound --
-    that kind is for a superset no question-style split could address, and the
-    format axis's original example (`prose`'s content superset of
-    `topology_inventory`) was retired in favour of `narrative`, a content-matched
-    pole built to remove the confound rather than qualify it. The ordinary gates
-    apply unchanged to each subset: a split that lands under SMALL_N reads `not
-    licensed`, which is the honest outcome for a subset too thin to rank, not a
-    reason to pool it back together. Rows are ordered so a comparison's two
-    styles sit adjacent -- that adjacency is the argument.
-
-    On the scoped types the two halves are balanced by construction: every
-    information request is authored in both registers, so each half holds exactly one
-    member of every fact-set and `n_q` here IS the fact-set count. That balance also
-    sharpens the lift above -- with the facts held constant across the halves, the
-    tag encodes register and nothing else, so `a natural question cannot be mirroring
-    the view` is a claim about wording alone rather than about which concept the
-    author happened to pick. What this table still cannot do is difference the two
-    halves question by question, because its rows compare SETS; `_matched_section`
-    below does that.
+    Only vocabulary-coupled axes are walked (no axis currently declares a `content` confound, which no style split could address); gates apply per subset, so a thin split reads `not licensed` rather than being pooled back.
     """
     keyed = _recut_rows(rows)
     if not keyed:
@@ -829,16 +599,7 @@ def _recut_section(rows: list[dict]) -> list[str]:
 
 
 def _matched_rows(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[dict]:
-    """The matched within-fact-set comparison's raw numbers, one dict per comparison.
-
-    Factored out of `_matched_section` so a caller other than the markdown table
-    (the thesis-figure renderer) can read `d_natural`, `d_constructed`, the matched
-    `mean` (= d_constructed - d_natural) and `scene_deltas` without recomputing them
-    -- the whole point being that a figure and report.md's table are one
-    computation, not two independently maintained ones. See `_matched_section`'s
-    docstring for the method; this function differs from it only in returning data
-    instead of formatted strings.
-    """
+    """Matched within-fact-set comparison's raw numbers, one dict per comparison -- factored out so the thesis-figure renderer reads the same numbers as report.md's table rather than recomputing them."""
     if not pairs:
         return []
     coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
@@ -905,37 +666,9 @@ def _matched_rows(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[d
 
 
 def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[str]:
-    """The matched within-fact-set comparison -- what the balanced corpus buys.
+    """Matched within-fact-set comparison: each information request is authored in both registers over the same facts, so differencing d_constructed(f) - d_natural(f) within a fact-set cancels fact selection and isolates wording -- unlike the re-cut above, which compares different facts across two subsets.
 
-    The re-cut above compares a natural SUBSET against a constructed SUBSET, so any
-    difference between them mixes the register manipulation with whatever else the
-    two sets of facts differ in. On the scoped types the corpus removes that: each
-    information request is authored twice, once in each register, over the same key
-    facts and with the same expected answer. Differencing the two within a fact-set
-    cancels fact selection exactly, leaving the wording:
-
-        d_nat(f) = AC(rep_b, natural f)     - AC(rep_a, natural f)
-        d_con(f) = AC(rep_b, constructed f) - AC(rep_a, constructed f)
-        m(f)     = d_con(f) - d_nat(f)
-
-    averaged within each host scene and then over the scene values, which is the
-    same unit of replication as every other table here.
-
-    Only the comparisons the cap actually fires on are walked, exactly as in the
-    re-cut: an anchor comparison against the floor or the ceiling carries no
-    vocabulary confound, so it has nothing to resolve and would only pad the table.
-
-    A fact-set missing any of its four cells is DROPPED, not zero-filled -- mirroring
-    the membership test in `_paired_rows`. Zero-filling would read a context overflow
-    on one member as `wording made no difference here`, which is the one conclusion
-    the missing data cannot support.
-
-    No confound is passed to `_verdict`. The coupling is the estimand in this table,
-    not a threat to it, so capping would grade down the very quantity the cap exists
-    to point at -- the same reasoning that lifts the cap on the natural half of the
-    re-cut. The gates are otherwise untouched: SMALL_N applies to the fact-set count
-    (the real number of independent requests), and each rep still has to clear its
-    coverage threshold.
+    A fact-set missing any of its four cells is DROPPED, never zero-filled (that would misread a context overflow as "wording made no difference"). No confound is passed to `_verdict`: the coupling is the estimand here, not a threat to it.
     """
     rows_ = _matched_rows(rows, pairs)
     if not rows_:
@@ -970,19 +703,7 @@ def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> lis
 
 
 def _sibling_groups(results_path: Path) -> list[tuple[str, Path]]:
-    """(responder directory name, results.csv) for every other model directory
-    holding the same aggregate group.
-
-    Eligibility is four explicit conditions, none of them inferred: the caller is
-    an aggregate-group report, the candidate is a different directory, it holds the
-    same group, and that group has rows. The judge condition is deliberately NOT
-    applied here -- a judge mismatch must be reported as a refusal rather than
-    silently filtered, so `_cross_section` applies it where it can be printed.
-
-    Returns [] for a per-scene report: one scene is not the unit of replication, so
-    agreement measured there would be a single draw dressed up as a replication.
-    Iteration is sorted, so adding a directory can never reorder an existing report.
-    """
+    """(responder directory name, results.csv) for every other model directory holding the same aggregate group. Judge matching is deliberately NOT applied here -- a mismatch must be reported as a refusal downstream, not silently filtered out."""
     if results_path.parent.parent.name != "_aggregate":
         return []
     group = results_path.parent.name
@@ -997,14 +718,7 @@ def _sibling_groups(results_path: Path) -> list[tuple[str, Path]]:
     return out
 
 
-# A comparison's state under one responder. A delta below the practical margin has
-# NO DIRECTION -- it is not a small win, it is an absence of separation -- so the
-# cross-responder reading is a three-state comparison rather than a sign comparison.
-# This is what keeps `REVERSED` off noise: deltas of +0.03 and -0.02 disagree in
-# sign while neither separates, and that is a null in both, not a failed
-# replication. Where a sub-margin delta's raw sign is shown it is called a LEAN,
-# never a direction, because naming it a direction would reintroduce the very
-# state this three-way split exists to remove.
+# A sub-margin delta has NO DIRECTION, so the cross-responder reading is three-state, not sign-based -- this keeps REVERSED off noise (two sub-margin deltas of opposite sign are a null in both, not a failed replication). A shown sub-margin sign is called a LEAN, never a direction.
 AHEAD, NULL, BEHIND = 1, 0, -1
 
 CROSS_PRESERVED   = "ordering preserved"
@@ -1024,17 +738,7 @@ def _dir_state(d: float) -> int:
 
 
 def _cross_outcome(d_here: float, d_there: float) -> str:
-    """Direction-and-separation state, never sign alone.
-
-    `REVERSED` requires BOTH sides to clear the practical margin in opposite
-    directions; nothing else can produce it. Where only `here` separates, the
-    sub-margin delta is reported as a lean -- informative, but not a reversal,
-    because a delta that does not separate has no direction to reverse.
-
-    Where `here` does not separate the lean is not split at all: this report is
-    written from `here`'s perspective, so `here` supplies the reference ordering,
-    and with no ordering to preserve there is nothing for `there` to agree with.
-    """
+    """Direction-and-separation state, never sign alone: REVERSED requires BOTH sides to clear the practical margin in opposite directions. Where only `here` separates, it's reported as a lean, not a reversal -- and the lean isn't split at all if `here` doesn't separate, since `here` supplies the reference ordering."""
     sh, st = _dir_state(d_here), _dir_state(d_there)
     if sh != NULL and st != NULL:
         return CROSS_PRESERVED if sh == st else CROSS_REVERSED
@@ -1045,12 +749,7 @@ def _cross_outcome(d_here: float, d_there: float) -> str:
     return CROSS_NULL_BOTH
 
 
-# A full `aggregate_results` run renders every group of every directory, and each
-# report reads every sibling group -- so without a cache each sibling CSV is parsed
-# and run through `_paired_rows` once per reporting directory, which is the whole
-# quadratic term. Keyed by (path, mtime, size) rather than path alone: the run
-# REWRITES these same files as it proceeds, so a path-only key would serve a report
-# the pre-aggregation contents of a directory aggregated later in the same run.
+# Cached to avoid re-parsing/re-pairing every sibling CSV once per reporting directory (the quadratic term). Keyed by (path, mtime, size), not path alone -- a run rewrites these same files as it proceeds.
 _SIB_ROWS: dict[tuple[str, int, int], list[dict]] = {}
 _SIB_PAIRED: dict[tuple[str, int, int], dict] = {}
 
@@ -1078,38 +777,7 @@ def _sibling_paired(path: Path, other_rows: list[dict], pairs) -> dict:
 
 def _cross_section(rows: list[dict], results_path: Path,
                    pairs: dict[tuple[str, str], str] | None = None) -> list[str]:
-    """Does each paired comparison point the same way under a second responder?
-
-    Three rules are enforced in code rather than left to the reader.
-
-    *Orderings, never levels.* Each responder's delta is computed inside its own
-    directory and only the direction states are compared. Two responders differ in
-    general capability for reasons unrelated to representation, so reading the gap
-    between their scores would be reading the responder, not the representation --
-    in either direction. This holds for any pair of directories, not only the
-    scale-matched confirmatory pair of thesis 3.6, since the section renders
-    wherever two same-judge directories exist. No absolute correctness crosses the
-    boundary.
-
-    *One judge per comparison.* A directory under a different judge is refused and
-    the refusal is printed. The one-judge-per-directory rule keeps judges from
-    mixing inside a directory; the same confound reappears across directories the
-    moment two are compared, and a judge change is not a responder change.
-
-    *Matched evidence.* A comparison is read only where both responders averaged
-    over the SAME scenes. Otherwise a disagreement could come from the responder or
-    from which scenes entered the mean, and this section exists to isolate the
-    first. Mismatches are excluded and listed rather than recomputed on the
-    intersection: a recomputed delta would disagree with the same comparison's
-    figure in the paired separation table above, and one comparison must not carry
-    two different numbers in one document.
-
-    Pair orientation needs no canonicalization. `_paired_pairs` derives it from the
-    ladder order in `axes.py`, so for any unordered pair the emitted orientation is
-    identical in every directory; and because the join key is the ORDERED tuple, a
-    hypothetical flip would drop the comparison out of the shared set rather than
-    invert its sign -- an under-report, never a false `REVERSED`. The invariant is
-    asserted in the test suite so a future data-derived ordering fails loudly.
+    """Does each paired comparison point the same way under a second responder? Only direction states cross the boundary, never absolute levels (two responders differ in general capability, which is not the representation) -- and only where the judge matches and both responders averaged over the same scenes, so a disagreement can only come from the responder.
     """
     sibs = _sibling_groups(results_path)
     if not sibs:
@@ -1273,17 +941,7 @@ OBJECT_RELATION_TYPES = {"object_relation", "relation_structure", "relation_aggr
 
 
 def _coverage_section(rows: list[dict]) -> list[str]:
-    """Cells where coverage matters: anything that overflowed the window, plus the
-    whole object-relation family (`object_relation`/`relation_structure`/
-    `relation_aggregate` -- where json_mini/json_pretty/relations_flat overflow on
-    dense scenes).
-    This is where the survivorship trap is read.
-
-    Split per host dataset (never pooled): overflow is a host property (the JSON
-    views only exceed the window on dense 3RScan scenes -- json_pretty on two of the
-    three, json_mini on 7f30f36c alone), so a pooled row would average a
-    host where a rep is fully scoreable with one where it fails closed and hide
-    exactly the survivorship signal this table exists to surface."""
+    """Cells where coverage matters: anything that overflowed the window, plus the object-relation family. Split per host dataset, never pooled -- overflow is a host property (JSON views only overflow on dense 3RScan scenes), so pooling would hide the survivorship signal this table exists to surface."""
     out: list[str] = []
     for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
         cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == ds])
@@ -1321,16 +979,7 @@ def _small_n_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
 
 
 def _candidate_section(rows: list[dict]) -> list[str]:
-    """The synthesis candidate-default vs the json_mini ceiling, with token cost -- the
-    'match the ceiling at a fraction of the tokens' question.
-
-    Split per host dataset (never pooled): most question types here are asked on
-    more than one dataset (aggregation/containment/direction/planning/proximity/
-    route/set_logic all appear on 2-3 hosts) with different floor/ceiling scope
-    semantics per host (same trap as `_planning_section`), and `synthesis`'s own
-    composition is host-dependent (e.g. its object-relation section only fires
-    where `has_object_relations` holds) -- a pooled `all` row would silently
-    average across incompatible scopes and compositions."""
+    """Synthesis candidate-default vs the json_mini ceiling, with token cost. Split per host dataset, never pooled -- floor/ceiling scope semantics and synthesis's own composition are both host-dependent."""
     out: list[str] = []
     for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
         cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == ds])
@@ -1353,13 +1002,7 @@ def _candidate_section(rows: list[dict]) -> list[str]:
 
 
 def _detail_section(cells: dict[tuple[str, str], Cell]) -> list[str]:
-    """Supporting-detail coverage -- a DIAGNOSTIC, not a quality score.
-
-    Reports the weight<=1 (detail) tier separately: the fraction of unasked supporting
-    facts the answer volunteered. It measures verbosity x representation, not
-    correctness, has its own (sparser) support n_detail, and is NOT comparable
-    cell-for-cell against AC. Read it only alongside AC (e.g. high AC + low detail =
-    answering correctly but thinly). Never rank on it."""
+    """Supporting-detail coverage -- a DIAGNOSTIC, not a quality score: measures verbosity x representation (volunteered unasked facts), not correctness. Not comparable cell-for-cell against AC; never rank on it."""
     trows = [[rep, qt, str(c.n_detail), f"{c.detail_mean:.2f}"]
              for (rep, qt), c in sorted(cells.items())
              if c.n_detail > 0 and c.detail_mean is not None]

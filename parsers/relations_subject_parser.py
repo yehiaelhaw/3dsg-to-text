@@ -1,34 +1,7 @@
-"""relations_subject -- the object-relation graph grouped by object (node-local).
-
-Each object is stated once, with all of its outgoing relations gathered under it:
-``chair [5]: standing on floor [1]; close by table [7], lamp [3].`` This is the
-node-centric pole of the relation-linearization axis. It draws on the same source
-edge set as `relations_flat` and `relations_predicate`, and the grouping key (here,
-the subject) is the intended difference, so a delta against those largely isolates
-whether node-local grouping aids reasoning.
-
-It is NOT, however, a complete restatement of that edge set, so do not describe the
-pair as content-identical. The `attr_cap` below prints only the first 3 objects of
-each comparative/shared-attribute predicate per subject, with a ``(+N more)`` count
-standing in for the rest: 109 / 146 / 414 triples go unprinted on the current primary
-trio, 02b33dfb / 1d2f8518 / 0cac762f. Two different consequences, worth keeping apart:
-shared-attribute (``same ...``) membership survives the cap, because each member
-prints up to 3 others and the printed fragments stay connected within the group, so
-the full clique is recoverable by unioning lines (checked for all 29 cliques across
-the three scenes); comparative (``... than``) edges truncated in *both* directions
-are simply absent from the document (0 / 12 / 117 triples). No evaluated question's
-key facts were found to turn on one of the absent comparative edges -- an absence of
-demonstrated impact, not a proof of none.
-
-It is the de-prosed twin of `prose`'s "Spatial relations by room:" section -- same
-content and ordering, but stripped of the room headers and the "is" narration, so a
-`prose` vs `relations_subject` contrast reads on the *format* axis (sentences vs
-compact list) over identical relation content. Spatial relations lead; comparative
-attribute cliques (``same material``) are capped per object so they do not drown the
-spatial edges.
-
-Runs anywhere object relations are annotated; refuses on scenes that carry none.
-"""
+"""relations_subject — the node-centric pole of the relation-linearization axis; groups the
+object-relation graph by subject object, one line per object. Comparative/shared-attribute
+predicates are capped at 3 objects per subject (with "(+N more)"); the cap leaves
+shared-attribute cliques recoverable by unioning lines but drops comparative edges outright."""
 
 import sys
 import os

@@ -1,49 +1,7 @@
-"""synthesis - the best-of-axes default representation.
-
-Derived from the screening per-question-type winners (experiments/results/
-qwen2.5-14b/): each evaluation axis's strongest serialization is composed into
-ONE compact natural-language document. This is a *merge*, not a concatenation --
-naive `a+b+c` combos lose to plain prose and bloat tokens, so the merge keeps a
-single head, a single per-room inventory, states connectivity once as derived
-facts, keeps the metric salient, and states object relations at both the raw
-and derived tier, once each:
-
-  * prose backbone (NL room inventory + object-relation section) -- the format
-    that wins aggregation / object_relation / set_logic. Reused verbatim via
-    `prose_parser._room_line` and `prose_parser._relations_by_room`.
-  * graph_digest's derived connectivity facts (reachability groups, hubs,
-    bottlenecks, multi-step distances) -- wins connectivity. Folded in via
-    `graph_digest_parser.connectivity_digest`, so the facts are byte-identical to
-    the standalone `graph_digest` view. The per-room line keeps the *local* 1-hop
-    adjacency ("connects to ...") the digest omits, so the two are complementary
-    (local adjacency + global derived structure), not a restatement.
-  * metric_relations' salient per-room distance+bearing (its NEAREST_K nearest
-    neighbours) -- wins proximity / containment. Only the relation lines are
-    taken; the prose backbone already carries the inventory the metric parser
-    would otherwise repeat. That dropped duplicate inventory (plus the dropped
-    second head) is what keeps this smaller than the losing `prose+graph_digest+
-    metric_relations` concatenation.
-  * relations_digest's derived object-relation facts (support depth,
-    receptacles, proximity clusters, shared-attribute cliques, relation census)
-    -- wins relation_structure / relation_aggregate on 3RScan. Folded in via
-    `relations_digest_parser.object_relations_digest`, byte-identical to the
-    standalone `relations_digest` view, appended after prose's raw per-object
-    section the same way graph_digest's global facts sit alongside
-    topology_inventory's local adjacency: raw triples (specific-pair lookups) + derived structure
-    (chain-depth/cluster/census lookups), not a restatement. Without this section
-    `synthesis` silently under-performs `relations_digest` on both derived-tier
-    types with no way to close the gap; see `evaluation/scope.py`'s `synthesis`
-    entry for the scope-model side of that correction.
-
-Egocentric routing (`navigation`) is deliberately *excluded*. Its edge on
-direction/route comes from the first-person reference frame, which cannot be
-folded into an allocentric document without becoming navigation; it stays the
-per-type override a router applies for routing questions.
-
-Universal: each section appears only when its capability is present, so the rep
-degrades gracefully -- to prose on a single-room 3RScan scene, to inventory +
-metric on a door-free Gibson scene, to the full document on ProcTHOR.
-"""
+"""synthesis — the best-of-axes default representation; merges (not concatenates) the prose
+room inventory with graph_digest's connectivity, metric_relations' salient distances, and
+relations_digest's derived object-relation structure into one document, each section
+appearing only when the underlying capability is present."""
 
 import sys
 import os
@@ -128,9 +86,8 @@ def _room_body(building: Building, sort_key) -> list[str]:
 
 
 def _metric_block(building: Building) -> list[str]:
-    """Salient per-room distance+bearing lines, reusing metric_relations'
-    `_grouped_relation_lines` (identical to the standalone metric view, minus its
-    head and the inventory the prose backbone already carries). [] if empty."""
+    """Salient per-room distance+bearing lines, reusing metric_relations' `_grouped_relation_lines`
+    without its head/inventory (the prose backbone already carries those). [] if empty."""
     groups = _floor_groups(building)
     multi = len(groups) > 1
 
@@ -170,12 +127,8 @@ def parse(building: Building) -> str:
             lines.append("")
             lines.extend(metric)
 
-    # Object relations, raw tier (prose's section): prepends its own blank line +
-    # header, or contributes nothing on scenes without object relations. Its
-    # trailing "Shared attributes" clique rollup is cut when the derived section
-    # below is also present -- both run the identical undirected_components
-    # grouping over the same "same X" edges, so keeping both would restate the
-    # same cliques twice under two different headers.
+    # Trailing "Shared attributes" clique rollup is cut here since the derived section
+    # below restates the same cliques under its own header.
     raw_relations = _relations_by_room(building, sort_key)
     header_idx = next(
         (i for i, l in enumerate(raw_relations) if l.strip().startswith("Shared attributes (")),
@@ -185,10 +138,7 @@ def parse(building: Building) -> str:
         raw_relations = raw_relations[:header_idx - 1]  # drop blank line + header + groups
     lines.extend(raw_relations)
 
-    # Object relations, derived tier: same facts as the standalone relations_digest
-    # view (including the shared-attribute cliques cut from the raw tier above).
-    # Guarded separately (not folded into _relations_by_room) so it degrades the
-    # same way the connectivity digest does on scenes without the channel.
+    # Guarded separately (not folded into _relations_by_room) so it degrades independently.
     if has_object_relations(building):
         lines.append("")
         lines.append(

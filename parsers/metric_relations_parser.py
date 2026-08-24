@@ -1,40 +1,7 @@
-"""metric_relations — salient inter-room metric relations (distance + direction).
-
-Pre-computes the metric relation an LLM would otherwise derive from raw
-coordinates: an in-plane distance and an 8-way compass bearing between rooms.
-This is the metric rung of the spatial-encoding ladder (compare
-`topology_inventory`, which keeps only connectivity) -- see axes.metric_rung
-for its Gibson companion card, the cleanest metric-rung exhibit in the study.
-
-Density is controlled, not exhaustive: instead of every O(n^2) room pair, each
-room lists only its `NEAREST_K` closest same-floor neighbours. Relations are
-grouped by room -- each room heads a block of its nearest neighbours, nearest
-first -- using the same floor-grouping and neighbour-ranking rule as
-`navigation`'s proximity mode. Unlike that view, though, this one ALSO carries
-a full per-room object inventory and a room-type census (see `_inventory_lines`
-below), so it is not a bare geometry restatement and not a content-matched
-counterpart to anything: an earlier design paired it directly with `navigation`
-as if the two differed only in framing, and that pairing has been retired
-because it does not hold -- the inventory and census are real extra content,
-not a vantage change. The actual fact-matched relational-framing counterpart to
-`navigation` on Gibson is `metric_framing` (metric_framing_parser.py), a
-separate, purpose-built view carrying none of this view's extra content. This
-view keeps its inventory and census unchanged, because they are what the
-spatial-encoding ladder needs it for. Listing is directed: a pair appears
-under both of its rooms, not de-duplicated.
-
-`NEAREST_K` stays at the salient default of 4 -- the exhaustive all-pairs variant
-this knob used to produce (`metric_relations_full`, the retracted density axis's
-pole) is
-retired: the axis was near-null (-0.043 AC) and the questions probing it were
-partly circular (a global-extremum fact, like the farthest pair in the scene, is
-answerable only by the exhaustive pole, so scoring the salient pole on it just
-measures a missing-data guess, not a density effect).
-
-Runs on any multi-room metric layout (Gibson, ProcTHOR); refuses on single-room
-scenes (3RScan). The floor plane is detected per group (see `_geometry`), so
-bearings are only emitted between rooms on the same floor.
-"""
+"""metric_relations — the metric rung of the spatial-encoding ladder (distance + 8-way compass
+bearing to each room's NEAREST_K nearest same-floor neighbours), plus a full per-room object
+inventory and room-type census; not a content-matched counterpart to navigation (see
+metric_framing_parser.py for that)."""
 
 import sys
 import os
@@ -66,9 +33,8 @@ def _floor_groups(building: Building) -> list[tuple[str | None, list[Room]]]:
 
 
 def _grouped_relation_lines(rooms: list[Room]) -> list[str]:
-    """Per-room blocks: each room heads its NEAREST_K nearest neighbours, nearest
-    first. Directed -- a pair appears under both of its rooms -- and allocentric
-    (the heading room is the subject: "is 3.2 m north-west of corridor [13]")."""
+    """Per-room blocks of its NEAREST_K nearest neighbours; directed, so a pair appears
+    under both of its rooms rather than being de-duplicated."""
     positions = [r.position for r in rooms]
     u, v = floor_plane(positions)
 

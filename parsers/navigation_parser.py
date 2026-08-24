@@ -1,43 +1,7 @@
-"""navigation — the navigational-framing route view.
-
-Describes the scene the way a person moves through it: from each room, where you
-can go and in which direction. It is the NAVIGATIONAL-framing pole of the
-"relational vs. navigational framing" axis (traversal register: "you can walk
-to", proximity register: "nearby"). Its matched relational-framing counterpart is
-`topology_metric` on the ProcTHOR door graph, and `metric_framing` on Gibson's
-K-nearest-neighbour geometry — both restate exactly this view's edges and
-distances with the figure-ground assignment reversed and a locative register
-("is ... of") instead; see either parser's docstring for why that reversal is
-not an egocentric/allocentric flip.
-
-BLOCK LAYOUT IS MATCHED TO THE COUNTERPART, ON PURPOSE
--------------------------------------------------------
-This view once joined a room's neighbours into one semicolon-joined
-sentence ("From X you can walk to: A (..); B (..)."), while `topology_metric`/
-`metric_framing` used a header line plus one indented clause per neighbour. That
-was an accidental structural confound, not a framing choice -- a design review
-found it and this file was rewritten to use the SAME block shape as its
-counterpart: identical header text ("X — connected rooms:" / "X -- nearest
-neighbours:", framing-neutral, structural), then one indented line per neighbour,
-nearest first, same room order, same numeric precision. The framing register now
-lives entirely in the per-neighbour clause ("you can walk to B, D bearing." vs
-`topology_metric`'s "is D bearing of B."), which is where it belongs -- see
-tests/test_framing_layout_isolation.py, which canonicalizes away the lexical
-register and asserts the remaining document structure is identical.
-
-It is also the only single non-`json` representation that fuses connectivity
-with metric direction, so it is the natural single view for navigation
-questions.
-
-Two modes, chosen from the data:
-- With a room connection graph (ProcTHOR): list each room's reachable neighbours
-  (through doorways or open passages). These are genuine moves — "you can walk to".
-- Without one (Gibson): list each room's nearest same-floor neighbours. There is
-  no traversability guarantee, so these are framed honestly as proximity — named
-  plainly with no traversal claim, unlike the connectivity-mode clause above.
-
-Runs on any multi-room metric layout; refuses on single-room scenes (3RScan).
-"""
+"""navigation — the navigational-framing pole of the relational/navigational framing axis
+(traversal register "you can walk to", matched against topology_metric on ProcTHOR and
+metric_framing on Gibson, both in locative register); falls back to honestly-labelled
+proximity when no room connection graph exists."""
 
 import sys
 import os
@@ -124,11 +88,8 @@ def parse(building: Building) -> str:
                     # framing-neutral, so there is no reason for the two texts to differ.
                     lines.append(f"{room_label(room)} — no connected rooms (isolated).")
                     continue
-                # Header text is IDENTICAL to topology_metric's -- "connected rooms" is
-                # a structural fact, not a framing choice, so it carries no register.
-                # The framing register (traversal vs locative) lives entirely in the
-                # per-neighbour line below, matching topology_metric's block shape:
-                # one header line, then one indented clause per neighbour, nearest first.
+                # Header text matches topology_metric's; the framing register lives only
+                # in the per-neighbour line below.
                 lines.append(f"{room_label(room)} — connected rooms:")
                 for d, br, b in targets:
                     lines.append(f"  you can walk to {room_label(b)}, {d:.1f} m {br}.")
@@ -142,11 +103,8 @@ def parse(building: Building) -> str:
                     # Matches metric_framing's handling of a floor with <2 rooms: no
                     # block at all, rather than a header over an empty list.
                     continue
-                # Header text is IDENTICAL to metric_framing's -- same reasoning as the
-                # connectivity-mode header above. The item line stays honestly
-                # proximity-framed (no traversal claim: Gibson has no door graph), and
-                # differs from metric_framing's "is ... of" locative anchor by naming
-                # the neighbour first rather than anchoring it to the heading room.
+                # Header text matches metric_framing's; item line stays honestly proximity-framed
+                # since Gibson has no door graph to claim traversal from.
                 lines.append(f"{room_label(room)} -- nearest neighbours:")
                 for d, br, b in ranked:
                     lines.append(f"  {room_label(b)}, {d:.1f} m {br} away.")

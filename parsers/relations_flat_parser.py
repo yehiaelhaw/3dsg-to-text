@@ -1,17 +1,6 @@
-"""relations_flat -- the object-relation graph as a flat list of atomized triples.
-
-The deliberately structureless pole of the relation-linearization axis: every edge
-on its own line, no grouping, no collapsing, no derivation. It is the baseline the
-other `relations_*` views lift over -- if grouping by object (`relations_subject`),
-by predicate (`relations_predicate`), drawing the support forest (`relations_tree`),
-or pre-computing its consequences (`relations_digest`) helps an LLM, the gain shows
-as a delta against this floor. Its cost is intentional: on a dense 3DSSG scene the
-symmetric attribute cliques (every wall ``same material`` as every other) emit O(k^2)
-lines here, exactly the token blow-up the grouped views exist to avoid.
-
-Runs anywhere object relations are annotated (3RScan dense; ProcTHOR sparse); refuses
-on scenes that carry none.
-"""
+"""relations_flat — the deliberately structureless floor pole of the relation-linearization
+axis; every object-relation edge on its own line as a raw (subject, relation, object)
+triple, no grouping or derivation."""
 
 import sys
 import os

@@ -1,24 +1,7 @@
-"""narrative — the content-matched prose half of the format axis.
-
-`narrative` carries exactly `topology_inventory`'s facts -- the same rooms, the
-same degree-first order, the same connectivity, the same object inventory per
-room, and nothing else -- rendered as sentences instead of labelled blocks. It
-exists so the format axis (evaluation/axes.py) can pair `topology_inventory`
-against a prose document that is a pure rendering flip rather than a content
-superset.
-
-`prose` is not that document: on top of the shared facts it states an explicit
-per-room object count and, on ProcTHOR, appends a "Spatial relations by room"
-section (see parsers/prose_parser.py). `narrative` shares prose's head sentence
-and per-room renderer (`_room_line`, with `show_count=False`) but omits both --
-no object count, no relations section, no floor grouping (topology_inventory
-never groups either). The pair's fact-for-fact equality is asserted by
-tests/test_format_axis_equivalence.py, not inferred from REP_CAPS.
-
-Runs only where a room connectivity graph exists (ProcTHOR); refuses elsewhere
-(Gibson, 3RScan) -- exactly `topology_inventory`'s gate, so the pair is defined
-on the same scenes and `narrative` never degrades into a `prose` twin.
-"""
+"""narrative — the content-matched prose pole of the format axis; carries exactly
+topology_inventory's facts (same rooms, order, connectivity, per-room inventory) as
+sentences instead of labelled blocks, reusing prose_parser's `_room_line` but without
+prose's object count or relations section."""
 
 import sys
 import os

@@ -14,17 +14,7 @@ def list_representations(scene_contexts_dir: Path, scene_id: str) -> list[str]:
 
 
 def load(scene_contexts_dir: Path, scene_id: str, representation: str) -> str:
-    """Return the scene context string for scene_id / representation.
-
-    A representation is either a single file stem, or a multi-view combination
-    written as ``"a+b"`` (e.g. ``"topology+metric_relations"``). For a combination
-    each part is loaded and the parts are concatenated under per-view headers so
-    the responder can tell the views apart. Combinations are opt-in via
-    ``EvalConfig.representations``; auto-discovery only lists single files.
-
-    Looks for scene_contexts_dir/<scene_id>/<part>.<any extension> per part.
-    Raises FileNotFoundError if a part has no matching file.
-    """
+    """Scene context string for scene_id / representation. A multi-view combination ("a+b") loads and concatenates each part under a per-view header; auto-discovery only lists single files. Raises FileNotFoundError if a part has no matching file."""
     if "+" in representation:
         parts = representation.split("+")
         blocks = []

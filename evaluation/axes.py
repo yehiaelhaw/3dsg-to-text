@@ -1,52 +1,17 @@
-"""axes.py — axis + representation-role registry (the reporting backbone).
-
-Single source of truth for *how the design axes map onto representations*: which
-reps form each axis ladder, on which host dataset, probing which question types,
-plus each rep's reporting role (floor / ceiling / candidate / pole).
-
-This is distinct from `scope.py`: scope says which rep *can answer* which type
-(the structural mask); this says how those reps are *grouped and ordered for
-reporting* (the axis story). `plots.py` and `report.py` both read it so the same
-axis ladder is told the same way — ladder order, floor/ceiling anchored — in every
-artifact. Keeping it here (not duplicated in plots.py) means a new parser joins the
-story in one place.
-"""
+"""Axis and representation-role registry: maps design axes onto representations and their reporting roles."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import NamedTuple
 
-# --- reporting roles -------------------------------------------------------
-# floor and ceiling anchor every axis card (they bound the band a pole sits in).
-# The candidate (synthesis) answers a *different* question than the axis poles, so
-# it is reported in its own tables, never mixed into a card.
+# floor/ceiling anchor each axis card; candidate (synthesis) is reported separately since it answers a different question.
 FLOOR = "inventory"
-# The complete-information anchor of the primary ladder, minified.
-# CEILING bounds what a derived view can *express*, not what can score highest:
-# json_pretty carries identical information and is graded against it on the
-# json_formatting cards. Minifying is a cost-accounting correction -- the ceiling's
-# token cost is the denominator of the headline claim, so charging it for
-# pretty-print whitespace overstates every derived view's apparent saving.
+# Minified: as denominator of the cost claim, un-minified whitespace would overstate every derived view's saving.
 CEILING = "json_mini"
 CANDIDATE = "synthesis"
 
-# Multi-view combinations (`topology+metric_relations`, `graph_digest+metric_relations`)
-# are retired and purged: their rows are gone, and so is every reporting role, table
-# and plot branch that filed them. Nothing here is combo-aware, because nothing is
-# left to be aware of. Neither name has a REP_CAPS entry, so a strict run aborts
-# rather than reporting one as a pole.
-#
-# They went because no distinct research question required a concatenation any
-# more. The one that did was the ProcTHOR route baseline -- a route question needs
-# connectivity and metric_edges together, and no single view carried both, so the
-# baseline had to be assembled. `topology_metric` now carries exactly that pair by
-# design and is matched to `navigation` fact-for-fact, which is strictly better:
-# the combo was a channel SUPERSET of navigation (it also carried object
-# inventories, stated twice, and metric between unconnected rooms), so its delta
-# confounded the contrast with that surplus. The combos' other question -- "can
-# salient views match the json_mini ceiling?" -- is already owned by `synthesis`,
-# a curated single document rather than a concatenation.
+# Multi-view combos (e.g. topology+metric_relations) are retired and purged; neither has a REP_CAPS entry, so a strict run aborts if one is referenced.
 
 
 def rep_role(rep: str) -> str:
@@ -60,35 +25,12 @@ def rep_role(rep: str) -> str:
     return "pole"
 
 
-# --- reporting thresholds (policy shared by plots.py and report.py) --------
-# A cell with n < SMALL_N is screening-only (its mean is too noisy to rank on);
-# a cell whose coverage (n_scored / n) is below MIN_COVERAGE is not rank-eligible
-# (its AC is conditioned on the surviving subset, so it can't be compared on AC
-# alone against a full-coverage cell -- the context_exceeded survivorship trap).
+# n < SMALL_N is screening-only (too noisy to rank); coverage < MIN_COVERAGE is not rank-eligible (AC is conditioned on a survivor subset -- the context_exceeded survivorship trap).
 SMALL_N = 6
 MIN_COVERAGE = 0.80
 
-# --- separation rule (thesis 4.6) -------------------------------------
-# Comparisons are PAIRED and the SCENE is the unit of replication: both members
-# of a pair are evaluated on the same scene-question instances, so they are
-# compared on their per-question difference, averaged within each host scene.
-# No confidence interval is computed and interval overlap is never a decision
-# rule -- at three scenes and a handful of questions per cell an interval would
-# imply a precision this design cannot support. Spreads are descriptive only.
-#
-# A pair is a CONSISTENT ADVANTAGE when the overall mean of the scene-level
-# differences clears PRACTICAL_MARGIN in absolute value, no scene runs against
-# that direction, and at least MIN_SCENES_SHOWING of them show it. A scene whose
-# difference is exactly zero does not contradict a direction, but neither does it
-# supply one -- hence two conditions rather than one.
-#
-# The margin is fixed for all comparisons and is deliberately coarser than the
-# granularity of one question's AC: a question carries 1-4 core facts, so a
-# single fact changing hands moves a small cell by more than a finer margin
-# would tolerate. It is NOT preregistered -- it was set once preliminary results
-# already existed -- so it lives here, applied uniformly to every regenerated
-# report, precisely so that no single pair can be graded under a margin picked
-# for it.
+# Paired per-scene deltas, no CI (an interval would imply a precision this design cannot support at 3 scenes).
+# Consistent advantage = mean delta clears PRACTICAL_MARGIN, no scene runs against it, >= MIN_SCENES_SHOWING agree. Margin is fixed, not preregistered.
 PRACTICAL_MARGIN = 0.10
 MIN_SCENES_SHOWING = 2
 
@@ -116,45 +58,17 @@ class Axis:
     headline_pair: tuple[str, str] | None = None  # within-axis contrast for the
                                   # paired-delta chart; None = pure ladder, no pair
     note: str = ""                # caveat surfaced in the card
-    # What this entry IS, so a reader holding report.md next to the design chapter
-    # can tell the five representation axes from the extra cards. "axis": one of
-    # the five (thesis 4.2). "companion": the same axis measured on a second host,
-    # carded separately because cards are single-host. "exhibit": a graded result
-    # that is not an axis contrast at all -- it borrows the card/paired machinery
-    # so a finding the design axes do not cover still gets a verdict under the
-    # same rules instead of being quoted as an anecdote.
+    # "axis": one of thesis 4.2's five axes. "companion": same axis on a second host. "exhibit": a graded result outside the five axes.
     kind: str = "axis"
-    # A DECLARED confound (thesis 4.6): named in the design chapter, not
-    # discovered in the results, and it caps the verdict at CAPPED_VERDICT
-    # however consistent the scene values are. Empty string = none declared.
+    # Declared confound (thesis 4.6), named in the design chapter; caps the verdict at CAPPED_VERDICT regardless of scene consistency. "" = none declared.
     confound: str = ""
-    # Which reps the confound attaches to. Empty tuple = the whole axis;
-    # otherwise only pairs touching one of these reps are capped (the derived
-    # poles' vocabulary coupling -- currently the only kind any axis declares).
+    # Empty tuple = confound applies to the whole axis; else only pairs touching one of these reps are capped.
     confound_reps: tuple[str, ...] = ()
-    # What KIND of confound, which decides whether the natural/constructed re-cut
-    # can resolve it. "vocabulary": the question's wording mirrors a derived pole's
-    # own printed output, so the `natural` subset -- questions a user could have
-    # asked without ever seeing that output -- is by construction uncoupled and the
-    # cap does not apply there. "content": one member simply carries more content
-    # than the other, which no question-style split addresses, so the cap would
-    # stand on every subset. No axis currently declares "content" -- the format
-    # axis's `prose` superset (the original example) was retired in favour of
-    # `narrative`, a content-matched pole built to remove the confound rather than
-    # qualify it. The value is kept because the distinction is still the reason
-    # only "vocabulary" axes are re-cut (thesis 4.6 / 6.7 name the two axes with a
-    # derived pole); it documents what a future non-vocabulary confound would look
-    # like, not a case in hand.
+    # "vocabulary": wording mirrors the pole's own output, so the natural-question subset is uncoupled and exempt from the cap. "content": no subset removes it.
     confound_kind: str = ""
 
     def confound_for(self, rep_a: str, rep_b: str) -> str:
-        """The declared confound capping this pair's verdict, or "".
-
-        Only the axis's OWN contrast can be capped. A comparison against the
-        floor or the ceiling is an anchor comparison, not the design decision
-        this axis isolates, so a derived pole's vocabulary coupling is not a
-        confound there.
-        """
+        """Declared confound capping this pair's verdict, or "" (floor/ceiling comparisons are exempt -- they're anchor comparisons, not the axis's own contrast)."""
         if not self.confound:
             return ""
         if FLOOR in (rep_a, rep_b) or CEILING in (rep_a, rep_b):
@@ -166,15 +80,7 @@ class Axis:
         return ""
 
 
-# The retracted density
-# and source-fidelity axes (see those docs) are intentionally absent -- with named
-# axes there is no letter gap to explain. The spatial-encoding axis is a ladder, not
-# a single contrast pair, so it carries no headline_pair (its result is read as lift
-# over the floor / where the peak sits, not a two-pole delta).
-#
-# Five entries carry kind="axis" -- the five representation axes of thesis 4.2. The
-# rest are companions and exhibits (see Axis.kind); they are cards, not axes, and the
-# renderers say so, so the count here never has to be reconciled against that five.
+# Retired density/source-fidelity axes are absent (named axes have no letter gap to explain). Five entries carry kind="axis" (thesis 4.2); the rest are companions/exhibits.
 AXES: list[Axis] = [
     Axis("spatial_encoding", "Spatial encoding", "procthor",
          ["inventory", "topology_inventory", "metric_relations", "json_mini"],
@@ -206,24 +112,7 @@ AXES: list[Axis] = [
               "prose keeps its readings elsewhere: the Gibson content_verbosity "
               "exhibit, the relation-linearization family, planning, and as the "
               "synthesis backbone.)"),
-    # RETIRED: this slot used to hold "Spatial anchoring", pairing
-    # `metric_relations` directly against `navigation` on Gibson under the premise
-    # that the two differ only in anchoring/frame. A design review found that
-    # false: `metric_relations` additionally carries a per-room object inventory
-    # and room-type census `navigation` lacks entirely (~1.43x length mismatch on
-    # the primary scenes), so the pair was never fact-matched -- see
-    # metric_relations_parser.py's docstring for the corrected account.
-    # `metric_relations` itself is unchanged and unretired: it keeps its
-    # spatial-encoding role (`metric_rung` above) and is still an active view.
-    # This is a PAIRING retirement, not a representation retirement.
-    #
-    # The replacement pairing is `metric_framing` (metric_framing_parser.py, a
-    # new, purpose-built view carrying none of `metric_relations`'s extra content)
-    # against `navigation`, proven fact-for-fact by
-    # tests/test_metric_framing_equivalence.py. It is no longer a standalone axis:
-    # it is now the Gibson companion (`framing_gibson`, below) of the promoted
-    # "Relational vs. navigational framing" axis (`framing`, further down), whose
-    # primary reading was always the stronger, better-powered ProcTHOR pair.
+    # RETIRED pairing "metric_relations vs navigation" (never fact-matched, ~1.43x length mismatch) -- a pairing retirement, not a representation one; metric_relations keeps its metric_rung role. Replacement lives at `framing_gibson`, below.
     Axis("structure_presentation", "Graph-structure representation", "procthor",
          ["topology", "room_tree", "graph_digest"],
          ["connectivity"],
@@ -254,86 +143,8 @@ AXES: list[Axis] = [
                   "re-cut and the matched within-fact-set comparison",
          confound_reps=("relations_digest",),
          confound_kind="vocabulary"),
-    # --- the framing axis (consolidated from three separate ProcTHOR exhibits
-    # into one formal axis) ---------------------------------------------------
-    # NAMING: this used to be "route_presentation", which invited the reading that
-    # one pole prints routes. NEITHER DOES. Both print the same one-hop doorway
-    # adjacency and nothing else -- no path, no hop count, no summed distance. What
-    # differs is the FRAMING of that adjacency: navigational/action-oriented ("from
-    # X you can walk to Y, 2.9 m north-east") vs relational/locative ("X is 2.9 m
-    # south-west of Y").
-    #
-    # This entry is one of the five representation axes of thesis 4.2 (kind="axis"),
-    # occupying the slot the retired Gibson-only "Spatial anchoring" axis used to
-    # hold (see the retirement comment above) -- promoted because the ProcTHOR pair
-    # is fact-matched (proven, not inferred: tests/test_topology_metric_equivalence.py)
-    # and well-powered on its best-read type (connectivity, below), where the old
-    # Gibson pair was neither. It reads on three question-type families, each
-    # requiring a DIFFERENT interpretation of the same two texts -- read
-    # `connectivity` FIRST, as the power check on the other two, not as one more
-    # independent replication of them:
-    #
-    # connectivity -- the only well-powered type in this design: 18 connectivity
-    #   stems per scene (54 total, 27 fact-sets) against 4 per scene for route and
-    #   direction. A connectivity stem asks only which rooms are joined; both poles
-    #   print the same edge set in the same order, so neither the figure-ground
-    #   assignment nor the per-edge metric is task-relevant here -- the framing
-    #   manipulation has no channel to act through. NO SEPARATION is therefore the
-    #   expected and uninteresting outcome, and it is what five of the six responder
-    #   directories show. A separation here would NOT strengthen the route/direction
-    #   readings below; it would mean the manipulation is doing something not
-    #   attributed to it, and would need explaining before either is quoted.
-    #   DECLARED POST-HOC, after route/direction cells already existed
-    #   and were sitting unread (topology_metric carries the connectivity channel,
-    #   so they were always in scope) -- disclose that wherever this reading is
-    #   quoted; it is a power check on exhibits already run, not a preregistered
-    #   contrast.
-    # route -- an audit of all 12 ProcTHOR route stems found NO bearing in any key
-    #   fact: routes need the edge set, the per-edge distances and room labels only.
-    #   So on route this pair is a fact-matched test of FRAMING over identical
-    #   task-relevant facts, and a route delta must NOT be attributed to the
-    #   figure-ground reversal, which the task does not read.
-    # direction -- all 12 ProcTHOR direction stems ask about a DIRECTLY CONNECTED
-    #   pair, so both doorway-restricted poles can answer every one, and the key
-    #   facts are phrased from the heading room, which navigation prints directly
-    #   and topology_metric states as the converse -- the reversal IS task-relevant
-    #   here (equal information, unequal work), but it is NOT IDENTIFIED: it arrives
-    #   bundled with the lexical-framing register, whose contribution could run in
-    #   either direction and cannot be separated from it. Not a bound on the
-    #   inversion's cost in either direction.
-    #
-    # BLOCK LAYOUT WAS AN UNRELATED CONFOUND AND HAS SINCE BEEN REMOVED:
-    # navigation used to join a room's neighbours into one semicolon-
-    # joined sentence, while topology_metric used a header line plus one indented
-    # clause per neighbour. A design review found that structural mismatch had
-    # nothing to do with the framing being studied, so navigation_parser.py was
-    # rewritten to use the SAME block shape -- identical header text ("X --
-    # connected rooms:"), one indented line per neighbour, same room and neighbour
-    # order -- verified structurally (not just fact-for-fact) by
-    # tests/test_framing_layout_isolation.py. On `route`, where no key fact
-    # depends on a bearing, the pair is now a clean isolating contrast of framing
-    # register alone. On `direction`, the residual bundle is figure-ground
-    # assignment plus register -- layout is no longer part of it. Neither reading
-    # should be called presentation-only or layout-only in the OTHER sense either
-    # -- the figure-ground reversal and the lexical register are still bundled
-    # together on `direction`, and this design cannot decompose those two.
-    #
-    # TERMINOLOGY: never egocentric/allocentric. Both poles print world-frame
-    # compass bearings and no ProcTHOR room carries a facing, so there is no
-    # observer orientation to be egocentric about; what differs is figure-ground
-    # assignment (which room is the subject of a converse-equivalent binary
-    # relation) plus framing register.
-    #
-    # AXIS_PAIRS/axis_contrasts.png draws ONE bar for this axis, averaged over all
-    # three probe types (the same pooling relation_linearization's three types
-    # already receive) -- that pooled number is not how to read this axis; use the
-    # per-type table on this card, in the order above.
-    #
-    # Supersedes an earlier concatenated ProcTHOR route baseline that was a strict
-    # channel superset of navigation -- it also carried object inventories and
-    # unconnected-pair metric, and ran 4.5x navigation on the same measure, so its
-    # delta was confounded twice over. That baseline was excluded from the analysis
-    # and its rows removed from the results tree.
+    # connectivity (18 stems/scene) is the well-powered read; route/direction (4/scene) are underpowered checks on it.
+    # route has no bearing in any key fact; direction bundles the figure-ground reversal with framing register (not separable). Never egocentric/allocentric.
     Axis("framing", "Relational vs. navigational framing", "procthor",
          ["topology_metric", "navigation"],
          ["route", "direction", "connectivity"],
@@ -440,21 +251,7 @@ AXES: list[Axis] = [
 
 AXIS_BY_ID = {a.id: a for a in AXES}
 
-# Re-derived for plots.axis_contrasts (paired per-question AC delta). Only axes with
-# a headline_pair contribute (the spatial-encoding axis is a ladder, so it has none).
-# plots.py imports this rather than maintaining its own copy.
-#
-# `host` and `probe_types` ride along and are NOT optional decoration: a headline
-# pair is only defined on the questions its axis declares. Carrying just the two
-# pole names loses that, and the consumer then has nothing to filter on but the
-# structural scope mask -- which admits every host and every type both poles happen
-# to support. That is strictly wider than the axis, and the surplus is not noise: it
-# mixed ProcTHOR questions into the Gibson-hosted reference-frame contrast and
-# pulled `planning` -- ungraded everywhere -- into two axes, none of it visible on
-# the chart. It also erases any distinction between two axes that share a pair and
-# differ only in the type they declare: they become one number drawn twice.
-# Anything reading AXIS_PAIRS must filter on both fields; the question set is part
-# of the comparison's definition, not a display preference.
+# host/probe_types ride along deliberately: filtering on pole names alone would admit any question both poles happen to support, wider than the axis actually declares.
 class AxisPair(NamedTuple):
     label: str                    # bar label (Axis.label)
     a: str                        # first pole (subtrahend: the delta is b - a)
@@ -471,10 +268,7 @@ AXIS_PAIRS = [
 
 
 def dataset_of(scene_id: str) -> str:
-    """Host dataset of a scene from its committed id. Gibson
-    scenes are named Brinnon/Thrall/Donaldson, so anything not procthor_*/3rscan_*
-    falls into gibson. Handles the pooled `scene_id` column (still the bare scene
-    id; aggregate_results namespaces only `question_id`)."""
+    """Host dataset from a scene id; anything not procthor_*/3rscan_* falls into gibson (Gibson scenes are named, not prefixed)."""
     s = (scene_id or "").lower()
     if s.startswith("procthor"):
         return "procthor"

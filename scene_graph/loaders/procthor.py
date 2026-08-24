@@ -17,13 +17,9 @@ def _obj_category(obj_id: str) -> str:
 
 
 def _obj_room(obj_id: str) -> str:
-    """Room number encoded in a ProcTHOR object id.
-
-    Free-standing objects are ``Type|room|index`` or, for asset groups,
-    ``Type|room|group|index`` — the room is always the second segment. Surface
-    children are ``Type|surface|room|index``. Reading the second-to-last segment
-    instead misfiles asset-group members (their ``group`` segment can collide
-    with a real room id) and silently drops the rest.
+    """Room number encoded in a ProcTHOR object id: the 2nd segment, except for
+    surface children (``Type|surface|room|index``) where it's the 3rd -- reading
+    the second-to-last segment instead misfiles asset-group members.
     """
     parts = obj_id.split("|")
     return parts[2] if parts[1] == "surface" else parts[1]
@@ -36,10 +32,9 @@ def _centroid(polygon: list[dict]) -> tuple[float, float, float]:
 
 
 def _wall_footprint(wall: dict) -> frozenset:
-    """Floor-plan signature of a wall segment.
-
-    The two rooms on either side of one boundary each carry their own wall entry
-    with the same (x, z) endpoints, so the rounded footprint pairs them up.
+    """Floor-plan signature of a wall segment; the two rooms sharing a boundary
+    each carry their own wall entry with matching (x, z) endpoints, so this
+    rounded footprint pairs them up.
     """
     return frozenset((round(p["x"], 3), round(p["z"], 3)) for p in wall["polygon"])
 
@@ -111,13 +106,11 @@ class ProcTHORLoader(DatasetLoader):
             loaded.add(o["id"])
             return True
 
-        # Object relations from the generator's structure (never from id text
-        # alone): a `children` entry sits on / is attached to its parent
-        # receptacle, and `Type|room|group|member` ids co-place furniture as one
-        # asset group (dining table + chairs, armchair + floor lamp). Nested
-        # group members (faucet on sink, TV on stand) already get an `on` edge,
-        # so sibling edges link only top-level members to the group anchor
-        # (member 0).
+        # Object relations come from the generator's structure, not id text alone:
+        # `children` entries become "on" edges; `Type|room|group|member` ids
+        # co-place furniture as one asset group, but nested members (faucet on
+        # sink) already have an "on" edge, so group edges link only top-level
+        # members to the anchor.
         relations: list[ObjectRelation] = []
         groups: dict[tuple[str, str], list[tuple[int, str]]] = defaultdict(list)
         for obj in house["objects"]:
@@ -136,20 +129,17 @@ class ProcTHORLoader(DatasetLoader):
                     ObjectRelation(mid, "arranged with", anchor) for _, mid in members[1:]
                 )
 
-        # Compact per-scene label ids (raw ProcTHOR ids are noisy pipe strings).
-        # Deterministic: rooms in numeric order, objects in load order, so every
-        # parser run mints the same numbering. Loader changes can renumber —
-        # regenerate all contexts together, never one file in isolation.
+        # Compact per-scene label ids (raw ids are noisy pipe strings), deterministic
+        # so every parser run mints the same numbering; regenerate all contexts together.
         counter = 1
         for rid in sorted(rooms, key=int):
             for obj in rooms[rid].objects:
                 obj.short_id = str(counter)
                 counter += 1
 
-        # Room adjacency = doors + open-plan passages. ProcTHOR represents an
-        # open boundary between two rooms as a wall segment flagged `empty` on
-        # both sides; counting only `doors` leaves ~28% of houses spuriously
-        # disconnected (ProcTHOR guarantees full traversability).
+        # Room adjacency = doors + open-plan passages (a wall segment flagged
+        # `empty` on both sides); doors alone leave ~28% of houses spuriously
+        # disconnected.
         connectivity: dict[str, list[str]] = {rid: [] for rid in rooms}
 
         def connect(r0: str, r1: str) -> None:
