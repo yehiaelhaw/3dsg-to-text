@@ -7,18 +7,17 @@ import collections
 import statistics
 from pathlib import Path
 
-# AXIS_PAIRS deltas are restricted to the axis's declared host/probe_types with both poles in scope, matching what the axis cards already show.
 from evaluation.scope import in_scope as _in_scope
 from evaluation.axes import (
-    AXES, AXIS_PAIRS, CANDIDATE, FULL_RECORD_ANCHOR, MIN_COVERAGE,
-    MIN_OBSERVATIONS, MIN_SCENES_SHOWING, NON_SPATIAL_ANCHOR, PRACTICAL_MARGIN,
+    AXES, FULL_RECORD_ANCHOR, MIN_COVERAGE,
+    MIN_OBSERVATIONS, NON_SPATIAL_ANCHOR, PRACTICAL_MARGIN,
     VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
     VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED, dataset_of, rep_role,
 )
-# report.py owns the analysis contract; imported rather than reimplemented so a chart and report.md can't drift apart.
+# Formal comparison logic comes from report.py.
 from evaluation.report import (
-    _cells, _gates, _load_pairs, _paired_rows, _q_means, _summarise, _verdict,
-    non_spatial_anchor_lifts, paired_deltas,
+    _cells, _load_pairs, _paired_rows, require_single_responder_judge,
+    non_spatial_anchor_lifts,
 )
 
 
@@ -48,65 +47,23 @@ def _per_question_ac(results_path: Path, dataset: str | None = None):
     return points, types, reps
 
 
-def _per_qid_ac(results_path: Path):
-    """Return (ac, qtype_of, host_of) keyed by question id, keeping identity (unlike _per_question_ac) so paired per-question deltas can be computed."""
-    rows = [r for r in csv.DictReader(results_path.open(encoding="utf-8")) if not r["error"]]
-    by_qr: dict[tuple, list[float]] = collections.defaultdict(list)
-    qtype_of: dict[str, str] = {}
-    host_of: dict[str, str] = {}
-    for r in rows:
-        if r["answer_correctness"] == "":
-            continue
-        by_qr[(r["question_id"], r["representation"])].append(float(r["answer_correctness"]))
-        qtype_of[r["question_id"]] = r["question_type"] or "unknown"
-        host_of[r["question_id"]] = dataset_of(r["scene_id"])
-    ac = {k: sum(v) / len(v) for k, v in by_qr.items()}
-    return ac, qtype_of, host_of
-
-
-def axis_pair_questions(pair, qtype_of: dict, host_of: dict) -> list[str]:
-    """The qids one axis-contrast bar may be computed from: the axis's declared host and probe types, restricted to both poles being in scope.
-
-    Public (not underscored) so the leakage test exercises this exact function instead of a copy that could agree with a broken original.
-    """
-    return [qid for qid in sorted(qtype_of)
-            if host_of.get(qid) == pair.host
-            and qtype_of[qid] in pair.probe_types
-            and _in_scope(pair.a, qtype_of[qid])
-            and _in_scope(pair.b, qtype_of[qid])]
-
-
-# Stable per-rep colours, reused across every chart so a representation keeps the
-# same colour in all figures (lets a thesis reader cross-reference). Grouped by
-# axis family: grey control, blue connectivity/structure, green metric/frame,
-# warm relations (relation linearization), purple/black prose+json_mini anchor.
-# tab10 carries only 10 hues, so the old resampling collapsed the 16-rep set into
-# duplicates; a fixed map avoids that and stays stable as reps come and go.
+# Stable representation colours, grouped loosely by representation family.
 REP_COLORS: dict[str, str] = {
-    "inventory":                     "#9e9e9e",  # control / non-spatial anchor
-    "json_mini":                     "#1f1f1f",  # raw-coordinate full-record anchor
-                                                 # (inherits the old `json` black, so
-                                                 # every existing figure keeps its
-                                                 # anchor colour across the migration)
-    "json_pretty":                   "#5c5c5c",  # same content, pretty-printed --
-                                                 # a lighter grey of the anchor's
-                                                 # own hue, clear of inventory's
+    "inventory":                     "#9e9e9e",  # non-spatial anchor
+    "json_mini":                     "#1f1f1f",  # full-record anchor
+    "json_pretty":                   "#5c5c5c",  # formatting ablation
     "prose":                         "#6a3d9a",  # natural language
-    # narrative's the content-matched sibling of prose (format axis, replacing
-    # prose there): the paired light purple of prose's dark one, so the two read
-    # as a family while staying visually distinct.
     "narrative":                     "#cab2d6",
-    # connectivity / structure (spatial-encoding connectivity, structure presentation)
+    # connectivity / structure (spatial-encoding connectivity, graph structure)
     "topology_inventory":            "#1f78b4",
     "room_tree":                     "#a6cee3",
     "graph_digest":                  "#08519c",
-    # metric / frame (spatial-encoding metric, reference frame)
+    # metric / framing (spatial-encoding metric, relational/navigational framing)
     "metric_relations":              "#33a02c",
     "navigation":                    "#00bcd4",
-    # navigation's matched counterpart (same channels, locative framing): a darker
-    # tone of navigation's own hue, so the pair reads as a pair in every figure.
+    # Darker navigation hue for its matched framing counterpart.
     "topology_metric":               "#00707f",
-    # object relations (relation linearization)
+    # relation organization
     "relations_flat":                "#e31a1c",
     "relations_predicate":           "#ff7f00",
     "relations_subject":             "#b15928",
@@ -119,8 +76,7 @@ REP_COLORS: dict[str, str] = {
 
 
 def _colors(reps: list[str]):
-    """Stable colour per rep. Unknown reps fall back to tab20 (fail-open) so a
-    new parser is still drawn -- just not with a curated colour until added above."""
+    """Return stable colors; unknown reps use tab20."""
     import matplotlib.pyplot as plt
     extra = [r for r in reps if r not in REP_COLORS]
     fallback = {}
@@ -136,10 +92,7 @@ _ROLE_BLOCK = {"non_spatial_anchor": 0, "pole": 1, "candidate": 2, "full_record_
 
 
 def registry_rep_order(reps) -> list[str]:
-    """Row order for the AC matrix: non-spatial anchor, poles in registry ladder order, unlisted reps, candidate, full-record anchor.
-
-    Derived purely from axes.AXES/rep_role (no results read), so position never implies a ranking -- the matrix is an overview, not a verdict; ranking lives in report.md's paired separation table.
-    """
+    """Order reps by registry role and ladder, never by results."""
     ladder_rank: dict[str, int] = {}
     for axis in AXES:
         for rep in axis.ladder:
@@ -149,40 +102,25 @@ def registry_rep_order(reps) -> list[str]:
                                        ladder_rank.get(r, unnamed), r))
 
 
-def efficiency_frontier(xy: dict[str, tuple[float, float]], eligible) -> list[str]:
-    """Pareto frontier (min tokens, max AC) over RANK-ELIGIBLE points only: a sub-coverage point can look artificially efficient because the questions that broke it are missing from its mean (the survivorship trap), so it can neither join the frontier nor be dominated."""
-    pts = {r: p for r, p in xy.items() if r in eligible}
-    front = [r for r in pts if not any(
-        o != r and pts[o][0] <= pts[r][0] and pts[o][1] >= pts[r][1]
-        and (pts[o][0] < pts[r][0] or pts[o][1] > pts[r][1]) for o in pts)]
-    return sorted(front, key=lambda r: (pts[r][0], r))
-
-
 # --- axis cards (the headline reporting chart) -----------------------------
 
 def _axis_card_reps(axis, qt: str, points: dict) -> list[str]:
-    """Anchored, ladder-ordered reps for one axis x type with data: non-spatial
-    anchor first, in-scope poles in rung order, full-record anchor last. [] when
-    fewer than two are present. Mirrors report._axis_reps so the chart and the
-    table list the same cells."""
+    """Return available reps in anchor/ladder order; [] if fewer than two."""
     reps = []
     if points.get((qt, NON_SPATIAL_ANCHOR)):
         reps.append(NON_SPATIAL_ANCHOR)
     for p in axis.ladder:
         if p in (NON_SPATIAL_ANCHOR, FULL_RECORD_ANCHOR):
             continue
-        if _in_scope(p, qt) and points.get((qt, p)):
+        if _in_scope(p, qt, axis.host) and points.get((qt, p)):
             reps.append(p)
     if points.get((qt, FULL_RECORD_ANCHOR)) and FULL_RECORD_ANCHOR not in reps:
         reps.append(FULL_RECORD_ANCHOR)
     return reps if len(reps) >= 2 else []
 
 
-def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str]:
-    """One figure per axes.AXES entry -> axis_card_<id>.png: bars in ladder order against a non-spatial/full-record anchor band, restricted to the entry's host and probe types.
-
-    Whisker is a descriptive min-max spread, not a confidence interval -- overlap is never a tie rule (thesis 4.6).
-    """
+def _plot_axis_cards(results_path: Path, rows: list[dict], out_dir: Path, color: dict) -> list[str]:
+    """Plot one host-scoped axis card with descriptive min-max whiskers."""
     import matplotlib.pyplot as plt
     import numpy as np
     rng = np.random.default_rng(42)
@@ -190,6 +128,7 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
     written: list[str] = []
     for axis in AXES:
         points, _t, _r = _per_question_ac(results_path, dataset=axis.host)
+        cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == axis.host])
         groups = [(qt, reps) for qt in axis.probe_types
                   if (reps := _axis_card_reps(axis, qt, points))]
         if not groups:
@@ -209,20 +148,18 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
             for xi, rep in enumerate(reps):
                 vals = points[(qt, rep)]
                 m = statistics.mean(vals)
-                small = len(vals) < MIN_OBSERVATIONS
-                ax.bar(xi, m, 0.72, color=color.get(rep, "grey"), alpha=0.85,
-                       hatch="//" if small else None,
-                       edgecolor="black" if small else "none", linewidth=0.4, zorder=2)
-                # Descriptive min-max spread of the per-question means, not an
-                # interval estimate: two of these overlapping means nothing.
+                ok, cov = _license(cells, rep, qt)
+                ax.bar(xi, m, 0.72, color=color.get(rep, "grey"), **_mark(ok), zorder=2)
+                # Descriptive per-question min-max; not an interval.
                 lo, hi = (min(vals), max(vals)) if len(vals) > 1 else (m, m)
                 ax.errorbar(xi, m, yerr=[[m - lo], [hi - m]], fmt="none",
                             color="black", capsize=2, linewidth=0.8, zorder=3)
                 jit = rng.uniform(-0.16, 0.16, len(vals))
                 ax.scatter(xi + jit, vals, s=9, color=color.get(rep, "grey"),
                            edgecolor="black", linewidth=0.3, alpha=0.5, zorder=4)
-                ax.text(xi, min(1.0, hi) + 0.015, f"n={len(vals)}", ha="center",
-                        va="bottom", fontsize=6, color="gray")
+                tag = f"n={len(vals)}" if ok else f"n={len(vals)} cov {cov:.0%} n/l"
+                ax.text(xi, min(1.0, hi) + 0.015, tag, ha="center",
+                        va="bottom", fontsize=6, color="gray" if ok else "red")
             ax.set_xticks(range(len(reps)))
             ax.set_xticklabels(reps, rotation=30, ha="right", fontsize=8)
             ax.set_ylim(0, 1.08)
@@ -231,13 +168,12 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
             if gi == 0:
                 ax.set_ylabel("Answer correctness")
         kind = "" if axis.kind == "axis" else f" [{axis.kind}]"
-        # Anchor names come from the registry, never a literal: the full-record
-        # anchor was renamed once already (json -> json_mini) and a hardcoded label
-        # here would have kept printing the retired name over correct data.
         fig.suptitle(f"{axis.label}{kind}   (host: {axis.host}; "
                      f"{NON_SPATIAL_ANCHOR}=dashed, {FULL_RECORD_ANCHOR}=dotted, "
-                     f"hatch = n<{MIN_OBSERVATIONS})", fontsize=11)
-        fig.tight_layout(rect=(0, 0, 1, 0.96))
+                     f"hatch = {VERDICT_NOT_LICENSED})", fontsize=11)
+        fig.text(0.01, 0.002, NOT_LICENSED_NOTE, ha="left", va="bottom",
+                 fontsize=7, color="gray")
+        fig.tight_layout(rect=(0, 0.03, 1, 0.96))
         stem = f"axis_card_{axis.id}.png"
         fig.savefig(out_dir / stem, dpi=150, bbox_inches="tight")
         plt.close(fig)
@@ -249,14 +185,14 @@ def _plot_axis_cards(results_path: Path, out_dir: Path, color: dict) -> list[str
 # --- aggregate-level charts (AC by axis, lift over non-spatial anchor) -------------------
 
 def _license(cells: dict, rep: str, qt: str) -> tuple[bool, float]:
-    """(rank_eligible, coverage) for one cell -- fail-open where there is no cell.
-
-    Fail-open matches the rest of the scope/reporting model: an absent cell is not
-    evidence of a coverage problem, and a chart that flags what it merely has no
-    rows about asserts something it does not know.
-    """
+    """Return (rank_eligible, coverage); missing cells are ineligible."""
     c = cells.get((rep, qt))
-    return (True, 1.0) if c is None else (c.rank_eligible, c.coverage)
+    return (False, 0.0) if c is None else (c.rank_eligible, c.coverage)
+
+
+def _admitted(rep: str, qt: str, host: str) -> bool:
+    """Admit inventory as an anchor independently of capability scope."""
+    return rep == NON_SPATIAL_ANCHOR or _in_scope(rep, qt, host)
 
 
 def _mark(ok: bool) -> dict:
@@ -267,21 +203,15 @@ def _mark(ok: bool) -> dict:
 
 
 NOT_LICENSED_NOTE = (
-    f"hatch + red edge = coverage below {MIN_COVERAGE:.0%}, so the cell is "
-    f"'{VERDICT_NOT_LICENSED}': its AC is conditioned on the questions that rep "
-    f"survived. Drawn, never ranked.")
+    f"hatch + red edge = {VERDICT_NOT_LICENSED}; drawn, not ranked.")
 
 LATENCY_DIAGNOSTIC_NOTE = (
-    "NOT INFERENTIAL: latency is confounded by batch composition, GPU contention "
-    "and model residency at call time, so a difference between two boxes is not "
-    "attributable to the representation. The cost axis is prompt tokens "
-    "(cost_quality_<host>.png). Pooled across hosts on purpose — splitting would "
-    "fix the shallowest confound only.")
+    "Latency is diagnostic; prompt tokens are the cost metric.")
 
 
 def _plot_ac_by_type(results_path: Path, rows: list[dict], ds: str,
                      out_dir: Path, color: dict) -> set[str]:
-    """AC per question type, in-scope reps side by side -- ONE host per figure (pooling hosts would let two bars in one group come from disjoint question sets over different scenes)."""
+    """Plot host-scoped AC by question type."""
     import matplotlib.pyplot as plt
     import numpy as np
     from matplotlib.patches import Patch
@@ -295,7 +225,7 @@ def _plot_ac_by_type(results_path: Path, rows: list[dict], ds: str,
     fig, ax = plt.subplots(figsize=(max(10, 2.2 * len(types)), 6))
     used: set[str] = set()
     for gi, qt in enumerate(types):
-        drawn = [r for r in reps if _in_scope(r, qt) and points.get((qt, r))]
+        drawn = [r for r in reps if _admitted(r, qt, ds) and points.get((qt, r))]
         k = len(drawn)
         if k == 0:
             continue
@@ -309,13 +239,12 @@ def _plot_ac_by_type(results_path: Path, rows: list[dict], ds: str,
             ax.bar(xpos, mean, barw * 0.9, color=color[rep],
                    label=rep if rep not in used else None, **_mark(ok))
             used.add(rep)
-            # AC is bounded [0,1]; clip the +/-1 std whisker so it never shoots
-            # past the frame (the bimodal 0/1 spread makes std large).
+            # Clip ±1 SD to the AC bounds [0, 1].
             lo, hi = max(0.0, mean - std), min(1.0, mean + std)
             ax.errorbar(xpos, mean, yerr=[[mean - lo], [hi - mean]], fmt="none",
                         color="black", capsize=2, linewidth=0.8)
             jitter = rng.uniform(-barw * 0.25, barw * 0.25, len(vals))
-            # low alpha so coincident points darken (honest density) without blobs
+            # Alpha reveals overplotting.
             ax.scatter(xpos + jitter, vals, s=10, color=color[rep],
                        edgecolor="black", linewidth=0.3, zorder=3, alpha=0.55)
             tag = f"n={len(vals)}" if ok else f"n={len(vals)} cov {cov:.0%} n/l"
@@ -325,8 +254,7 @@ def _plot_ac_by_type(results_path: Path, rows: list[dict], ds: str,
     ax.set_xticks(range(len(types)))
     ax.set_xticklabels([t.replace("_", " ") for t in types], rotation=20, ha="right")
     ax.set_ylabel("Answer correctness")
-    ax.set_title(f"Answer correctness by question type - host: {ds}  (in-scope reps "
-                 "only; bar=mean, whisker=±1 std, dots=per question)")
+    ax.set_title(f"Answer correctness by type — host: {ds} (mean ±1 SD; dots=questions)")
     ax.set_ylim(-0.22, 1.05)  # extra bottom room for the rotated n= labels
     ax.axhline(0, color="black", linewidth=0.6)
     ax.grid(axis="y", linestyle="--", alpha=0.4)
@@ -344,16 +272,13 @@ def _plot_ac_by_type(results_path: Path, rows: list[dict], ds: str,
 
 
 def _plot_non_spatial_anchor_lift(rows: list[dict], ds: str, out_dir: Path, color: dict) -> set[str]:
-    """AC lift over the `inventory` non-spatial anchor -- matched per-question, one host per figure: the anchor's meaning is host-dependent, so pooling would average incomparable things.
-
-    Drawn only where inventory is a genuine no-information control; on content types it's a legitimate format rather than a non-spatial anchor, so those belong in the head-to-head chart instead.
-    """
+    """Plot matched AC lift over inventory for one host."""
     import matplotlib.pyplot as plt
     import numpy as np
     from matplotlib.patches import Patch
     rng = np.random.default_rng(42)
 
-    lifts = [p for p in non_spatial_anchor_lifts(rows, ds) if not _in_scope(NON_SPATIAL_ANCHOR, p.qt)]
+    lifts = [p for p in non_spatial_anchor_lifts(rows, ds) if not _in_scope(NON_SPATIAL_ANCHOR, p.qt, ds)]
     if not lifts:
         return set()
     by_type: dict[str, dict[str, object]] = collections.defaultdict(dict)
@@ -388,14 +313,12 @@ def _plot_non_spatial_anchor_lift(rows: list[dict], ds: str, out_dir: Path, colo
     ax.set_xticklabels([t.replace("_", " ") for t in ctrl_types], rotation=20, ha="right")
     ax.set_ylabel(f"AC lift over the {NON_SPATIAL_ANCHOR} non-spatial anchor  (matched questions)")
     ax.set_ylim(-1.1, 1.1)
-    ax.set_title(f"Value of spatial structure - host: {ds}  (paired per-question AC "
-                 f"difference vs the {NON_SPATIAL_ANCHOR} non-spatial anchor, averaged within scene; "
-                 ">0 = it helped, <0 = it hurt)")
+    ax.set_title(f"Spatial-structure lift — host: {ds} (>0 helps, <0 hurts)")
     ax.axhline(0, color="black", linewidth=0.8)
     ax.grid(axis="y", linestyle="--", alpha=0.4)
     fig.text(0.01, 0.002,
-             "bar = mean of the SCENE values (the unit of replication); dots = the "
-             "individual paired question differences.  " + NOT_LICENSED_NOTE,
+             "bars = scene means or mean of scene values; dots = paired question differences; "
+             + NOT_LICENSED_NOTE,
              ha="left", va="bottom", fontsize=7, color="gray")
     handles = [Patch(color=color.get(r, "grey"), label=r)
                for r in registry_rep_order(used)]
@@ -410,7 +333,7 @@ def _plot_non_spatial_anchor_lift(rows: list[dict], ds: str, out_dir: Path, colo
 
 def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
                   out_dir: Path) -> set[str]:
-    """Rep x type mean-AC matrix for one host: coloured by mean AC, out-of-scope cells greyed/hatched (a structural gap, not a zero), sub-coverage cells red-hatched and labelled `n/l`. Rows in `registry_rep_order`."""
+    """Plot one host's rep × type AC matrix with scope and eligibility marks."""
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -427,7 +350,7 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
     M = np.full((len(ordered_reps), len(types)), np.nan)
     for i, rep in enumerate(ordered_reps):
         for j, qt in enumerate(types):
-            if _in_scope(rep, qt) and points.get((qt, rep)):
+            if _admitted(rep, qt, ds) and points.get((qt, rep)):
                 M[i, j] = statistics.mean(points[(qt, rep)])
     fig, ax = plt.subplots(
         figsize=(max(8, 1.3 * len(types) + 3), max(4, 0.62 * len(ordered_reps) + 2))
@@ -437,7 +360,7 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
     im = ax.imshow(M, cmap=cmap, vmin=0, vmax=1, aspect="auto")
     for i, rep in enumerate(ordered_reps):
         for j, qt in enumerate(types):
-            if not _in_scope(rep, qt):
+            if not _admitted(rep, qt, ds):
                 ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1,
                                            facecolor="lightgrey", edgecolor="white",
                                            hatch="//", zorder=2))
@@ -455,9 +378,7 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
                 if 0 < n < MIN_OBSERVATIONS:  # screening-only cell: red outline
                     ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
                                                edgecolor="red", linewidth=1.4, zorder=4))
-    # A rule at each reporting-role boundary (non-spatial anchor / poles / candidate /
-    # full-record anchor): the candidate answers a different question than the axis
-    # poles, and the two anchors bound them rather than competing with them.
+    # Separate reporting-role blocks.
     for i in range(1, len(ordered_reps)):
         if (_ROLE_BLOCK.get(rep_role(ordered_reps[i]), 1)
                 != _ROLE_BLOCK.get(rep_role(ordered_reps[i - 1]), 1)):
@@ -466,11 +387,8 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
     ax.set_xticklabels([t.replace("_", " ") for t in types], rotation=20, ha="right")
     ax.set_yticks(range(len(ordered_reps)))
     ax.set_yticklabels(ordered_reps)
-    ax.set_title(f"Answer correctness matrix - host: {ds}  (mean per rep x type; grey = "
-                 f"out of scope, red outline = n<{MIN_OBSERVATIONS}, red hatch = not licensed)\n"
-                 "Rows in registry order (non-spatial anchor / poles / candidate / "
-                 "full-record anchor) - "
-                 "NOT a ranking; separation is decided in report.md", fontsize=10)
+    ax.set_title(f"AC matrix — host: {ds} (grey=out of scope; red hatch={VERDICT_NOT_LICENSED})",
+                 fontsize=10)
     fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02, label="mean AC")
     fig.tight_layout()
     name = f"ac_heatmap_{ds}.png"
@@ -480,26 +398,18 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
     return {name}
 
 
-# --- the two graded figures (ceiling premium, separation forest) -----------
-# Unlike the charts above (which draw a quantity), these draw a VERDICT from report.py: an unlicensed positive delta is drawn hollow, exactly like a negative one -- the sign never stands in for the grade.
-
-# Deliberately not a red/green scale. A delta's sign is not good or bad, and
-# colouring it that way would restate the sign the markers already refuse to grade on.
+# --- the graded verdict figure (paired separation) --------------------------
+# Verdict markers, not delta sign, encode the grade.
+# Avoid red/green: delta sign is directional, not good/bad.
 VERDICT_COLOR = {
     VERDICT_CONSISTENT:    "#1b6f4a",   # the only graded win
-    VERDICT_DIRECTIONAL:   "#c77c17",   # margin met but under-replicated, or capped
+    VERDICT_DIRECTIONAL:   "#c77c17",   # consistent direction without a licensed consistent advantage, or capped
     VERDICT_MIXED:         "#9d3b8c",   # scenes disagree at the declared margin
-    VERDICT_NO_SEPARATION: "#6b7280",   # null
+    VERDICT_NO_SEPARATION: "#6b7280",   # no practically meaningful separation
     VERDICT_NOT_LICENSED:  "#b0b6bf",   # gates failed -- drawn, never ranked
 }
 
-# Marker SHAPE per verdict, shared by every thesis figure that draws a verdict mark
-# (thesis_figures.py: F1, F2, and the vocabulary-sensitivity rep points), so colour is
-# never the only cue separating two verdict classes in grayscale. `consistent
-# advantage` and `no practically meaningful separation` share the circle -- fill state
-# (filled/hollow), not shape, tells them apart, the same convention every entry here
-# already uses for win vs. not-win. `not licensed` gets its own shape because it is a
-# different concept (a gate failure, never ranked) and would otherwise read as `mixed`.
+# Marker shape also encodes verdict for grayscale readability.
 VERDICT_MARKER = {
     VERDICT_CONSISTENT:    "o",   # filled circle
     VERDICT_DIRECTIONAL:   "^",   # hollow triangle
@@ -511,225 +421,16 @@ BAND = "#e8eaed"        # the +-PRACTICAL_MARGIN region
 SCENE_MARK = "#4a5058"  # the individual scene deltas
 GATED_BG = "#f5f6f7"    # backs the `not licensed` block in the separation forest
 
-# Reps excluded from the ceiling-premium candidate pool, each with a reason (visible here and printed in the figure's footer) since exclusion is a reporting choice that moves the headline number.
-CEILING_PREMIUM_EXCLUDED = {
-    FULL_RECORD_ANCHOR: "is the comparator",
-    "json_pretty": "carries the full-record anchor's own parse() output, so beating "
-                   "it is not a derived-view result",
-    CANDIDATE:     "reported as the candidate default in report.md's candidate section",
-    NON_SPATIAL_ANCHOR: "the no-information control, not a derived view",
-    # Temporary: navigation's prompt changed under the 2026-08-21 block-layout fix and results.csv hasn't been regenerated against it yet; remove once rerun.
-    "navigation":  "excluded pending its fresh rerun after the 2026-08-21 "
-                   "block-layout fix; not a permanent exclusion",
-}
-
-
-def ceiling_premium_rows(rows: list[dict]) -> list[dict]:
-    """One row per (host, question type): the best OBSERVED derived view vs the full-record anchor, using the same paired/gated/graded functions as the separation table so the two never disagree.
-
-    `k` discloses that the winner is chosen post-hoc from the in-scope candidates (an oracle, not a declared representation); a gated row keeps its scene deltas and is marked `not licensed` rather than dropped.
-    """
-    out: list[dict] = []
-    for host in sorted({dataset_of(r["scene_id"]) for r in rows}):
-        host_rows = [r for r in rows if dataset_of(r["scene_id"]) == host]
-        cells = _cells(host_rows)
-        q_mean, scene_of = _q_means(host_rows)
-        qtype_of = {r["question_id"]: (r["question_type"] or "unknown") for r in host_rows}
-        # Sorted so `max` below breaks ties at the alphabetically first candidate.
-        pool = sorted({rep for rep, _q in q_mean} - set(CEILING_PREMIUM_EXCLUDED))
-
-        for qt in sorted({qtype_of[q] for _rep, q in q_mean}):
-            if (FULL_RECORD_ANCHOR, qt) not in cells:
-                continue                      # nothing to be a premium over
-            qids = {q for _rep, q in q_mean if qtype_of[q] == qt}
-            cands = []
-            for rep in pool:
-                if not _in_scope(rep, qt) or (rep, qt) not in cells:
-                    continue
-                by_scene = paired_deltas(q_mean, scene_of, qids, FULL_RECORD_ANCHOR, rep)
-                if not by_scene:
-                    continue
-                scene_deltas, n_q, q_deltas = _summarise(by_scene)
-                ineligible = _gates(cells, qt, (FULL_RECORD_ANCHOR, rep), n_q)
-                tok_rep = cells[(rep, qt)].tokens_mean
-                tok_anchor = cells[(FULL_RECORD_ANCHOR, qt)].tokens_mean
-                cands.append(dict(
-                    host=host, qt=qt, rep=rep, scene_deltas=scene_deltas,
-                    mean=statistics.mean(list(scene_deltas.values())),
-                    n_questions=n_q, q_deltas=q_deltas, ineligible=ineligible,
-                    verdict=_verdict(scene_deltas, "", ineligible),
-                    tok_ratio=(tok_anchor / tok_rep) if tok_rep and tok_anchor else None))
-            if not cands:
-                continue
-            best = dict(max(cands, key=lambda c: c["mean"]))
-            best["k"] = len(cands)
-            out.append(best)
-    return out
-
-
-def _plot_ceiling_premium(prem: list[dict], out_dir: Path,
-                          responder: str, judge: str) -> set[str]:
-    """ceiling_premium.png -- the headline claim with its grade attached."""
-    import matplotlib.pyplot as plt
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch
-
-    if not prem:
-        return set()
-    n = len(prem)
-    # The caption, legend and footnote are fixed-size furniture; the plotting area is
-    # not. Reserving them as FRACTIONS of the figure (which is what a row-count-driven
-    # figsize makes them) works at 19 rows and collapses at 5, where the same fraction
-    # is barely an inch and the caption lands on the axes. So the bands are reserved in
-    # INCHES and converted, and every out-of-axes text is positioned the same way.
-    H = 0.46 * n + 4.2
-    TOP_IN, BOTTOM_IN = 1.15, 2.3          # caption band; legend + footnote band
-    axes_h = H - TOP_IN - BOTTOM_IN        # inches of drawable height
-    fig, ax = plt.subplots(figsize=(13.2, H))
-    ax.axvspan(-PRACTICAL_MARGIN, PRACTICAL_MARGIN, color=BAND, zorder=0)
-    ax.axvline(0, color="#333", linewidth=0.9, zorder=1)
-
-    lo = min([v for r in prem for v in r["scene_deltas"].values()] + [0.0])
-    hi = max([v for r in prem for v in r["scene_deltas"].values()] + [0.0])
-    ax.set_xlim(min(-0.35, lo - 0.08), max(0.55, hi + 0.08))
-
-    ylabels, host_bounds, prev_host = [], [], None
-    for i, r in enumerate(prem):
-        y = n - 1 - i
-        if r["host"] != prev_host:
-            host_bounds.append((y + 0.5, r["host"]))
-            prev_host = r["host"]
-        ylabels.append(r["qt"].replace("_", " "))
-        gated = r["verdict"] == VERDICT_NOT_LICENSED
-        c = VERDICT_COLOR[r["verdict"]]
-        # The scene deltas are drawn whether or not the row is graded (see the
-        # function above); a gated row's ticks are lighter, not absent.
-        for v in r["scene_deltas"].values():
-            ax.plot([v], [y], marker="|", markersize=9, color=SCENE_MARK,
-                    alpha=0.35 if gated else 0.75, zorder=3, linestyle="none")
-        win = r["verdict"] == VERDICT_CONSISTENT
-        ax.plot([r["mean"]], [y], marker="o" if win else "D",
-                markersize=8 if win else 6,
-                markerfacecolor=c if win else "white", markeredgecolor=c,
-                markeredgewidth=1.6, zorder=4, linestyle="none")
-
-    ax.set_yticks(range(n))
-    ax.set_yticklabels(list(reversed(ylabels)), fontsize=8.5)
-    ax.set_ylim(-0.8, n - 0.2)
-    ax.set_xlabel("Scene-paired AC delta:  best observed derived view  -  "
-                  f"{FULL_RECORD_ANCHOR} full-record anchor\n(per-question deltas averaged within scene, "
-                  "then over the scene values)", fontsize=9)
-    ax.grid(axis="x", linestyle=":", alpha=0.45, zorder=0)
-    ax.set_axisbelow(True)
-    x0 = ax.get_xlim()[0]
-    for ybound, host in host_bounds:
-        ax.axhline(ybound, color="#c9ccd1", linewidth=0.9)
-        ax.text(x0 + 0.015, ybound - 0.42, host.upper(), fontsize=8.5,
-                fontweight="bold", color="#4a5058", va="top")
-
-    # Annotation columns, placed in axes-fraction x so they track the axes box.
-    COL_REP, COL_TOK, COL_VERD = 1.04, 1.42, 1.62
-    trans = ax.get_yaxis_transform()
-    for x, label in ((COL_REP, "best observed derived view\n(of k in scope)"),
-                     (COL_TOK, "prompt\ntokens"),
-                     (COL_VERD, "verdict under the declared rule")):
-        ax.text(x, n - 0.35, label, transform=trans, fontsize=7.4, fontweight="bold",
-                va="bottom", ha="left", color="#4a5058")
-    for i, r in enumerate(prem):
-        y = n - 1 - i
-        gated = r["verdict"] == VERDICT_NOT_LICENSED
-        body = "#8a9099" if gated else "#2a2e33"
-        ax.text(COL_REP, y, f"{r['rep']}  (of {r['k']})", transform=trans,
-                fontsize=7.2, va="center", ha="left", color=body)
-        ax.text(COL_TOK, y, f"{r['tok_ratio']:.1f}x fewer" if r["tok_ratio"] else "-",
-                transform=trans, fontsize=7.2, va="center", ha="left", color=body)
-        label = r["verdict"] + (f"  ({r['ineligible']})" if gated else "")
-        ax.text(COL_VERD, y, label, transform=trans, fontsize=7.2, va="center",
-                ha="left", color=VERDICT_COLOR[r["verdict"]],
-                fontweight="bold" if r["verdict"] == VERDICT_CONSISTENT else "normal")
-
-    graded = [r for r in prem if r["verdict"] != VERDICT_NOT_LICENSED]
-    wins = sum(1 for r in graded if r["verdict"] == VERDICT_CONSISTENT)
-    pos = sum(1 for r in graded if r["verdict"] != VERDICT_CONSISTENT and r["mean"] > 0)
-    flat, gated_n = len(graded) - wins - pos, len(prem) - len(graded)
-    fig.suptitle(f"Does a compact derived view beat the full-record "
-                 f"{FULL_RECORD_ANCHOR} anchor?", fontsize=13.5, fontweight="bold",
-                 x=0.035, ha="left", y=1 - 0.26 / H)
-    # A directory where nothing is gradeable is a result, not an empty figure, and
-    # "0 of 0 cells reach a consistent advantage" states it as though the derived
-    # views had been tried and lost. They were never comparable: the full-record
-    # anchor is the member that failed.
-    if graded:
-        caption = (f"{wins} of {len(graded)} graded host x question-type cells reach a "
-                   f"CONSISTENT ADVANTAGE over {FULL_RECORD_ANCHOR} under the declared rule.\n"
-                   f"{pos} more have a positive mean the rule does not license as a "
-                   f"win; {flat} {'is' if flat == 1 else 'are'} negative or flat; "
-                   f"{gated_n} {'is' if gated_n == 1 else 'are'} drawn with scene "
-                   f"deltas but {VERDICT_NOT_LICENSED} (the gate is on the row).")
-    else:
-        caption = (f"No cell here can be graded against {FULL_RECORD_ANCHOR}: the "
-                   f"anchor itself fails the coverage gate on every one of the "
-                   f"{gated_n} cells below.\nThe derived views are drawn with their "
-                   f"scene deltas, and the gate that withheld each grade is printed "
-                   f"on its row. This is a fact about the anchor, not about the "
-                   f"views beside it.")
-    fig.text(0.035, 1 - 0.60 / H, caption,
-             fontsize=9.2, color="#4a5058", va="top", ha="left")
-
-    handles = [
-        Line2D([], [], marker="o", linestyle="none", markersize=8,
-               markerfacecolor=VERDICT_COLOR[VERDICT_CONSISTENT],
-               markeredgecolor=VERDICT_COLOR[VERDICT_CONSISTENT],
-               label=f"consistent advantage (|mean| >= {PRACTICAL_MARGIN:.2f}, no "
-                     f"scene reversed, >= {MIN_SCENES_SHOWING} scenes showing)"),
-        Line2D([], [], marker="D", linestyle="none", markersize=6,
-               markerfacecolor="white", markeredgecolor=VERDICT_COLOR[VERDICT_DIRECTIONAL],
-               label="directional / mixed / no separation - NOT a win, whatever the sign"),
-        Line2D([], [], marker="D", linestyle="none", markersize=6,
-               markerfacecolor="white", markeredgecolor=VERDICT_COLOR[VERDICT_NOT_LICENSED],
-               label=f"{VERDICT_NOT_LICENSED} - deltas shown, grade withheld"),
-        Line2D([], [], marker="|", linestyle="none", markersize=9, color=SCENE_MARK,
-               label="individual scene delta (the unit of replication)"),
-        Patch(facecolor=BAND, label=f"+-{PRACTICAL_MARGIN:.2f} practical margin"),
-    ]
-    # Anchored a fixed 0.95in below the axes, clear of the two-line x label.
-    ax.legend(handles=handles, loc="upper left",
-              bbox_to_anchor=(0.0, -0.95 / axes_h), fontsize=7.6, frameon=False, ncol=2)
-
-    held = "; ".join(f"{k} ({v})" for k, v in CEILING_PREMIUM_EXCLUDED.items())
-    fig.text(0.035, 0.12 / H,
-             "The winning view is selected POST-HOC per cell from the k in-scope "
-             "candidates - an oracle choice on the same data, not a pre-declared "
-             "representation.\n"
-             "'x fewer' is a PROMPT-TOKEN ratio (input only; excludes completions; no "
-             "monetary cost is computed anywhere in this study).\n"
-             f"Held out of the candidate pool: {held}.\n"
-             f"responder: {responder}  |  judge: {judge}",
-             fontsize=7, color="#8a9099", va="bottom", ha="left")
-
-    # Explicit margins rather than tight_layout: the annotation columns live outside
-    # the axes box, where tight_layout cannot see them and fights the reserved space.
-    fig.subplots_adjust(left=0.145, right=0.545,
-                        top=1 - TOP_IN / H, bottom=BOTTOM_IN / H)
-    fig.savefig(out_dir / "ceiling_premium.png", dpi=170, bbox_inches="tight")
-    plt.close(fig)
-    print(f"plot -> {out_dir / 'ceiling_premium.png'}")
-    return {"ceiling_premium.png"}
-
 
 _VERDICT_ORDER = {VERDICT_CONSISTENT: 0, VERDICT_DIRECTIONAL: 1, VERDICT_MIXED: 2,
                   VERDICT_NO_SEPARATION: 3, VERDICT_NOT_LICENSED: 4}
-# The right-hand annotation is ONE text object per row, not two columns. Two columns
-# at fixed axes-fraction offsets overprinted each other: tight_layout sizes the axes
-# box around the longest y-label, so the inches a fixed fraction buys change with the
-# panel, and a gap that clears at one host's label width does not at another's.
-# Concatenating makes the collision impossible instead of tuning it away.
+# Use one right-hand annotation per row to avoid column overlap.
 _COL_NOTE, _SEPARATION_RECT_RIGHT = 1.005, 0.82
 
 
 def _plot_paired_separation(prs: list, out_dir: Path,
                             responder: str, judge: str) -> set[str]:
-    """paired_separation.png -- report.md's separation table, drawn: one row per report.Paired, faceted by host, split into graded vs `not licensed` blocks (interleaved, a reader would mistake a gated row for a graded one). Gated rows keep their scene deltas -- they qualify the evidence, not hide it."""
+    """Plot report.Paired rows by host, keeping gated evidence visible."""
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
@@ -748,9 +449,7 @@ def _plot_paired_separation(prs: list, out_dir: Path,
     # +1 slot for the blank row that carries the block divider, where both blocks exist
     slots = {h: len(g) + len(u) + (1 if g and u else 0) for h, (g, u) in per_host.items()}
 
-    # Height in inches, and the title/legend/footnote bands reserved in inches too --
-    # as fractions they hold at 63 rows and collapse at 7, where the same fraction is
-    # a tenth of an inch and the footnote lands on the x label.
+    # Scale panel height by row count while reserving fixed title/footer space.
     H = 0.34 * sum(slots.values()) + 2.6 * len(hosts)
     fig, axes = plt.subplots(
         len(hosts), 1, squeeze=False, figsize=(13.6, H),
@@ -763,12 +462,14 @@ def _plot_paired_separation(prs: list, out_dir: Path,
         ys, cursor = [], slots[h] - 1
         for i, _p in enumerate(ordered):
             if i == len(graded) and graded and gated:
-                cursor -= 1                     # the blank divider slot
+                # Reserve one divider row when both blocks exist.
+                cursor -= 1
             ys.append(cursor)
             cursor -= 1
 
         lim = max(0.55, max(abs(v) for p in ordered for v in p.scene_deltas.values()) + 0.06)
-        if gated:   # shade the gated block before anything is drawn on it
+        if gated:
+            # Shade the gated block.
             ax.axhspan(min(ys[len(graded):]) - 0.5, max(ys[len(graded):]) + 0.5,
                        color=GATED_BG, zorder=0)
         ax.axvspan(-PRACTICAL_MARGIN, PRACTICAL_MARGIN, color=BAND, zorder=1)
@@ -776,8 +477,7 @@ def _plot_paired_separation(prs: list, out_dir: Path,
 
         labels, prev_axis = [], None
         for i, (p, y) in enumerate(zip(ordered, ys)):
-            # Reset at the block boundary so the gated block labels its own axes
-            # rather than inheriting the last label from the graded block above it.
+            # Restart axis labels at the gated block.
             if i == len(graded):
                 prev_axis = None
             if p.axis_id != prev_axis:
@@ -792,14 +492,11 @@ def _plot_paired_separation(prs: list, out_dir: Path,
                 ax.plot([v], [y], marker="|", markersize=8, color=SCENE_MARK,
                         alpha=0.4 if gated_row else 0.7, zorder=4, linestyle="none")
             win = p.verdict == VERDICT_CONSISTENT
-            ax.plot([p.mean], [y], marker="o" if win else "D",
+            ax.plot([p.mean], [y], marker=VERDICT_MARKER[p.verdict],
                     markersize=7 if win else 5.5,
                     markerfacecolor=c if win else "white", markeredgecolor=c,
                     markeredgewidth=1.5, zorder=5, linestyle="none")
-            # Support first, then why the row is qualified. `n sc` is the scene count:
-            # the deltas are a mean over THOSE scenes, and a gated row typically has
-            # fewer of them than the graded rows above it -- which is the whole story
-            # on 3RScan, so it is on the row rather than in the caption.
+            # Show question, fact-set, and scene support.
             tag = f"n_q={p.n_questions}" + (f", fs={p.n_factsets}" if p.n_factsets else "")
             tag += f", {len(p.scene_deltas)} sc"
             note_color, weight = "#8a9099", "normal"
@@ -833,21 +530,18 @@ def _plot_paired_separation(prs: list, out_dir: Path,
                      f"{VERDICT_NOT_LICENSED})", fontsize=10, fontweight="bold",
                      loc="left")
         if hi == len(hosts) - 1:
-            # The row label above is written `rep_b - rep_a`, so a positive mean is
-            # rep_b's -- the name printed FIRST. Saying "second-named" inverts every
-            # sign in the figure for a reader who takes the axis at its word.
-            ax.set_xlabel("Mean of the scene-level AC deltas   (rep_b - rep_a; > 0 = "
-                          "the representation named first in the row scored higher)",
+            # Rows are rep_b - rep_a; positive favors rep_b.
+            ax.set_xlabel("Scene-level mean AC delta (rep_b - rep_a; >0 favors rep_b)",
                           fontsize=9)
 
-    fig.suptitle("Every comparison report.md makes, decided the same way",
+    fig.suptitle("Declared paired comparisons under the same verdict rules",
                  fontsize=13, fontweight="bold", x=0.05, ha="left", y=1 - 0.22 / H)
     handles = [
-        Line2D([], [], marker="o", linestyle="none", markersize=7,
+        Line2D([], [], marker=VERDICT_MARKER[VERDICT_CONSISTENT], linestyle="none", markersize=7,
                markerfacecolor=VERDICT_COLOR[VERDICT_CONSISTENT],
                markeredgecolor=VERDICT_COLOR[VERDICT_CONSISTENT], label=VERDICT_CONSISTENT),
     ] + [
-        Line2D([], [], marker="D", linestyle="none", markersize=5.5,
+        Line2D([], [], marker=VERDICT_MARKER[v], linestyle="none", markersize=5.5,
                markerfacecolor="white", markeredgecolor=VERDICT_COLOR[v], label=v)
         for v in (VERDICT_DIRECTIONAL, VERDICT_MIXED, VERDICT_NO_SEPARATION,
                   VERDICT_NOT_LICENSED)
@@ -857,15 +551,11 @@ def _plot_paired_separation(prs: list, out_dir: Path,
         Patch(facecolor=BAND, label=f"+-{PRACTICAL_MARGIN:.2f} practical margin"),
         Patch(facecolor=GATED_BG, label=f"{VERDICT_NOT_LICENSED} block"),
     ]
-    # On the FIGURE, not on the first axes: anchored to a panel it drifts with that
-    # panel's height, which varies with how many comparisons the first host has.
+    # Keep the legend figure-level across variable-height panels.
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.45, 1 - 0.42 / H),
                fontsize=7.4, frameon=False, ncol=4)
     fig.text(0.05, 0.14 / H,
-             "No confidence intervals: the scene ticks are the entire replication this "
-             "design carries, and overlap is never a tie rule (thesis 4.6).\n"
-             "CAPPED = a declared confound downgraded an otherwise-consistent result; "
-             "it never promotes and never rescues.\n"
+             "Scene ticks are the replication; no CIs. CAPPED = confound-downgraded.\n"
              f"responder: {responder}  |  judge: {judge}",
              fontsize=7, color="#8a9099", va="bottom", ha="left")
     fig.tight_layout(rect=(0.0, 0.70 / H, _SEPARATION_RECT_RIGHT, 1 - 1.00 / H))
@@ -876,146 +566,90 @@ def _plot_paired_separation(prs: list, out_dir: Path,
 
 
 def plot_aggregate(aggregate_path: Path) -> None:
-    import matplotlib.pyplot as plt
-    import numpy as np
-
     out_dir = aggregate_path.parent
+    # Delete the permanently retired post-hoc artifact before early returns.
+    stale_ceiling = out_dir / "ceiling_premium.png"
+    if stale_ceiling.exists():
+        stale_ceiling.unlink()
+
     results_path = out_dir / "results.csv"
     if not results_path.exists():
         return
-    # The raw rows, errors included: coverage is n_scored/n, so the rows that failed
-    # are the denominator. Every mean below still comes from _per_question_ac, which
-    # drops them.
+    # Error rows remain in coverage; AC means exclude them.
     with results_path.open(encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
     if not rows:
         return
+    require_single_responder_judge(rows)
     points, types, reps = _per_question_ac(results_path)
     if not types:
         return
     color = _colors(reps)
-    rng = np.random.default_rng(42)
 
-    # -- Chart 0: axis cards (one figure per axis, ladder order, host dataset) --
-    # The headline reporting view: each axis told as its own ladder. The per-type
-    # head-to-head below covers the content/general types no axis ladder probes.
-    written_cards = _plot_axis_cards(results_path, out_dir, color)
+    # -- Chart 0: axis cards --
+    written_cards = _plot_axis_cards(results_path, rows, out_dir, color)
 
-    # -- Charts 1-3: per-host head-to-head, non-spatial anchor lift, and the AC matrix --
-    # One figure per host each. In a single-host directory (a per-scene report, or
-    # _aggregate/procthor) that is one figure; in _aggregate/all it is three, and
-    # they are three separate readings rather than one averaged one.
+    # -- Charts 1-3: host-scoped AC, anchor lift, and heatmap --
     written: set[str] = set()
     for ds in sorted({dataset_of(r["scene_id"]) for r in rows}):
         written |= _plot_ac_by_type(results_path, rows, ds, out_dir, color)
         written |= _plot_non_spatial_anchor_lift(rows, ds, out_dir, color)
         written |= _plot_heatmap(results_path, rows, ds, out_dir)
 
-    # -- Chart 4: axis-contrast paired deltas (every AXES entry declaring a
-    #    headline_pair: format, structure presentation, relation linearization,
-    #    relational vs. navigational framing (ProcTHOR primary + Gibson companion)) --
-    # For each axis pair, the per-question AC delta (second pole minus first), over
-    # the questions that axis DECLARES -- its host and its probe types, both poles in
-    # scope (axis_pair_questions). Bar = mean, whisker = ±1 population std, dots =
-    # per question. >0 means the second pole scored higher.
-    #
-    # The host and type filters are the comparison's definition, not a tidy-up: a
-    # Gibson-hosted pair must not average over ProcTHOR questions, and two axes that
-    # share a pair and differ only in declared type are otherwise one number drawn
-    # twice. Leakage is asserted against, in tests/test_axis_contrasts_scope.py.
-    qid_ac, qtype_of, host_of = _per_qid_ac(results_path)
-    bars: list[tuple[str, list[float]]] = []
-    for pair in AXIS_PAIRS:
-        deltas = [qid_ac[(qid, pair.b)] - qid_ac[(qid, pair.a)]
-                  for qid in axis_pair_questions(pair, qtype_of, host_of)
-                  if (qid, pair.a) in qid_ac and (qid, pair.b) in qid_ac]
-        if deltas:
-            bars.append((f"{pair.label} [{pair.host}]: {pair.a} -> {pair.b}", deltas))
-    if bars:
-        fig, ax = plt.subplots(figsize=(10.5, max(3, 0.9 * len(bars) + 1.5)))
-        for i, (lab, deltas) in enumerate(bars):
-            m = statistics.mean(deltas)
-            sd = statistics.pstdev(deltas) if len(deltas) > 1 else 0.0
-            ax.barh(i, m, color="tab:green" if m >= 0 else "tab:red", alpha=0.8)
-            ax.errorbar(m, i, xerr=sd, fmt="none", color="black", capsize=3, linewidth=0.8)
-            jitter = rng.uniform(-0.12, 0.12, len(deltas))
-            ax.scatter(deltas, [i + j for j in jitter], s=16, color="black",
-                       alpha=0.5, zorder=3)
-            ax.text(0.99, i, f"n={len(deltas)}", transform=ax.get_yaxis_transform(),
-                    ha="right", va="center", fontsize=6, color="gray")
-        ax.set_yticks(range(len(bars)))
-        ax.set_yticklabels([lab for lab, _ in bars])
-        ax.invert_yaxis()
-        ax.axvline(0, color="black", linewidth=0.8)
-        ax.set_xlabel("AC delta  (second pole minus first; >0 = second pole better)")
-        ax.set_title("Axis contrasts  (paired per-question AC delta; each axis's own "
-                     "host [bracketed] and declared question types)")
-        ax.grid(axis="x", linestyle="--", alpha=0.4)
-        fig.tight_layout()
-        fig.savefig(out_dir / "axis_contrasts.png", dpi=150, bbox_inches="tight")
-        plt.close(fig)
-        print(f"plot -> {out_dir / 'axis_contrasts.png'}")
-
-    # -- Charts 5-6: the two graded figures --
-    # Drawn last because they depend on nothing above them and on all of report.py:
-    # `ceiling_premium` grades the headline claim (a compact derived view against the
-    # json_mini full-record anchor) and `paired_separation` draws the separation table itself.
-    # Both carry the responder and judge in-figure -- a verdict is a verdict OF a
-    # responder graded BY a judge, and these two figures travel out of their directory.
-    responder = ", ".join(sorted({r.get("responder") or "" for r in rows} - {""})) or "?"
-    judge = ", ".join(sorted({r.get("judge") or "" for r in rows} - {""})) or "?"
-    graded_figs = _plot_ceiling_premium(ceiling_premium_rows(rows), out_dir,
-                                        responder, judge)
-    graded_figs |= _plot_paired_separation(_paired_rows(rows, pairs=_load_pairs()),
+    # -- Chart 4: paired verdicts from report.py --
+    responder = rows[0].get("responder") or "?"
+    judge = rows[0].get("judge") or "?"
+    verdict_figs = _plot_paired_separation(_paired_rows(rows, pairs=_load_pairs()),
                                            out_dir, responder, judge)
 
-    # retire charts that the scope-aware set replaces / that mislead, plus the old
-    # single combined axis card and any per-axis card whose axis lost its data.
+    # Remove obsolete or stale aggregate charts.
     stale = ["ac_comparison.png", "faithfulness_comparison.png", "ac_delta.png",
              "ac_lift_over_floor.png", "axis_cards.png",
-             # The host-pooled predecessors of the three per-host charts above.
-             # Deleted rather than left beside them: they are the same chart under
-             # a shorter name, and the shorter name is the one a stale reference
-             # would still resolve to.
-             "ac_by_axis.png", "value_of_spatial_structure.png", "ac_heatmap.png"]
+             # Remove host-pooled predecessors.
+             "ac_by_axis.png", "value_of_spatial_structure.png", "ac_heatmap.png",
+             # Remove retired pooled-delta chart.
+             "axis_contrasts.png"]
     stale += [p.name for p in out_dir.glob("axis_card_*.png") if p.name not in written_cards]
-    # ...and any per-host figure whose host lost its data since the last run.
+    # Remove per-host outputs whose data disappeared.
     for pattern in ("ac_by_axis_*.png", "value_of_spatial_structure_*.png",
                     "ac_heatmap_*.png"):
         stale += [p.name for p in out_dir.glob(pattern) if p.name not in written]
-    # ...and either graded figure that this run had nothing to draw. A stale verdict
-    # figure is worse than a missing one: it survives under the correct filename and
-    # is read as current.
-    stale += [n for n in ("ceiling_premium.png", "paired_separation.png")
-              if n not in graded_figs]
+    # Remove stale verdict output when nothing is drawable.
+    stale += [n for n in ("paired_separation.png",) if n not in verdict_figs]
     for name in stale:
         p = out_dir / name
         if p.exists():
             p.unlink()
 
 
-# --- per-observation charts (guess detector, latency) ----------------------
+# --- per-observation charts (grounding diagnostic, latency) ----------------
+
+def _matched_cost_quality_point(ac_by_qid: dict[str, list[float]],
+                                tok_by_qid: dict[str, list[float]]
+                                ) -> tuple[float, float, int] | None:
+    """Return (tokens, AC, n) over AC∩token qids, averaging repetitions per qid."""
+    matched = sorted(set(ac_by_qid) & set(tok_by_qid))
+    if not matched:
+        return None
+    ac_mean = statistics.mean(statistics.mean(ac_by_qid[q]) for q in matched)
+    tok_mean = statistics.mean(statistics.mean(tok_by_qid[q]) for q in matched)
+    return tok_mean, ac_mean, len(matched)
+
 
 def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
-    """Charts read per observation rather than per cell.
-
-    `diagnostics` adds the operational latency box plot. Off by default: latency is
-    an operational diagnostic, not a result, and a figure that ships with every run
-    is a figure that ends up quoted. See the module docstring.
-    """
+    """Plot per-observation diagnostics; latency is optional."""
     import matplotlib.pyplot as plt
     import numpy as np
 
-    rows = [r for r in csv.DictReader(results_path.open(encoding="utf-8")) if not r["error"]]
+    all_rows = list(csv.DictReader(results_path.open(encoding="utf-8")))
+    require_single_responder_judge(all_rows)
+    rows = [r for r in all_rows if not r["error"]]
     out_dir = results_path.parent
     representations = sorted({r["representation"] for r in rows})
     colors = _colors(representations)
-    rng = np.random.default_rng(42)
 
-    # One panel per question type, one figure per host: AC is never pooled across types (thesis 4.6), since a single point per rep would rank one strong on connectivity against one strong on set_logic. Token cost (x-axis) is legitimately pooled -- same file regardless of question.
-    # Coverage is report.py's per-(rep, type, host) rate, not a local global one -- a rep that overflows only on one type would otherwise read as mostly covered, diluting the panel where it actually fails.
-    all_rows = list(csv.DictReader(results_path.open(encoding="utf-8")))
-    for stale_name in ("cost_quality.png",):   # pooled-AC predecessor of this chart
+    # Cost/AC panels are host- and type-scoped; coverage uses report.py cells.
+    for stale_name in ("cost_quality.png",):
         stale = out_dir / stale_name
         if stale.exists():
             stale.unlink()
@@ -1024,31 +658,44 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
     written_cq: set[str] = set()
     for ds in datasets:
         ds_rows = [r for r in rows if dataset_of(r["scene_id"]) == ds]
-        # tokens: pooled per rep within the host (same file for every question)
-        by_rep_tok: dict[str, list[float]] = collections.defaultdict(list)
-        # AC: kept separate per question type -- never pooled
-        by_qt_rep_ac: dict[str, dict[str, list[float]]] = collections.defaultdict(
-            lambda: collections.defaultdict(list))
+        # Average repetitions within qid before averaging questions.
+        ac_by_q: dict[str, dict[str, dict[str, list[float]]]] = collections.defaultdict(
+            lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
+        tok_by_q: dict[str, dict[str, dict[str, list[float]]]] = collections.defaultdict(
+            lambda: collections.defaultdict(lambda: collections.defaultdict(list)))
         for r in ds_rows:
             rep = r["representation"]
             qt = r["question_type"] or "unknown"
-            if not _in_scope(rep, qt):
+            if not _in_scope(rep, qt, ds):
                 continue
+            qid = r["question_id"]
             if r["answer_correctness"] != "":
-                by_qt_rep_ac[qt][rep].append(float(r["answer_correctness"]))
+                ac_by_q[qt][rep][qid].append(float(r["answer_correctness"]))
             tok = r.get("prompt_tokens", "")
             if tok not in ("", "0", None):
                 try:
-                    by_rep_tok[rep].append(float(tok))
+                    tok_by_q[qt][rep][qid].append(float(tok))
                 except ValueError:
                     pass
 
         cells = _cells([r for r in all_rows if dataset_of(r["scene_id"]) == ds])
 
-        qts = sorted(qt for qt in by_qt_rep_ac
-                     if any(by_rep_tok.get(rep) for rep in by_qt_rep_ac[qt]))
+        # Build each point from that rep/type's AC∩token qids.
+        points_by_qt: dict[str, dict[str, tuple[float, float, int]]] = {}
+        for qt in set(ac_by_q) | set(tok_by_q):
+            pts = {}
+            for rep in set(ac_by_q[qt]) | set(tok_by_q[qt]):
+                pt = _matched_cost_quality_point(ac_by_q[qt].get(rep, {}),
+                                                 tok_by_q[qt].get(rep, {}))
+                if pt is not None:
+                    pts[rep] = pt
+            if pts:
+                points_by_qt[qt] = pts
+
+        qts = sorted(points_by_qt)
         if not qts:
-            continue   # no token data recorded (some backends omit it)
+            # No matched AC/token data.
+            continue
 
         ncols = min(3, len(qts))
         nrows = (len(qts) + ncols - 1) // ncols
@@ -1056,44 +703,32 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
                                  squeeze=False)
         for idx, qt in enumerate(qts):
             ax = axes[idx // ncols][idx % ncols]
-            reps = [rep for rep in by_qt_rep_ac[qt] if by_rep_tok.get(rep)]
-            xy = {rep: (statistics.mean(by_rep_tok[rep]),
-                        statistics.mean(by_qt_rep_ac[qt][rep])) for rep in reps}
+            reps = sorted(points_by_qt[qt])
             lic = {rep: _license(cells, rep, qt) for rep in reps}
-            frontier = efficiency_frontier(xy, {r for r in reps if lic[r][0]})
-            if len(frontier) > 1:
-                ax.plot([xy[r][0] for r in frontier], [xy[r][1] for r in frontier],
-                        color="gray", linestyle="--", linewidth=1, zorder=2,
-                        label="efficiency frontier (licensed points only)")
             for rep in reps:
-                x, y = xy[rep]
-                ok, c = lic[rep]
-                ax.scatter(x, y, color=colors.get(rep, "gray"), s=40 + 90 * c,
+                tok_mean, ac_mean, n_q = points_by_qt[qt][rep]
+                ok, cov = lic[rep]
+                ax.scatter(tok_mean, ac_mean, color=colors.get(rep, "gray"), s=40 + 90 * cov,
                            edgecolor="red" if not ok else "black",
                            linewidth=1.4 if not ok else 0.5, zorder=3)
-                tag = (rep if c > 0.999
-                       else f"{rep} (cov {c * 100:.0f}%"
-                            + (f"; {VERDICT_NOT_LICENSED})" if not ok else ")"))
-                ax.annotate(tag, (x, y), textcoords="offset points",
+                tag = (f"{rep} (q_n={n_q})" if ok else
+                       f"{rep} (q_n={n_q}; cov {cov * 100:.0f}%; {VERDICT_NOT_LICENSED})")
+                ax.annotate(tag, (tok_mean, ac_mean), textcoords="offset points",
                             xytext=(6, 4), fontsize=7,
                             color="red" if not ok else "black")
             ax.set_title(qt, fontsize=10)
             ax.set_ylim(-0.05, 1.05)
             ax.grid(linestyle="--", alpha=0.4)
-            if len(frontier) > 1:
-                ax.legend(fontsize=7)
         for idx in range(len(qts), nrows * ncols):
             axes[idx // ncols][idx % ncols].axis("off")
 
-        fig.supxlabel("Mean prompt tokens  (context size -> serialization overhead; "
-                      "same file for every question type)", fontsize=9)
-        fig.supylabel("Mean answer correctness  (in-scope, surviving cells)", fontsize=9)
-        fig.suptitle(f"Cost vs Quality by question type - host: {ds}", fontsize=12)
+        fig.supxlabel("Mean prompt tokens (matched to the plotted question set)", fontsize=9)
+        fig.supylabel("Mean answer correctness (matched to the plotted question set)", fontsize=9)
+        fig.suptitle(f"Cost vs Quality by question type — host: {ds} (descriptive audit)",
+                    fontsize=12)
         fig.text(0.01, 0.005,
-                 "upper-left = more accuracy per token  |  marker shrinks + red edge as "
-                 f"coverage drops; below {MIN_COVERAGE:.0%} the point is "
-                 f"{VERDICT_NOT_LICENSED} and cannot join the frontier  |  AC is never "
-                 "pooled across question types or hosts",
+                 "Descriptive only; no ranking. Efficiency claims use paired comparisons.\n"
+                 f"Red edge={VERDICT_NOT_LICENSED}; size=coverage; q_n=matched questions.",
                  ha="left", va="bottom", fontsize=7, color="gray")
         fig.tight_layout(rect=(0.01, 0.02, 1, 0.97))
         name = f"cost_quality_{ds}.png"
@@ -1102,24 +737,14 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
         written_cq.add(name)
         print(f"plot -> {out_dir / name}")
 
-    # drop per-host charts whose host lost its data since the last run
+    # Remove stale per-host cost-quality charts.
     for p in out_dir.glob("cost_quality_*.png"):
         if p.name not in written_cq:
             p.unlink()
 
-    # -- Faithfulness vs Answer Correctness: a guess / grounding diagnostic --
-    # Only meaningful when faithfulness was computed (compute_faithfulness=True);
-    # otherwise there is nothing on the x-axis, so skip rather than emit an empty
-    # chart, and remove a stale one from a prior faithfulness-on run.
+    # Faithfulness diagnostic; remove stale output when unavailable.
     if any(r["faithfulness"] != "" for r in rows):
         fig, ax = plt.subplots(figsize=(7.5, 6.5))
-        # quadrant shading: high AC + low faithfulness = credit without grounding (lucky guess)
-        ax.axhspan(0.5, 1.05, xmin=0, xmax=0.5 / 1.05, color="tab:red", alpha=0.06)
-        ax.axhline(0.5, color="gray", linestyle=":", linewidth=0.8)
-        ax.axvline(0.5, color="gray", linestyle=":", linewidth=0.8)
-        ax.text(0.02, 1.0, "lucky guess\n(high AC, low faithfulness)", fontsize=7, color="tab:red", va="top")
-        ax.text(0.52, 0.03, "grounded but wrong", fontsize=7, color="gray", va="bottom")
-
         for rep in representations:
             rr = [r for r in rows if r["representation"] == rep
                   and r["faithfulness"] != "" and r["answer_correctness"] != ""]
@@ -1127,12 +752,12 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
             ys = np.array([float(r["answer_correctness"]) for r in rr])
             if len(xs) == 0:
                 continue
-            xs = xs + rng.uniform(-0.018, 0.018, len(xs))
-            ys = ys + rng.uniform(-0.018, 0.018, len(ys))
-            ax.scatter(xs, ys, label=rep, color=colors.get(rep, "gray"), alpha=0.6, s=28)
+            # Plot exact values; use alpha for overplotting.
+            ax.scatter(xs, ys, label=rep, color=colors.get(rep, "gray"), alpha=0.5, s=22)
         ax.set_xlabel("Faithfulness (grounded in context)")
         ax.set_ylabel("Answer correctness (matches key facts)")
-        ax.set_title("Faithfulness vs Answer Correctness  (per observation)")
+        # Faithfulness is diagnostic only; no ranking threshold.
+        ax.set_title("Faithfulness vs Answer Correctness (diagnostic)")
         ax.set_xlim(0, 1.05)
         ax.set_ylim(0, 1.08)
         ax.legend(fontsize=8, ncol=2)
@@ -1146,11 +771,7 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
         if stale.exists():
             stale.unlink()
 
-    # -- Latency per representation (OPERATIONAL DIAGNOSTIC, not a result) --
-    # Off by default and renamed from `latency_comparison` -- the old name implied a comparison this diagnostic doesn't support (see LATENCY_DIAGNOSTIC_NOTE).
-    #
-    # The previous production filename is swept whether or not diagnostics are on:
-    # it exists in every results directory written before this rule.
+    # -- Latency diagnostic --
     for stale_name in ("latency_comparison.png",):
         stale = out_dir / stale_name
         if stale.exists():
@@ -1161,11 +782,7 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
             stale.unlink()
         return
 
-    # Box + whiskers per rep (median, IQR, 1.5*IQR whiskers, outliers as fliers).
-    # No point overlay -- with many questions the scatter buried the box, and the
-    # box's own whiskers + fliers already carry the spread. Reps go in a side
-    # legend (boxes left-to-right == legend top-to-bottom) since the long combined
-    # names collide when written diagonally under the axis.
+    # Boxplot per rep; legend avoids long x labels.
     from matplotlib.patches import Patch
     latency_map: dict[tuple, list[float]] = collections.defaultdict(list)
     for r in rows:
@@ -1192,8 +809,7 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
     ax.set_xticks([])
     ax.set_xlabel("Representation (see legend)")
     ax.set_ylabel("Wall-clock response latency (s)")
-    ax.set_title("Response latency — OPERATIONAL DIAGNOSTIC, not a comparison\n"
-                 "(box = IQR, whiskers = 1.5*IQR, dots = outliers)")
+    ax.set_title("Response latency (diagnostic; box=IQR, whiskers=1.5×IQR)")
     ax.text(0.0, -0.13, LATENCY_DIAGNOSTIC_NOTE, transform=ax.transAxes,
             fontsize=7, color="tab:red", va="top")
     ax.grid(axis="y", linestyle="--", alpha=0.4)
