@@ -146,21 +146,13 @@ def save(
                 tag = f"{record.question.id} | {record.response.representation} | rep{record.response.repetition}"
                 if record.error:
                     n_err += 1
-                    print(f"  ERROR  {tag}")
-                    print(f"         {record.error.splitlines()[-1]}")
+                    print(f"  {'ERROR':<8}{tag} | {record.error.splitlines()[-1]}")
                 else:
                     n_ok += 1
                     score_str = "  ".join(
                         f"{k}={v:.2f}" for k, v in record.scores.to_dict().items() if v is not None
                     )
-                    print(f"  OK     {tag} | {score_str} | {record.response.latency_ms:.0f}ms")
-                    print(f"         Q:  {record.question.text}")
-                    print(f"         A:  {record.response.raw_answer}")
-                    if record.rubric_reasoning:
-                        print("         JUDGE:")
-                        for line in record.rubric_reasoning.strip().splitlines():
-                            print(f"           {line}")
-                    print(70 * "=")
+                    print(f"  {'SCORE':<8}{tag} | {score_str} | {record.response.latency_ms:.0f}ms")
 
     # Aggregate from the written CSV (not in-memory records) so a resumed run
     # summarises prior + new rows together.

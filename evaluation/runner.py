@@ -147,7 +147,7 @@ def generate_responses(config: EvalConfig) -> Path:
                                         raw_answer="", error=str(exc))
                         _write(fh, rec)
                         n_err += 1
-                        print(f"  ERR   {question.id} | {representation} | rep{repetition} | {exc}")
+                        print(f"  {'ERROR':<8}{question.id} | {representation} | rep{repetition} | {exc}")
                     continue
 
                 for repetition in range(1, config.repetitions + 1):
@@ -161,13 +161,13 @@ def generate_responses(config: EvalConfig) -> Path:
                     _write(fh, rec)
                     if not rec["error"]:
                         n_new += 1
-                        print(f"  GEN   {question.id} | {representation} | rep{repetition} | {rec['latency_ms']:.0f}ms")
+                        print(f"  {'RESPOND':<8}{question.id} | {representation} | rep{repetition} | {rec['latency_ms']:.0f}ms")
                     elif is_context_exceeded(rec["error"]):
                         n_ctx += 1
-                        print(f"  CTX!  {question.id} | {representation} | rep{repetition} | prompt {rec['prompt_tokens']} tok, budget {_ctx_limit(num_ctx)}")
+                        print(f"  {'CONTEXT':<8}{question.id} | {representation} | rep{repetition} | prompt {rec['prompt_tokens']} tok, budget {_ctx_limit(num_ctx)}")
                     else:
                         n_err += 1
-                        print(f"  ERR   {question.id} | {representation} | rep{repetition}")
+                        print(f"  {'ERROR':<8}{question.id} | {representation} | rep{repetition}")
 
     # Unload only when responder and judge share a host -- otherwise it just
     # forces a cold reload, leaking load time into the next cell's latency_ms.
@@ -230,7 +230,7 @@ def _generate_one(question, representation, repetition, context, responder,
         # Local/server token counts should agree; a mismatch signals drift
         # (re-pull, template change, silent truncation). Loud but non-fatal.
         elif exact_tokens is not None and gen.prompt_tokens and exact_tokens != gen.prompt_tokens:
-            print(f"  WARN  {question.id} | {representation} | token count drift: "
+            print(f"  {'WARN':<8}{question.id} | {representation} | token count drift: "
                   f"predicted {exact_tokens}, server reported {gen.prompt_tokens} "
                   f"(delta {gen.prompt_tokens - exact_tokens:+d})")
         return _gen_dict(
