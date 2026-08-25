@@ -1,5 +1,5 @@
 """Pool primary-scene results.csv files into per-dataset (and cross-dataset)
-aggregate reports; stress/sensitivity scenes are pooled separately via --nonprimary.
+aggregate reports; stress/sensitivity scenes are pooled separately via --include-nonprimary.
 """
 from __future__ import annotations
 
@@ -149,22 +149,16 @@ def partial_groups(groups: dict[str, list[Path]]) -> dict[str, str]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Pool per-scene results into cross-scene plots.")
-    ap.add_argument("--models", help="comma-separated model dir names (default: all under results/)")
+    ap.add_argument("--models", help="comma-separated model dir names, not ModelProfile names (default: all)")
     ap.add_argument("--diagnostics", action="store_true",
-                    help="also draw the operational latency diagnostic. Off by default: "
-                         "latency is confounded by batch composition and GPU contention, "
-                         "so it is not a result and not the cost axis (prompt tokens are).")
-    ap.add_argument("--nonprimary", action="store_true",
-                    help="also pool the stress/sensitivity scenes into their own "
-                         "_aggregate/nonprimary_<dataset>/ groups. They are never added "
-                         "to a primary group either way; this only builds the pooled "
-                         "view used by the scene-substitution sensitivity analysis.")
+                    help="also draw the operational latency diagnostic (off by default; "
+                         "confounded, not the cost axis)")
+    ap.add_argument("--include-nonprimary", action="store_true",
+                    help="also pool stress/sensitivity scenes into their own "
+                         "nonprimary_<dataset> groups")
     ap.add_argument("--allow-partial", action="store_true",
-                    help="write a per-dataset primary group even when it holds fewer "
-                         f"than {SCENES_PER_DATASET} scenes. Off by default so a "
-                         "transition state (mid scene substitution, or a run that only "
-                         "reached some scenes) cannot silently overwrite a full report "
-                         "with a partial one under the same filenames.")
+                    help="write a primary group with fewer than "
+                         f"{SCENES_PER_DATASET} scenes instead of skipping it")
     args = ap.parse_args()
 
     if not OUTPUT_ROOT.exists():
@@ -182,7 +176,7 @@ def main() -> None:
 
     for model_dir in model_dirs:
         aggregate_model(model_dir, diagnostics=args.diagnostics,
-                        nonprimary=args.nonprimary,
+                        nonprimary=args.include_nonprimary,
                         allow_partial=args.allow_partial)
 
 

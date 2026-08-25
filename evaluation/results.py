@@ -115,8 +115,12 @@ def save(
     records: Iterable[EvalRecord],
     config: EvalConfig,
     verbose: bool = True,
+    write_report: bool = True,
 ) -> tuple[Path, Path]:
-    """Write all records to per-question and aggregate CSVs. Returns both paths."""
+    """Write all records to per-question and aggregate CSVs. Returns both paths.
+
+    `write_report=False` skips plots.py/report.py; the CSVs are always written.
+    """
     import time
     config.output_dir.mkdir(parents=True, exist_ok=True)
     detail_path    = config.output_dir / "results.csv"
@@ -162,14 +166,15 @@ def save(
     # summarises prior + new rows together.
     _write_aggregate_from_csv(detail_path, aggregate_path)
 
-    from evaluation import plots
-    plots.plot_aggregate(aggregate_path)
-    plots.plot_per_question(detail_path)
+    if write_report:
+        from evaluation import plots
+        plots.plot_aggregate(aggregate_path)
+        plots.plot_per_question(detail_path)
 
-    # The tabular half of reporting (coverage / rank-eligibility, small-n register,
-    # per-axis numeric cards) -- regenerated from results.csv alongside the charts.
-    from evaluation.report import write_report
-    write_report(detail_path, aggregate_path)
+        # The tabular half of reporting (coverage / rank-eligibility, small-n register,
+        # per-axis numeric cards) -- regenerated from results.csv alongside the charts.
+        from evaluation.report import write_report as _write_report
+        _write_report(detail_path, aggregate_path)
 
     if verbose:
         elapsed = time.perf_counter() - t_start

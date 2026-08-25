@@ -99,14 +99,26 @@ directory of parsers can be run over any scene.
 be restarted.
 
 ```bash
-python -m experiments.run_experiments --list          # print the matrix, run nothing
+python -m experiments.run_experiments --plan          # print the matrix, run nothing
 python -m experiments.run_experiments --models qwen2.5-14b --scenes Brinnon
 python -m experiments.run_experiments --models qwen2.5-14b --scenes Brinnon \
     --score-only --judge-backend gemini --judge-model gemini-2.5-flash
 ```
 
-`--score-only` re-judges the cached answers in `responses.jsonl` with a different judge — no
-regeneration. Also useful: `--reps`, `--types`, `--generate-only`.
+| Flag | Meaning |
+| --- | --- |
+| `--models` | comma-separated `ModelProfile` names (default: all in `models.py`) |
+| `--scenes` | comma-separated scene ids (default: all in `scenes.py`) |
+| `--representations` | comma-separated rep names, overriding each scene's default set |
+| `--question-types` | comma-separated question types to run (default: every in-scope type) |
+| `--plan` | print the planned matrix and exit; nothing runs |
+| `--generate-only` | generate responses only; judge later with `--score-only` |
+| `--score-only` | re-judge cached `responses.jsonl` instead of generating (needs the two below) |
+| `--judge-backend` / `--judge-model` | override the judge, e.g. `gemini` / `gemini-2.5-flash` |
+| `--faithfulness` | also compute the faithfulness metric (off by default) |
+| `--no-report` | skip plots/`report.md` per scene (CSVs still written); rebuild later with `aggregate_results` |
+
+`--generate-only` and `--score-only` are mutually exclusive.
 
 **Aggregate and report:**
 
@@ -117,6 +129,13 @@ python -m experiments.aggregate_results --models qwen2.5-14b
 
 Both write into `experiments/results/`; `aggregate_results` also regenerates `report.md` and
 the charts.
+
+| Flag | Meaning |
+| --- | --- |
+| `--models` | comma-separated model directory names under `experiments/results/` (default: all) |
+| `--diagnostics` | also draw the latency diagnostic chart (off by default; confounded, not the cost axis) |
+| `--include-nonprimary` | also pool stress/sensitivity scenes into their own `nonprimary_<dataset>` groups |
+| `--allow-partial` | write a per-dataset group even with fewer than 3 primary scenes, instead of skipping it |
 
 ## Tests
 

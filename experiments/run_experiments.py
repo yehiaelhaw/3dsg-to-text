@@ -65,49 +65,44 @@ def main():
     ap = argparse.ArgumentParser(description="Run the responder x scene evaluation matrix.")
     ap.add_argument("--models", help="comma-separated ModelProfile names (default: all)")
     ap.add_argument("--scenes", help="comma-separated scene_ids (default: all)")
-    ap.add_argument("--reps", help="comma-separated representation names: override the "
-                                    "rep set of every selected scene (subset runs, e.g. "
-                                    "a second responder on headline cells only; resume "
-                                    "still skips finished cells)")
-    ap.add_argument("--types", help="comma-separated question types to generate "
-                                     "(default: every in-scope type). Narrows a run to "
-                                     "the cells a reported comparison reads -- in-scope "
-                                     "is not the same as required")
-    ap.add_argument("--list", action="store_true", help="print the matrix and exit")
-    ap.add_argument("--generate-only", action="store_true",
-                     help="run responder generation only, skip judging "
-                          "(score later with score_only against the cached responses.jsonl)")
-    ap.add_argument("--score-only", action="store_true",
-                     help="skip generation; judge the existing cached responses.jsonl "
-                          "instead (requires --judge-backend/--judge-model, e.g. to "
-                          "re-judge with Gemini for final numbers)")
+    ap.add_argument("--representations", help="comma-separated representation names "
+                                    "(default: each scene's full set)")
+    ap.add_argument("--question-types", help="comma-separated question types to run "
+                                     "(default: every in-scope type)")
+    ap.add_argument("--plan", action="store_true", help="print the planned matrix and exit")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--generate-only", action="store_true",
+                     help="generate responses only; judge later with --score-only")
+    mode.add_argument("--score-only", action="store_true",
+                     help="re-judge cached responses.jsonl instead of generating "
+                          "(requires --judge-backend/--judge-model)")
     ap.add_argument("--judge-backend", help="override the judge backend "
                                              f"(default: {JUDGE_BACKEND} screening judge)")
     ap.add_argument("--judge-model", help=f"override the judge model (default: {JUDGE_MODEL})")
     ap.add_argument("--faithfulness", action="store_true",
-                     help="also compute the faithfulness metric (off by default -- "
-                          "gemma2:9b's context window can't hold it during screening)")
+                     help="also compute the faithfulness metric (off by default)")
+    ap.add_argument("--no-report", action="store_true",
+                     help="skip plots/report.md (CSVs still written; rebuild "
+                          "later with aggregate_results.py)")
     args = ap.parse_args()
 
-    if args.generate_only and args.score_only:
-        raise SystemExit("--generate-only and --score-only are mutually exclusive")
     if args.score_only and not (args.judge_backend and args.judge_model):
         raise SystemExit("--score-only requires --judge-backend and --judge-model "
                           "(re-judging with the same screening judge is a no-op)")
 
     models = _select(MODEL_PROFILES, args.models, "model", lambda m: m.name)
     scenes = _select(SCENES, args.scenes, "scene", lambda s: s.scene_id)
-    reps = ([r.strip() for r in args.reps.split(",") if r.strip()]
-            if args.reps else None)
-    qtypes = ([t.strip() for t in args.types.split(",") if t.strip()]
-              if args.types else None)
+    reps = ([r.strip() for r in args.representations.split(",") if r.strip()]
+            if args.representations else None)
+    qtypes = ([t.strip() for t in args.question_types.split(",") if t.strip()]
+              if args.question_types else None)
     combos = list(product(models, scenes))
 
     print(f"matrix: {len(models)} model(s) x {len(scenes)} scene(s) = {len(combos)} run(s)")
     for prof, scene in combos:
         print(f"  {prof.name:18s} x {scene.scene_id:18s} "
               f"-> {OUTPUT_ROOT}/{prof.name}/{scene.scene_id}")
-    if args.list:
+    if args.plan:
         return
 
     if args.generate_only:
@@ -133,7 +128,12 @@ def main():
             score_only=args.score_only, compute_faithfulness=args.faithfulness,
             representations=reps, question_types=qtypes,
         )
-        save(iter_records(cfg), cfg)
+        save(iter_records(cfg), cfg, write_report=not args.no_report)
+
+    if args.no_report:
+        print("\n--no-report: skipping cross-scene aggregate "
+              "(rerun aggregate_results.py later to build it)")
+        return
 
     print("\n=== cross-scene aggregate ===")
     for prof in models:
