@@ -16,7 +16,7 @@ from evaluation.axes import (
 )
 # Formal comparison logic comes from report.py.
 from evaluation.report import (
-    _cells, _load_pairs, _paired_rows, require_single_responder_judge,
+    _cells, _load_pairs, _paired_rows,
     non_spatial_anchor_lifts,
 )
 
@@ -580,7 +580,6 @@ def plot_aggregate(aggregate_path: Path) -> None:
         rows = list(csv.DictReader(fh))
     if not rows:
         return
-    require_single_responder_judge(rows)
     points, types, reps = _per_question_ac(results_path)
     if not types:
         return
@@ -642,7 +641,6 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
     import numpy as np
 
     all_rows = list(csv.DictReader(results_path.open(encoding="utf-8")))
-    require_single_responder_judge(all_rows)
     rows = [r for r in all_rows if not r["error"]]
     out_dir = results_path.parent
     representations = sorted({r["representation"] for r in rows})

@@ -10,7 +10,7 @@ from typing import Iterable
 
 from evaluation.axes import dataset_of
 from evaluation.config import EvalConfig
-from evaluation.core import CSV_COLUMNS, EvalRecord, is_context_exceeded
+from evaluation.core import CSV_COLUMNS, ContinuityError, EvalRecord, is_context_exceeded
 
 # Host-separated (dataset, representation, question_type) rows; repetitions of one
 # question are averaged together before the aggregate statistics.
@@ -59,16 +59,39 @@ def _compact_for_resume(path: Path) -> None:
     print(f"resume: compacted {path.name} -- dropped {len(rows) - len(kept)} superseded row(s)")
 
 
+def _check_tag_continuity(path: Path, responder_tag: str | None, judge_tag: str | None) -> None:
+    """Fail loudly if resuming would interleave a different responder/judge into results.csv."""
+    with path.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    existing_responders = {r["responder"] for r in rows if r.get("responder")}
+    existing_judges = {r["judge"] for r in rows if r.get("judge")}
+    if responder_tag is not None and existing_responders - {responder_tag}:
+        raise ContinuityError(
+            f"{path}: existing rows were written by responder(s) "
+            f"{sorted(existing_responders - {responder_tag})}, not {responder_tag!r} -- "
+            "refusing to resume into a directory that would mix responders."
+        )
+    if judge_tag is not None and existing_judges - {judge_tag}:
+        raise ContinuityError(
+            f"{path}: existing rows were judged by {sorted(existing_judges - {judge_tag})}, "
+            f"not {judge_tag!r} -- refusing to resume into a directory that would mix "
+            "judges. Use a fresh output directory (e.g. a new ModelProfile name) for a "
+            "different judge."
+        )
+
+
 class ResultsWriter:
     """Streams EvalRecords to a per-question CSV row-by-row."""
 
-    def __init__(self, path: Path, resume: bool = False) -> None:
+    def __init__(self, path: Path, resume: bool = False,
+                 responder_tag: str | None = None, judge_tag: str | None = None) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._path = path
         # Treat a zero-byte resume file as fresh so the CSV header is written.
         append = resume and path.exists() and path.stat().st_size > 0
         if append:
             _compact_for_resume(path)
+            _check_tag_continuity(path, responder_tag, judge_tag)
         self._fh = path.open("a" if append else "w", newline="", encoding="utf-8")
         self._writer = csv.DictWriter(self._fh, fieldnames=CSV_COLUMNS)
         if not append:
@@ -107,7 +130,11 @@ def save(
         # codepage (e.g. cp1252 on Windows) -- replace rather than crash mid-run.
         sys.stdout.reconfigure(errors="replace")
 
-    with ResultsWriter(detail_path, resume=config.resume) as writer:
+    with ResultsWriter(
+        detail_path, resume=config.resume,
+        responder_tag=f"{config.responder_backend}/{config.responder_model}",
+        judge_tag=f"{config.judge_backend}/{config.judge_model}",
+    ) as writer:
         for record in records:
             writer.add(record)
 

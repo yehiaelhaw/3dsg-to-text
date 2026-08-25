@@ -25,20 +25,6 @@ QA_ROOT = Path(__file__).resolve().parents[1] / "experiments" / "qa"
 QA_FILENAME = "keyfact-qa.jsonl"
 
 
-class MixedComparisonError(ValueError):
-    """Raised when comparative results mix responders or judges."""
-
-
-def require_single_responder_judge(rows: list[dict]) -> None:
-    """Require exactly one nonblank responder and judge."""
-    responders = {(r.get("responder") or "").strip() for r in rows}
-    judges = {(r.get("judge") or "").strip() for r in rows}
-    if len(responders) != 1 or len(judges) != 1 or "" in responders or "" in judges:
-        raise MixedComparisonError(
-            "Thesis comparative outputs require one responder and one judge per results.csv."
-        )
-
-
 def _load_pairs(qa_root: Path | None = None) -> dict[tuple[str, str], str]:
     """Load (scene_id, qid) -> pair_id; return {} if QA files are unavailable."""
     root = Path(qa_root if qa_root is not None else QA_ROOT)
@@ -1018,7 +1004,6 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
         rows = list(csv.DictReader(fh))
     if not rows:
         return None
-    require_single_responder_judge(rows)
 
     cells = _cells(rows)
     responder = rows[0].get("responder", "?")

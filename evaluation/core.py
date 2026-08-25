@@ -18,6 +18,10 @@ def is_context_exceeded(error: Optional[str]) -> bool:
     return bool(error) and error.startswith(CONTEXT_EXCEEDED)
 
 
+class ContinuityError(ValueError):
+    """Raised when resuming would mix responders or judges in one output directory."""
+
+
 @dataclass
 class KeyFact:
     fact:   str
