@@ -132,5 +132,4 @@ the charts.
 | --- | --- |
 | `--models` | comma-separated model directory names under `experiments/results/` (default: all) |
 | `--diagnostics` | also draw the latency diagnostic chart (off by default; confounded, not the cost axis) |
-| `--include-nonprimary` | also pool stress/sensitivity scenes into their own `nonprimary_<dataset>` groups |
-| `--allow-partial` | write a per-dataset group even with fewer than 3 primary scenes, instead of skipping it |
+| `--allow-partial` | write a per-dataset group even with fewer than 3 scenes, instead of skipping it |

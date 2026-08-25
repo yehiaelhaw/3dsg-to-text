@@ -1,6 +1,4 @@
-"""Pool primary-scene results.csv files into per-dataset (and cross-dataset)
-aggregate reports; stress/sensitivity scenes are pooled separately via --include-nonprimary.
-"""
+"""Pool per-scene results.csv files into per-dataset (and cross-dataset) aggregate reports."""
 from __future__ import annotations
 
 import os
@@ -13,13 +11,12 @@ import csv
 from pathlib import Path
 
 from evaluation.axes import dataset_of
-from experiments.scenes import PRIMARY, UnregisteredScene, role_of
+from experiments.scenes import UnregisteredScene, check_registered
 
 OUTPUT_ROOT = Path("experiments/results")
 AGG_DIRNAME = "_aggregate"
-NONPRIMARY_PREFIX = "nonprimary_"
 
-# Require all 3 primary scenes unless --allow-partial is used.
+# Require all 3 scenes per dataset unless --allow-partial is used.
 SCENES_PER_DATASET = 3
 
 
@@ -31,27 +28,20 @@ def _scene_dirs(model_dir: Path) -> list[Path]:
     )
 
 
-def _split_by_role(scene_dirs: list[Path]) -> tuple[list[Path], list[tuple[Path, str]]]:
-    """Partition scene directories into primary and non-primary groups."""
-    primary: list[Path] = []
-    excluded: list[tuple[Path, str]] = []
+def _registered_dirs(scene_dirs: list[Path]) -> list[Path]:
+    """Fail closed on any scene directory with no registry entry."""
     unknown: list[str] = []
     for d in scene_dirs:
         try:
-            role = role_of(d.name)
+            check_registered(d.name)
         except UnregisteredScene:
             unknown.append(d.name)
-            continue
-        if role == PRIMARY:
-            primary.append(d)
-        else:
-            excluded.append((d, role))
     if unknown:
         raise SystemExit(
             f"unregistered scene results: {', '.join(sorted(unknown))}\n"
-            "Every pooled scene must declare a role in experiments/scenes.py "
-            "(primary | stress | sensitivity). Refusing to guess.")
-    return primary, excluded
+            "Every pooled scene must be registered in experiments/scenes.py. "
+            "Refusing to guess.")
+    return scene_dirs
 
 
 def _pool_rows(scene_dirs: list[Path]) -> tuple[list[str], list[dict]]:
@@ -93,30 +83,18 @@ def _write_group(group_dir: Path, fieldnames: list[str], rows: list[dict],
 
 
 def aggregate_model(model_dir: Path, diagnostics: bool = False,
-                    nonprimary: bool = False, allow_partial: bool = False) -> None:
+                    allow_partial: bool = False) -> None:
     scene_dirs = _scene_dirs(model_dir)
     if not scene_dirs:
         print(f"  (no scene results under {model_dir})")
         return
 
-    # Split roles before grouping and report excluded scenes.
-    primary_dirs, excluded = _split_by_role(scene_dirs)
-    if excluded:
-        print(f"  non-primary, excluded from every pooled group: "
-              + ", ".join(f"{d.name} ({role})" for d, role in sorted(excluded)))
-    if not primary_dirs:
-        print(f"  (no PRIMARY scene results under {model_dir})")
-        return
+    scene_dirs = _registered_dirs(scene_dirs)
 
-    # group scenes by dataset, plus an 'all' group spanning every primary scene
-    groups: dict[str, list[Path]] = {"all": list(primary_dirs)}
-    for d in primary_dirs:
+    # group scenes by dataset, plus an 'all' group spanning every scene
+    groups: dict[str, list[Path]] = {"all": list(scene_dirs)}
+    for d in scene_dirs:
         groups.setdefault(dataset_of(d.name), []).append(d)
-
-    # Pooled into their own groups on request, never into `all`.
-    if nonprimary and excluded:
-        for d, _role in excluded:
-            groups.setdefault(NONPRIMARY_PREFIX + dataset_of(d.name), []).append(d)
 
     partial = partial_groups(groups)
     for group, dirs in sorted(groups.items()):
@@ -135,13 +113,13 @@ def aggregate_model(model_dir: Path, diagnostics: bool = False,
 
 
 def partial_groups(groups: dict[str, list[Path]]) -> dict[str, str]:
-    """Return under-filled primary groups, propagating partial status to `all`."""
+    """Return under-filled dataset groups, propagating partial status to `all`."""
     out: dict[str, str] = {}
     for group, dirs in groups.items():
-        if group == "all" or group.startswith(NONPRIMARY_PREFIX):
+        if group == "all":
             continue
         if len(dirs) < SCENES_PER_DATASET:
-            out[group] = f"{len(dirs)}/{SCENES_PER_DATASET} primary scenes"
+            out[group] = f"{len(dirs)}/{SCENES_PER_DATASET} scenes"
     if out and "all" in groups:
         out["all"] = "pools " + ", ".join(sorted(out))
     return out
@@ -153,11 +131,8 @@ def main() -> None:
     ap.add_argument("--diagnostics", action="store_true",
                     help="also draw the operational latency diagnostic (off by default; "
                          "confounded, not the cost axis)")
-    ap.add_argument("--include-nonprimary", action="store_true",
-                    help="also pool stress/sensitivity scenes into their own "
-                         "nonprimary_<dataset> groups")
     ap.add_argument("--allow-partial", action="store_true",
-                    help="write a primary group with fewer than "
+                    help="write a dataset group with fewer than "
                          f"{SCENES_PER_DATASET} scenes instead of skipping it")
     args = ap.parse_args()
 
@@ -176,7 +151,6 @@ def main() -> None:
 
     for model_dir in model_dirs:
         aggregate_model(model_dir, diagnostics=args.diagnostics,
-                        nonprimary=args.include_nonprimary,
                         allow_partial=args.allow_partial)
 
 
