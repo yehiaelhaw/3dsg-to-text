@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-# "+" combinations union capabilities; unknown reps fail open to ALL_CAPS.
+# Unknown reps fail open to ALL_CAPS.
 # metric = arbitrary room-pair geometry; metric_edges = connected-edge geometry.
 # Relation tiers: raw, support, derived. relations_digest is curated; some
 # per-subject raw lists are capped without creating a separate tier.
@@ -58,20 +58,16 @@ TYPE_NEEDS: dict[str, set[str] | list[set[str]] | dict[str, set[str] | list[set[
 
 
 def caps(rep: str) -> set[str]:
-    """Union capabilities across "+" components."""
-    out: set[str] = set()
-    for part in rep.split("+"):
-        out |= REP_CAPS.get(part, ALL_CAPS)
-    return out
+    """Capabilities of a representation; unknown names fail open to ALL_CAPS."""
+    return REP_CAPS.get(rep, ALL_CAPS)
 
 
 def validate_declared(reps: set[str], qtypes: set[str | None]) -> None:
     """Reject undeclared reps/types before final runs instead of failing open."""
     problems: list[str] = []
     for rep in sorted(reps):
-        for part in rep.split("+"):
-            if part not in REP_CAPS:
-                problems.append(f"representation {part!r} (from {rep!r}) has no REP_CAPS entry")
+        if rep not in REP_CAPS:
+            problems.append(f"representation {rep!r} has no REP_CAPS entry")
     for qt in sorted(qtypes, key=lambda t: t or ""):
         if not qt:
             problems.append("a question has no question_type (never filtered under fail-open)")

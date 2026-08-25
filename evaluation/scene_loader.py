@@ -14,15 +14,7 @@ def list_representations(scene_contexts_dir: Path, scene_id: str) -> list[str]:
 
 
 def load(scene_contexts_dir: Path, scene_id: str, representation: str) -> str:
-    """Scene context string for scene_id / representation. A multi-view combination ("a+b") loads and concatenates each part under a per-view header; auto-discovery only lists single files. Raises FileNotFoundError if a part has no matching file."""
-    if "+" in representation:
-        parts = representation.split("+")
-        blocks = []
-        for part in parts:
-            text = load(scene_contexts_dir, scene_id, part).strip()
-            blocks.append(f"=== {part.upper()} ===\n{text}")
-        return "\n\n".join(blocks) + "\n"
-
+    """Scene context string for scene_id / representation. Raises FileNotFoundError if no matching file exists."""
     scene_dir = Path(scene_contexts_dir) / scene_id
     if not scene_dir.is_dir():
         raise FileNotFoundError(f"Scene directory not found: {scene_dir}")
