@@ -17,6 +17,9 @@ The pipeline has three stages:
 This README covers the code only. The research design — why these serializations, why these
 questions, what the results mean — is the subject of the thesis in `thesis/`.
 
+Forking this to add your own serialization, dataset, or model? See
+[EXTENDING.md](EXTENDING.md).
+
 ## Layout
 
 ```
