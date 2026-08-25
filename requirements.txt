@@ -10,3 +10,6 @@ python-dotenv>=1.0    # reads GEMINI_API_KEY / OPENAI_API_KEY from .env
 # Reporting layer (evaluation/plots.py, report.py).
 matplotlib>=3.8
 numpy>=1.26
+
+# Dataset download (dataset/ProcTHOR-10K/download_dataset.py).
+prior>=2.0            # allenai dataset loader

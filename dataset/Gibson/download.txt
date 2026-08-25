@@ -1,0 +1,3 @@
+Dataset: Gibson / 3D Scene Graph -- building-scale scene graphs
+Source:  https://sdss.redivis.com/datasets/1kf9-cfjvtqc7q
+Place:   3DSceneGraph_<Building>.npz files directly in this folder

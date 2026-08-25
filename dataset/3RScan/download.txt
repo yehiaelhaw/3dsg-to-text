@@ -1,0 +1,3 @@
+Dataset: 3RScan -- RGB-D reconstructions of indoor scenes (paired with 3DSSG annotations)
+Source:  https://3dssg.github.io/  (section "Dataset")
+Place:   each scan's files under dataset/3RScan/<scan-id>/

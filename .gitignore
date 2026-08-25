@@ -1,17 +1,18 @@
 __pycache__/
-# Tokenizer vocabularies pulled from ollama /api/show, keyed by served blob
-# digest (evaluation/token_count.py). Regenerated on demand; ~2MB per model.
-evaluation/.token_cache/
-dataset/
 .env
 .vscode/
+
+# Generated/downloaded data and results
+# dataset/<dataset>/download files are force-tracked with `git add -f`
+dataset/
+scene_contexts/
 experiments/results/
 experiments/results_smoke/
 experiments/results_backup/
-# Timestamped pre-edit copies of the QA dataset + affected results (backup.py).
-# Large and reconstructible; keep them local.
 experiments/backups/
-scene_contexts/
+evaluation/.token_cache/
+
+# Local-only
 evaluation/tests/
 evaluation/thesis_figures.py
 /scripts/

@@ -1,0 +1,3 @@
+Dataset: 3DSSG -- semantic scene graph annotations for 3RScan
+Source:  https://3dssg.github.io/  (section "Dataset")
+Place:   objects.json, relationships.json, classes.txt, attributes.txt, etc. directly in this folder

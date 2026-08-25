@@ -61,7 +61,7 @@ The code refers to these; they are generated, downloaded, or local-only.
 
 | Path | What it is |
 | --- | --- |
-| `dataset/` | the source datasets (Gibson, ProcTHOR-10K, 3RScan/3DSSG), downloaded separately |
+| `dataset/` | the source datasets (Gibson, ProcTHOR-10K, 3RScan/3DSSG), downloaded separately — see each subfolder's `download.txt` |
 | `scene_contexts/` | parser output — the serializations the responder actually reads |
 | `experiments/results/` | run output: `results.csv`, `aggregate.csv`, `responses.jsonl`, `report.md`, charts |
 | `experiments/backups/` | timestamped pre-edit copies of QA data and affected results |
