@@ -30,7 +30,7 @@ parsers/             One module per serialization, each a standalone CLI. Files
 evaluation/          The evaluation framework.
   config.py          EvalConfig — everything one run needs
   core.py            Question / Response / EvalRecord + the results.csv schema
-  dataset.py         reads the authored keyfact-qa.jsonl files
+  dataset.py         reads the authored qa/<scene>.jsonl files
   scene_loader.py    reads scene_contexts/
   scope.py           which serializations can answer which question types
   axes.py            how serializations group into comparisons, for reporting
@@ -49,7 +49,7 @@ experiments/         Run configuration and drivers.
   scenes.py          scene registry — which scenes, which QA file, which reps
   run_experiments.py runs the responder x scene matrix
   aggregate_results.py  pools per-scene results and redraws the charts
-  qa/<scene>/keyfact-qa.jsonl   the authored questions and their key facts
+  qa/<scene>.jsonl   the authored questions and their key facts
 
 thesis/              LaTeX sources.
 ```

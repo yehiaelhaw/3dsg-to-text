@@ -22,7 +22,6 @@ from evaluation.scope import in_scope
 
 # Load QA pair_ids for matched fact-set analysis.
 QA_ROOT = Path(__file__).resolve().parents[1] / "experiments" / "qa"
-QA_FILENAME = "keyfact-qa.jsonl"
 
 
 def _load_pairs(qa_root: Path | None = None) -> dict[tuple[str, str], str]:
@@ -31,7 +30,7 @@ def _load_pairs(qa_root: Path | None = None) -> dict[tuple[str, str], str]:
     pairs: dict[tuple[str, str], str] = {}
     if not root.is_dir():
         return pairs
-    for qa_path in sorted(root.glob(f"*/{QA_FILENAME}")):
+    for qa_path in sorted(root.glob("*.jsonl")):
         with qa_path.open(encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()

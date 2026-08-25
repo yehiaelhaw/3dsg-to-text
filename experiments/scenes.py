@@ -26,7 +26,7 @@ class Scene:
 
 
 def _qa(scene_id: str) -> str:
-    return f"experiments/qa/{scene_id}/keyfact-qa.jsonl"
+    return f"experiments/qa/{scene_id}.jsonl"
 
 
 # Explicit ProcTHOR representation set; relation-linearization is evaluated on 3RScan.
