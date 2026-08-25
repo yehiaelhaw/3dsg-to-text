@@ -7,6 +7,6 @@ google-genai>=2.0     # Gemini judge (confirmatory scoring)
 openai>=2.0           # OpenAI judge (cross-vendor judge check only)
 python-dotenv>=1.0    # reads GEMINI_API_KEY / OPENAI_API_KEY from .env
 
-# Reporting layer (evaluation/plots.py, report.py, thesis_figures.py).
+# Reporting layer (evaluation/plots.py, report.py).
 matplotlib>=3.8
 numpy>=1.26

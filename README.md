@@ -11,8 +11,8 @@ The pipeline has three stages:
 2. **Evaluate** — a *responder* LLM answers authored questions with one serialization as its
    only context; a *judge* LLM then scores each answer against hand-written key facts
    (`evaluation/` → `experiments/results/<model>/<scene>/results.csv`).
-3. **Report** — the CSVs are pooled into tables, charts and the thesis figures
-   (`evaluation/report.py`, `plots.py`, `thesis_figures.py`).
+3. **Report** — the CSVs are pooled into tables and charts
+   (`evaluation/report.py`, `plots.py`).
 
 This README covers the code only. The research design — why these serializations, why these
 questions, what the results mean — is the subject of the thesis in `thesis/`.
@@ -39,10 +39,8 @@ evaluation/          The evaluation framework.
   results.py         CSV writing and aggregation
   report.py          the numeric report (report.md)
   plots.py           charts
-  thesis_figures.py  page-sized renders + LaTeX tables for the thesis
   token_count.py     exact pre-call prompt token counts for Ollama models
   llm/               provider abstraction: ollama, gemini, openai
-  tests/             checks; see "Tests" below
 
 experiments/         Run configuration and drivers.
   models.py          responder profiles (which model, which host, which options)
@@ -136,24 +134,3 @@ the charts.
 | `--diagnostics` | also draw the latency diagnostic chart (off by default; confounded, not the cost axis) |
 | `--include-nonprimary` | also pool stress/sensitivity scenes into their own `nonprimary_<dataset>` groups |
 | `--allow-partial` | write a per-dataset group even with fewer than 3 primary scenes, instead of skipping it |
-
-## Tests
-
-The files in `evaluation/tests/` are **standalone scripts, not a pytest suite**. Each is run
-on its own and prints `PASS` or raises:
-
-```bash
-python -m evaluation.tests.test_scope_smoke
-python -m evaluation.tests.test_reporting_smoke
-```
-
-Most run offline. These five call live LLMs, so they cost money or need a running Ollama
-server: `test_runner_smoke`, `test_results_smoke`, `test_ollama_smoke`, `test_gemini_smoke`,
-`test_context_based_smoke`. `test_token_count_replay` needs the Ollama server too, to read
-back the tokenizer it replays against.
-
-Six offline ones need `dataset/` present, because they check live parser output against
-freshly loaded source geometry rather than against a fixture:
-`test_procthor_loader_smoke`, `test_format_axis_equivalence`, `test_framing_layout_isolation`,
-`test_metric_framing_equivalence`, `test_topology_metric_equivalence`,
-`test_structure_presentation_rename`.

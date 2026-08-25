@@ -12,6 +12,8 @@ experiments/results_backup/
 # Large and reconstructible; keep them local.
 experiments/backups/
 scene_contexts/
+evaluation/tests/
+evaluation/thesis_figures.py
 /scripts/
 /docs/
 /logs/
