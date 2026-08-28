@@ -63,6 +63,22 @@ QUESTION: {question}
 MODEL ANSWER: {answer}
 
 For each numbered fact below, answer YES if the MODEL ANSWER contains or clearly implies it, or NO if it does not.
+A fact that names a specific object, ID, or room requires that same specific object, ID, or room to
+appear in the ANSWER -- if the ANSWER instead says it lacks the information and offers only generic,
+hypothetical, or categorical speculation (e.g. "it could be a chair or a cabinet" without naming
+which one), that does NOT satisfy a fact about a specific named object, even if the general category
+is mentioned.
+A fact that requires multiple separate conditions to ALL hold (for example: belonging to several
+named groups or categories, satisfying several stated criteria, or being true in more than one
+respect) is YES only if the ANSWER supports every one of those conditions individually. Check each
+condition one at a time before answering. If your own reasoning finds that even one required
+condition is unsupported or not mentioned, your verdict for that fact must be NO -- never answer YES
+when your stated reasoning identifies a missing or unsupported condition.
+If the ANSWER explores several candidate objects, relations, or paths while reasoning but then states
+a specific final, complete conclusion (a final list, a single named answer, a definitive count), only
+credit a fact against that final conclusion. A fact about an item that appears only in an
+intermediate or exploratory step, and is not included in the final conclusion, is NOT supported --
+even if that item was mentioned alongside others that did make the final conclusion.
 Start each line with the number and YES or NO, then add a brief reason. Example:
 1. YES — the answer explicitly states Room 22.0
 2. NO — no distance value is mentioned
