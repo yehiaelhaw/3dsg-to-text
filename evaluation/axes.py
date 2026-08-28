@@ -52,8 +52,12 @@ class Axis:
     probe_types: list[str]        # question types licensed for this reading
     headline_pair: tuple[str, str] | None = None  # paired-delta contrast; None for a pure ladder
     note: str = ""                # short interpretation caveat surfaced in the card
-    # "axis", "companion", or "exhibit".
-    kind: str = "axis"
+    # Shared group key for other readings of the same underlying axis; they nest
+    # as subsections under one heading instead of each getting a top-level one.
+    family: str = ""
+    # True for a non-axis reading with no `family`; nests under a shared
+    # "Further readings" heading so it's never miscounted as a sixth axis.
+    secondary: bool = False
     # Declared confound; caps an otherwise-consistent verdict at CAPPED_VERDICT.
     confound: str = ""
     # Empty = whole axis; otherwise only pairs touching these representations.
@@ -77,7 +81,8 @@ class Axis:
         return ""
 
 
-# Five thesis axes; remaining entries are companions or exhibits.
+# Five thesis axes; remaining entries are further readings grouped under one of them
+# (see `family`).
 AXES: list[Axis] = [
     Axis("spatial_encoding", "Spatial encoding", "procthor",
          ["inventory", "topology_inventory", "metric_relations", "json_mini"],
@@ -88,16 +93,33 @@ AXES: list[Axis] = [
     Axis("metric_rung", "Spatial encoding (metric rung)", "gibson",
          ["metric_relations"],
          ["proximity"],
-         note="Gibson companion reading of the spatial-encoding metric rung on "
-              "`proximity`, using room-level metric geometry.",
-         kind="companion"),
-    Axis("format", "Block vs. sentence rendering", "procthor",
+         note="Gibson reading of the spatial-encoding metric rung on `proximity`, "
+              "using room-level metric geometry.",
+         family="Spatial encoding"),
+    Axis("format", "Formatting", "procthor",
          ["topology_inventory", "narrative"],
          ["connectivity"],
          headline_pair=("topology_inventory", "narrative"),
          note="`topology_inventory` and `narrative` are fact-for-fact equivalent and "
               "differ only in rendering; `prose` is excluded because it contains "
               "additional information."),
+    Axis("json_formatting", "Formatting (JSON)", "procthor",
+         ["json_pretty"],
+         ["connectivity", "direction", "route", "aggregation", "proximity",
+          "set_logic", "containment"],
+         family="Formatting",
+         note="Same whitespace-only manipulation as the rendering axis above, run "
+              "separately on the full-record anchor rather than pooled with it: "
+              "`json_pretty` and `json_mini` contain identical keys, ordering, and "
+              "values, so pairing either against `topology_inventory`/`narrative` "
+              "would mix in a genuine content difference. `json_mini` remains the "
+              "full-record anchor rather than an accuracy bound."),
+    Axis("json_formatting_gibson", "Formatting (JSON, Gibson)", "gibson",
+         ["json_pretty"],
+         ["aggregation", "proximity", "set_logic", "direction", "containment"],
+         family="Formatting",
+         note="Gibson reading of the same formatting ablation. 3RScan has no reading "
+              "here because `json_pretty` fails the coverage gate there."),
     Axis("structure_presentation", "Graph-structure representation", "procthor",
          ["topology", "room_tree", "graph_digest"],
          ["connectivity"],
@@ -127,45 +149,28 @@ AXES: list[Axis] = [
          ["topology_metric", "navigation"],
          ["route", "direction", "connectivity"],
          headline_pair=("topology_metric", "navigation"),
-         kind="axis",
          note="Fact- and layout-matched over the same doorway edges and geometry. "
               "Framing jointly changes figure-ground assignment and "
               "locative/navigational register, so it is not an egocentric/allocentric "
               "manipulation. Route tests framing, direction makes the converse relation "
               "task-relevant, and connectivity is diagnostic only."),
-    Axis("framing_gibson", "Relational vs. navigational framing (Gibson companion)",
-         "gibson",
+    Axis("framing_gibson", "Relational vs. navigational framing (Gibson)", "gibson",
          ["metric_framing", "navigation"],
          ["direction"],
          headline_pair=("metric_framing", "navigation"),
-         kind="companion",
-         note="Gibson companion using the same K-nearest-neighbour room pairs and "
+         family="Relational vs. navigational framing",
+         note="Gibson reading using the same K-nearest-neighbour room pairs and "
               "metrics in locative and navigational form. Equivalence is checked against "
               "independently recomputed K-NN geometry; `direction` is the only in-scope "
               "type because Gibson has no door graph."),
     Axis("content_verbosity", "Verbosity on content questions", "gibson",
          ["prose"],
          ["containment", "aggregation", "set_logic"],
-         kind="exhibit",
+         secondary=True,
          note="For `containment`, `aggregation`, and `set_logic`, `prose` and "
               "`json_mini` contain the information the questions require; `json_mini` "
-              "adds unused channels, so this exhibit tests verbosity/content load rather "
+              "adds unused channels, so this reading tests verbosity/content load rather "
               "than formatting."),
-    Axis("json_formatting", "JSON formatting (pretty vs minified)", "procthor",
-         ["json_pretty"],
-         ["connectivity", "direction", "route", "aggregation", "proximity",
-          "set_logic", "containment"],
-         kind="exhibit",
-         note="`json_pretty` and `json_mini` contain identical keys, ordering, and "
-              "values; only formatting whitespace differs. This is a two-sided "
-              "formatting ablation, and `json_mini` remains the full-record anchor rather "
-              "than an accuracy bound."),
-    Axis("json_formatting_gibson", "JSON formatting (Gibson)", "gibson",
-         ["json_pretty"],
-         ["aggregation", "proximity", "set_logic", "direction", "containment"],
-         kind="companion",
-         note="Gibson companion to the same formatting ablation. 3RScan has no "
-              "companion because `json_pretty` fails the coverage gate there."),
 ]
 
 AXIS_BY_ID = {a.id: a for a in AXES}

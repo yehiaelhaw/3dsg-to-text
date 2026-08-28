@@ -167,8 +167,7 @@ def _plot_axis_cards(results_path: Path, rows: list[dict], out_dir: Path, color:
             ax.grid(axis="y", linestyle="--", alpha=0.3)
             if gi == 0:
                 ax.set_ylabel("Answer correctness")
-        kind = "" if axis.kind == "axis" else f" [{axis.kind}]"
-        fig.suptitle(f"{axis.label}{kind}   (host: {axis.host}; "
+        fig.suptitle(f"{axis.label}   (host: {axis.host}; "
                      f"{NON_SPATIAL_ANCHOR}=dashed, {FULL_RECORD_ANCHOR}=dotted, "
                      f"hatch = {VERDICT_NOT_LICENSED})", fontsize=11)
         fig.text(0.01, 0.002, NOT_LICENSED_NOTE, ha="left", va="bottom",

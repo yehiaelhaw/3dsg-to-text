@@ -185,8 +185,45 @@ def _axis_card(axis, rows: list[dict]) -> list[str]:
         body.append("")
     if not body:
         return []
-    kind = "" if axis.kind == "axis" else f" ({axis.kind})"
-    return [f"## {axis.label}{kind}", f"_{axis.note}_", ""] + body
+    return [f"## {axis.label}", f"_{axis.note}_", ""] + body
+
+
+_FURTHER_READINGS = "Further readings"
+
+
+def _axis_sections(rows: list[dict]) -> list[str]:
+    """Render every axis card, grouping same-family readings under one heading.
+
+    Multi-member families get one `##` heading with `###` subsections; lone
+    members and `secondary` axes (grouped under "Further readings") render flat.
+    """
+
+    def group_key(axis) -> str:
+        if axis.family:
+            return axis.family
+        if axis.secondary:
+            return _FURTHER_READINGS
+        return axis.label
+
+    lines: list[str] = []
+    i = 0
+    while i < len(AXES):
+        key = group_key(AXES[i])
+        group = [AXES[i]]
+        while len(group) + i < len(AXES) and group_key(AXES[i + len(group)]) == key:
+            group.append(AXES[i + len(group)])
+        i += len(group)
+        cards = [c for c in (_axis_card(axis, rows) for axis in group) if c]
+        if not cards:
+            continue
+        if key == _FURTHER_READINGS:
+            lines += [f"## {_FURTHER_READINGS}", ""]
+            cards = [[f"#{card[0]}", *card[1:]] for card in cards]
+        elif len(cards) > 1:
+            cards = [cards[0]] + [[f"#{card[0]}", *card[1:]] for card in cards[1:]]
+        for card in cards:
+            lines += card
+    return lines
 
 
 def _planning_section(rows: list[dict]) -> list[str]:
@@ -1026,8 +1063,7 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
     lines += _matched_section(rows, pairs)
     # No-op for per-scene reports; needs an _aggregate/<group>/results.csv path.
     lines += _cross_section(rows, results_path, pairs)
-    for axis in AXES:
-        lines += _axis_card(axis, rows)
+    lines += _axis_sections(rows)
     lines += _planning_section(rows)
     lines += _coverage_section(rows)
     lines += _small_n_section(cells)
