@@ -638,7 +638,6 @@ def _matched_cost_quality_point(ac_by_qid: dict[str, list[float]],
 def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
     """Plot per-observation diagnostics; latency is optional."""
     import matplotlib.pyplot as plt
-    import numpy as np
 
     all_rows = list(csv.DictReader(results_path.open(encoding="utf-8")))
     rows = [r for r in all_rows if not r["error"]]
@@ -740,34 +739,10 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
         if p.name not in written_cq:
             p.unlink()
 
-    # Faithfulness diagnostic; remove stale output when unavailable.
-    if any(r["faithfulness"] != "" for r in rows):
-        fig, ax = plt.subplots(figsize=(7.5, 6.5))
-        for rep in representations:
-            rr = [r for r in rows if r["representation"] == rep
-                  and r["faithfulness"] != "" and r["answer_correctness"] != ""]
-            xs = np.array([float(r["faithfulness"]) for r in rr])
-            ys = np.array([float(r["answer_correctness"]) for r in rr])
-            if len(xs) == 0:
-                continue
-            # Plot exact values; use alpha for overplotting.
-            ax.scatter(xs, ys, label=rep, color=colors.get(rep, "gray"), alpha=0.5, s=22)
-        ax.set_xlabel("Faithfulness (grounded in context)")
-        ax.set_ylabel("Answer correctness (matches key facts)")
-        # Faithfulness is diagnostic only; no ranking threshold.
-        ax.set_title("Faithfulness vs Answer Correctness (diagnostic)")
-        ax.set_xlim(0, 1.05)
-        ax.set_ylim(0, 1.08)
-        ax.legend(fontsize=8, ncol=2)
-        ax.grid(linestyle="--", alpha=0.4)
-        fig.tight_layout()
-        fig.savefig(out_dir / "faith_vs_ac.png", dpi=150)
-        plt.close(fig)
-        print(f"plot -> {out_dir / 'faith_vs_ac.png'}")
-    else:
-        stale = out_dir / "faith_vs_ac.png"
-        if stale.exists():
-            stale.unlink()
+    # Faithfulness metric was removed; clean up any chart left from older runs.
+    stale = out_dir / "faith_vs_ac.png"
+    if stale.exists():
+        stale.unlink()
 
     # -- Latency diagnostic --
     for stale_name in ("latency_comparison.png",):

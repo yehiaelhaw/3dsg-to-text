@@ -33,7 +33,7 @@ def _select(items, names, kind, key):
 
 
 def build_config(profile, scene, *, judge_backend=None, judge_model=None,
-                  score_only=False, compute_faithfulness=False, representations=None,
+                  score_only=False, representations=None,
                   question_types=None):
     """Build one EvalConfig for a model × scene cell."""
     from evaluation.config import EvalConfig
@@ -52,8 +52,6 @@ def build_config(profile, scene, *, judge_backend=None, judge_model=None,
         question_types=question_types,
         # One responder draw per cell.
         repetitions=1,
-        # Faithfulness is disabled during Gemma screening due to context limits.
-        compute_faithfulness=compute_faithfulness,
         resume=True,
         score_only=score_only,
         # Require explicit scope declarations before running.
@@ -79,8 +77,6 @@ def main():
     ap.add_argument("--judge-backend", help="override the judge backend "
                                              f"(default: {JUDGE_BACKEND} screening judge)")
     ap.add_argument("--judge-model", help=f"override the judge model (default: {JUDGE_MODEL})")
-    ap.add_argument("--faithfulness", action="store_true",
-                     help="also compute the faithfulness metric (off by default)")
     ap.add_argument("--no-report", action="store_true",
                      help="skip plots/report.md (CSVs still written; rebuild "
                           "later with aggregate_results.py)")
@@ -125,7 +121,7 @@ def main():
         cfg = build_config(
             prof, scene,
             judge_backend=args.judge_backend, judge_model=args.judge_model,
-            score_only=args.score_only, compute_faithfulness=args.faithfulness,
+            score_only=args.score_only,
             representations=reps, question_types=qtypes,
         )
         save(iter_records(cfg), cfg, write_report=not args.no_report)

@@ -17,7 +17,6 @@ from evaluation.core import CSV_COLUMNS, ContinuityError, EvalRecord, is_context
 _AGGREGATE_COLUMNS = [
     "dataset", "representation", "question_type",
     "n", "error_count", "context_exceeded", "n_scored", "coverage",
-    "faithfulness_mean", "faithfulness_std",
     "answer_correctness_mean", "answer_correctness_std", "answer_correctness_q_range",
     # Diagnostic (supporting-detail coverage, not correctness). n_detail is its OWN
     # support -- sparser than n_scored, since only questions with weight<=1 facts
@@ -251,7 +250,6 @@ def _group_row(dataset: str, representation: str, question_type: str, rows: list
             return ""
         return f"{min(vals):.4f}..{max(vals):.4f}"
 
-    fth_q = per_question_means("faithfulness")
     ac_q  = per_question_means("answer_correctness")
     det_q = per_question_means("answer_correctness_detail")  # sparser: only questions with detail facts
 
@@ -265,8 +263,6 @@ def _group_row(dataset: str, representation: str, question_type: str, rows: list
         "n_scored":                n_scored,
         # Coverage is the scored fraction of raw evaluation instances.
         "coverage":                f"{n_scored / n:.4f}" if n else "",
-        "faithfulness_mean":       mean_of(fth_q),
-        "faithfulness_std":        std_of(fth_q),
         "answer_correctness_mean": mean_of(ac_q),
         "answer_correctness_std":  std_of(ac_q),
         "answer_correctness_q_range": q_range_of(ac_q),
@@ -293,8 +289,6 @@ def _operational_total_row(rows: list[dict]) -> dict:
         "context_exceeded":        context_exceeded,
         "n_scored":                n_scored,
         "coverage":                f"{n_scored / n:.4f}" if n else "",
-        "faithfulness_mean":       "",
-        "faithfulness_std":        "",
         "answer_correctness_mean": "",
         "answer_correctness_std":  "",
         "answer_correctness_q_range": "",

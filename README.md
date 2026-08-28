@@ -116,7 +116,6 @@ python -m experiments.run_experiments --models qwen2.5-14b --scenes Brinnon \
 | `--generate-only` | generate responses only; judge later with `--score-only` |
 | `--score-only` | re-judge cached `responses.jsonl` instead of generating (needs the two below) |
 | `--judge-backend` / `--judge-model` | override the judge, e.g. `gemini` / `gemini-2.5-flash` |
-| `--faithfulness` | also compute the faithfulness metric (off by default) |
 | `--no-report` | skip plots/`report.md` per scene (CSVs still written); rebuild later with `aggregate_results` |
 
 `--generate-only` and `--score-only` are mutually exclusive.

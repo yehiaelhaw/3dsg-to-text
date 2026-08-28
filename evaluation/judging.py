@@ -7,42 +7,6 @@ import re
 from evaluation.core import KeyFact
 from evaluation.llm.base import LLMProvider
 
-_FAITHFULNESS_PROMPT = """\
-You are a strict faithfulness judge for a 3D scene-graph QA system.
-
-CONTEXT (scene graph):
-{context}
-
-QUESTION:
-{question}
-
-ANSWER:
-{answer}
-
-Task: Score how well the ANSWER is supported by the CONTEXT on a scale from 0.0 to 1.0,
-where 1.0 means every claim is directly supported and 0.0 means the answer contradicts or invents information not present.
-Award partial credit proportional to the fraction of claims that are supported.
-
-Pay special attention to room-object assignments: if the answer states that a specific object is in a specific room, verify that the context lists that object under that room — not just that the object exists somewhere in the scene.
-
-Respond with ONLY a single decimal number between 0.0 and 1.0. No explanation."""
-
-
-def faithfulness(
-    question: str,
-    context: str,
-    answer: str,
-    judge: LLMProvider,
-) -> float:
-    prompt = _FAITHFULNESS_PROMPT.format(
-        context=context.strip(),
-        question=question.strip(),
-        answer=answer.strip(),
-    )
-    result = judge.generate(prompt)
-    return _parse_score(result.text)
-
-
 _CORRECTNESS_PROMPT = """\
 You are a correctness judge for a 3D scene-graph QA system.
 

@@ -34,8 +34,6 @@ class EvalConfig:
     scope_filter:       bool                = True
     # Thesis-reportable runs require fail-closed scope validation.
     strict_scope:       bool                = False
-    # Faithfulness is diagnostic only; disabling it avoids the extra judge call.
-    compute_faithfulness: bool              = True
 
     embedding_model:    str                 = "all-MiniLM-L6-v2"
     # Resume by skipping completed, non-error cells already in results.csv.

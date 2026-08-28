@@ -366,7 +366,6 @@ def score_responses(config: EvalConfig) -> Iterator[EvalRecord]:
 
     records = _load_cache(path)
     done = _load_done_keys(config) if config.resume else set()
-    ctx_cache: dict[tuple[str, str], str] = {}
 
     print(f"PHASE 2/2  score {len(records)} responses (judge: {judge_tag})")
 
@@ -374,7 +373,7 @@ def score_responses(config: EvalConfig) -> Iterator[EvalRecord]:
         key = (rec["question_id"], rec["representation"], str(rec["repetition"]))
         if key in done:
             continue
-        yield _score_one(rec, config, judge, judge_tag, ctx_cache)
+        yield _score_one(rec, config, judge, judge_tag)
 
 
 def _load_cache(path: Path) -> list[dict]:
@@ -394,7 +393,7 @@ def _load_cache(path: Path) -> list[dict]:
     return list(by_key.values())
 
 
-def _score_one(rec: dict, config, judge, judge_tag, ctx_cache) -> EvalRecord:
+def _score_one(rec: dict, config, judge, judge_tag) -> EvalRecord:
     question = Question(
         id=rec["question_id"],
         scene_id=rec["scene_id"],
@@ -426,12 +425,6 @@ def _score_one(rec: dict, config, judge, judge_tag, ctx_cache) -> EvalRecord:
     try:
         scores = MetricScores()
 
-        if config.compute_faithfulness:
-            context = _get_context(config, question.scene_id, response.representation, ctx_cache)
-            scores.faithfulness = judging.faithfulness(
-                question.text, context, response.raw_answer, judge
-            )
-
         rubric_reasoning = ""
         if question.key_facts:
             (scores.answer_correctness,
@@ -451,13 +444,6 @@ def _score_one(rec: dict, config, judge, judge_tag, ctx_cache) -> EvalRecord:
             responder=rec["responder"], judge=judge_tag,
             error=traceback.format_exc(),
         )
-
-
-def _get_context(config, scene_id, representation, cache) -> str:
-    key = (scene_id, representation)
-    if key not in cache:
-        cache[key] = scene_loader.load(config.scene_contexts_dir, scene_id, representation)
-    return cache[key]
 
 
 def _load_done_keys(config: EvalConfig) -> set[tuple[str, str, str]]:
