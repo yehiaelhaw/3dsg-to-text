@@ -9,7 +9,7 @@ from pathlib import Path
 
 from evaluation.scope import in_scope as _in_scope
 from evaluation.axes import (
-    AXES, FULL_RECORD_ANCHOR, MIN_COVERAGE,
+    AXES, FULL_RECORD_ANCHOR,
     MIN_OBSERVATIONS, NON_SPATIAL_ANCHOR, PRACTICAL_MARGIN,
     VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
     VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED, dataset_of, rep_role,
@@ -69,9 +69,6 @@ REP_COLORS: dict[str, str] = {
     "relations_subject":             "#b15928",
     "relations_digest":              "#fdbf6f",
     "relations_tree":                "#8c510a",
-    # multi-view combinations
-    "topology+metric_relations":     "#fec4ff",
-    "graph_digest+metric_relations": "#ce1256",
 }
 
 

@@ -598,7 +598,7 @@ def _recut_section(rows: list[dict]) -> list[str]:
                           " / ".join(f"{v:+.3f}" for v in p.scene_deltas.values()),
                           f"{p.mean:+.3f}", str(p.n_questions),
                           p.verdict + (f" ({p.ineligible})" if p.ineligible else "")])
-    return (["## Vocabulary re-cut: natural vs constructed (thesis 4.6)",
+    return (["## Vocabulary re-cut: natural vs constructed",
              "_Split vocabulary-confounded comparisons by natural/constructed wording; each subset keeps its own gates._", ""]
             + _table(["axis", "type", "comparison", "style", "scene deltas", "mean",
                       "n_q", "verdict"], trows) + [""])
@@ -688,7 +688,7 @@ def _matched_section(rows: list[dict], pairs: dict[tuple[str, str], str]) -> lis
             r["verdict"] + (f" ({r['ineligible']})" if r["ineligible"] else ""),
         ])
 
-    return (["## Matched fact-sets: does the lead depend on wording? (thesis 4.6)",
+    return (["## Matched fact-sets: does the lead depend on wording?",
              "_Within each fact-set, mean = d_constructed - d_natural; incomplete sets are dropped._", ""]
             + _table(["axis", "type", "comparison", "d_natural", "d_constructed",
                       "scene deltas", "mean", "fact-sets", "verdict"], trows) + [""])
@@ -777,7 +777,6 @@ def _cross_section(rows: list[dict], results_path: Path,
     if not here:
         return []
     judges_here = sorted({r.get("judge", "?") for r in rows})
-    responder = rows[0].get("responder", "?")
 
     # Collect exclusions before rendering so summary and details use the same evidence.
     refused: dict[str, list[str]] = {}
