@@ -15,7 +15,7 @@ from evaluation.axes import (
     MIN_OBSERVATIONS, MIN_SCENES_SHOWING, NON_SPATIAL_ANCHOR, PRACTICAL_MARGIN,
     VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
     VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED,
-    dataset_of, rep_role, tier_of,
+    dataset_of, rep_role,
 )
 from evaluation.core import is_context_exceeded
 from evaluation.scope import in_scope
@@ -1007,9 +1007,7 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
     cells = _cells(rows)
     responder = rows[0].get("responder", "?")
     judge = rows[0].get("judge", "?")
-    tier = tier_of(judge)
-    judge_line = (f"- judge: `{judge}`  |  tier: **{tier}**"
-                  + ("  (candidate-selection tier only)" if tier == "screening" else ""))
+    judge_line = f"- judge: `{judge}`"
     datasets = sorted({dataset_of(r["scene_id"]) for r in rows})
     today = datetime.date.today().isoformat()
 
@@ -1026,7 +1024,8 @@ def write_report(results_path: Path, aggregate_path: Path | None = None) -> Path
     lines += _paired_section(rows, pairs)
     lines += _recut_section(rows)
     lines += _matched_section(rows, pairs)
-    # Cross-responder check is auxiliary and omitted from the default report.
+    # No-op for per-scene reports; needs an _aggregate/<group>/results.csv path.
+    lines += _cross_section(rows, results_path, pairs)
     for axis in AXES:
         lines += _axis_card(axis, rows)
     lines += _planning_section(rows)

@@ -13,8 +13,8 @@ from experiments.models import MODEL_PROFILES
 from experiments.scenes import SCENES
 
 JUDGE_BACKEND = "ollama"
-JUDGE_MODEL = "gemma2:9b"
-JUDGE_OPTIONS = {"temperature": 0.0}
+JUDGE_MODEL = "gemma3:27b-it-qat"
+JUDGE_OPTIONS = {"temperature": 0.0, "num_ctx": 8192}
 
 OUTPUT_ROOT = "experiments/results"
 
@@ -74,8 +74,7 @@ def main():
     mode.add_argument("--score-only", action="store_true",
                      help="re-judge cached responses.jsonl instead of generating "
                           "(requires --judge-backend/--judge-model)")
-    ap.add_argument("--judge-backend", help="override the judge backend "
-                                             f"(default: {JUDGE_BACKEND} screening judge)")
+    ap.add_argument("--judge-backend", help=f"override the judge backend (default: {JUDGE_BACKEND})")
     ap.add_argument("--judge-model", help=f"override the judge model (default: {JUDGE_MODEL})")
     ap.add_argument("--no-report", action="store_true",
                      help="skip plots/report.md (CSVs still written; rebuild "
@@ -84,7 +83,7 @@ def main():
 
     if args.score_only and not (args.judge_backend and args.judge_model):
         raise SystemExit("--score-only requires --judge-backend and --judge-model "
-                          "(re-judging with the same screening judge is a no-op)")
+                          "(re-judging with the same judge is a no-op)")
 
     models = _select(MODEL_PROFILES, args.models, "model", lambda m: m.name)
     scenes = _select(SCENES, args.scenes, "scene", lambda s: s.scene_id)

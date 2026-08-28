@@ -375,7 +375,7 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
                 label = f"{M[i, j]:.2f}\nn={n}" + ("" if ok else f"\nn/l cov {cov:.0%}")
                 ax.text(j, i, label, ha="center", va="center", color="black",
                         fontsize=7, zorder=5)
-                if 0 < n < MIN_OBSERVATIONS:  # screening-only cell: red outline
+                if 0 < n < MIN_OBSERVATIONS:  # under-powered cell: red outline
                     ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
                                                edgecolor="red", linewidth=1.4, zorder=4))
     # Separate reporting-role blocks.

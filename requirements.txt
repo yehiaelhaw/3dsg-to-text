@@ -2,7 +2,7 @@
 #
 # Responder / judge backends. Only the ones you actually use need to be present:
 # the provider modules are imported lazily by evaluation/llm/factory.py.
-ollama>=0.6           # local responder + screening judge
+ollama>=0.6           # local responder + judge
 google-genai>=2.0     # Gemini judge (confirmatory scoring)
 openai>=2.0           # OpenAI judge (cross-vendor judge check only)
 python-dotenv>=1.0    # reads GEMINI_API_KEY / OPENAI_API_KEY from .env

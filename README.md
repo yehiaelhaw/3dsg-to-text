@@ -75,9 +75,9 @@ pip install -r requirements.txt   # Python 3.10+ (developed on 3.11)
 cp .env.example .env              # then fill in the keys you need
 ```
 
-A local [Ollama](https://ollama.com) server provides the responder and the screening judge;
-`GEMINI_API_KEY` is needed only for confirmatory judging. Model hosts are set per profile in
-`experiments/models.py`.
+A local [Ollama](https://ollama.com) server provides the responder and the judge by default;
+`GEMINI_API_KEY` is only needed if you override `--judge-backend`/`--judge-model` (or a responder
+profile) to use Gemini instead. Model hosts are set per profile in `experiments/models.py`.
 
 ## Running
 

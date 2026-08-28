@@ -197,11 +197,3 @@ def dataset_of(scene_id: str) -> str:
     if s.startswith("3rscan"):
         return "3rscan"
     return "gibson"
-
-
-def tier_of(judge_model: str) -> str:
-    """Classify known cloud judge names as confirmatory; all others as screening."""
-    j = (judge_model or "").lower()
-    if any(k in j for k in ("gemini", "gpt", "claude", "anthropic", "openai")):
-        return "confirmatory"
-    return "screening"
