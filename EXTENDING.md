@@ -187,9 +187,22 @@ Question types (`connectivity`, `proximity`, `object_relation`, ...) are declare
 `evaluation/scope.py`'s `TYPE_NEEDS`, mapping a type to the capability channel(s) a
 representation must have to be in-scope for it (a `set` = AND, a `list[set]` = OR
 alternatives, a `dict` = host-specific needs — see `planning` for an example). Add your type
-there, then author questions of that type in `experiments/qa/<scene>.jsonl`
-(`evaluation/dataset.py` reads this format; each question needs `question_type` set for
-`scope.py` filtering to apply — an unset type is never filtered).
+there. As with `REP_CAPS` (above), an undeclared type is never filtered — use
+`strict_scope=True` to catch that instead of running fail-open.
+
+Then author questions of that type in `experiments/qa/<scene>.jsonl`
+(`evaluation/dataset.py` reads this format), one JSON object per line:
+
+- `id`, `scene_id`, `text` — required.
+- `question_type` — must match a `TYPE_NEEDS` key for scope filtering to apply; unset/empty
+  is never filtered.
+- `key_facts` — non-empty list of `{"fact": str, "weight": float}`; must include at least one
+  core fact (`weight > 1`), since `answer_correctness` is only defined over the core tier.
+  The repo normally uses `weight: 3` for core facts and `1` for details. Weights also control
+  how much each fact contributes to its tier's score, so different weights within a tier are
+  allowed but change their relative importance.
+- `pair_id` / `question_style` — optional, for matched natural/constructed wording pairs;
+  setting one without the other raises.
 
 ## After wiring something in
 

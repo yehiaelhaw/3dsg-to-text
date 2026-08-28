@@ -23,6 +23,8 @@ Forking this to add your own serialization, dataset, or model? See
 ## Layout
 
 ```
+dataset/             Source datasets (Gibson, ProcTHOR-10K, 3RScan/3DSSG).
+
 scene_graph/         Domain model. Building / Room / SceneObject / ObjectRelation
                      dataclasses, capability predicates over them, and one loader
                      per source dataset (Gibson, ProcTHOR, 3RScan).
@@ -54,19 +56,6 @@ experiments/         Run configuration and drivers.
 
 thesis/              LaTeX sources.
 ```
-
-### Directories that are not in version control
-
-The code refers to these; they are generated, downloaded, or local-only.
-
-| Path | What it is |
-| --- | --- |
-| `dataset/` | the source datasets (Gibson, ProcTHOR-10K, 3RScan/3DSSG), downloaded separately — see each subfolder's `download.txt` |
-| `scene_contexts/` | parser output — the serializations the responder actually reads |
-| `experiments/results/` | run output: `results.csv`, `aggregate.csv`, `responses.jsonl`, `report.md`, charts |
-| `experiments/backups/` | timestamped pre-edit copies of QA data and affected results |
-| `evaluation/.token_cache/` | tokenizer vocabularies pulled from the Ollama server, ~2 MB per model |
-| `.env` | API keys |
 
 ## Setup
 
