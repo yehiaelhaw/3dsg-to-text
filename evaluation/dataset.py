@@ -67,6 +67,12 @@ def load(
                         f"{path}:{lineno}: question {qid!r} is in a pair but carries no "
                         f"question_style; the register is what the pair contrasts"
                     )
+                if question_style is not None and pair_id is None:
+                    raise ValueError(
+                        f"{path}:{lineno}: question {qid!r} carries question_style "
+                        f"{question_style!r} but no pair_id; a style tag identifies "
+                        f"matched-pair membership, not merely how a question reads"
+                    )
                 questions.append(Question(
                     id=qid,
                     scene_id=raw["scene_id"],
@@ -84,5 +90,19 @@ def load(
         missing = filter_ids - found
         if missing:
             raise ValueError(f"question_ids not found in dataset: {sorted(missing)}")
+    else:
+        # Pair completeness only holds over a full scene file; a filtered
+        # subset legitimately drops one member of a pair.
+        by_pair: dict[str, list[Question]] = {}
+        for q in questions:
+            if q.pair_id is not None:
+                by_pair.setdefault(q.pair_id, []).append(q)
+        for pid, members in by_pair.items():
+            styles = sorted(m.question_style for m in members)
+            if len(members) != 2 or styles != ["constructed", "natural"]:
+                raise ValueError(
+                    f"{path}: pair_id {pid!r} must contain exactly one 'natural' and "
+                    f"one 'constructed' question; found {[(m.id, m.question_style) for m in members]}"
+                )
 
     return questions

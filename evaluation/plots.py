@@ -10,7 +10,7 @@ from pathlib import Path
 from evaluation.scope import in_scope as _in_scope
 from evaluation.axes import (
     AXES, FULL_RECORD_ANCHOR,
-    MIN_OBSERVATIONS, NON_SPATIAL_ANCHOR, PRACTICAL_MARGIN,
+    MIN_OBSERVATIONS, NON_SPATIAL_ANCHOR, NOT_EVALUATED, PRACTICAL_MARGIN,
     VERDICT_CONSISTENT, VERDICT_DIRECTIONAL, VERDICT_MIXED,
     VERDICT_NO_SEPARATION, VERDICT_NOT_LICENSED, dataset_of, rep_role,
 )
@@ -221,7 +221,8 @@ def _plot_ac_by_type(results_path: Path, rows: list[dict], ds: str,
     fig, ax = plt.subplots(figsize=(max(10, 2.2 * len(types)), 6))
     used: set[str] = set()
     for gi, qt in enumerate(types):
-        drawn = [r for r in reps if _admitted(r, qt, ds) and points.get((qt, r))]
+        drawn = [r for r in reps if r not in NOT_EVALUATED
+                 and _admitted(r, qt, ds) and points.get((qt, r))]
         k = len(drawn)
         if k == 0:
             continue
@@ -339,7 +340,8 @@ def _plot_heatmap(results_path: Path, rows: list[dict], ds: str,
     cells = _cells([r for r in rows if dataset_of(r["scene_id"]) == ds])
     counts = {(qt, rep): len(vals) for (qt, rep), vals in points.items()}
     ordered_reps = registry_rep_order(
-        [r for r in reps if any(points.get((qt, r)) for qt in types)])
+        [r for r in reps if r not in NOT_EVALUATED
+         and any(points.get((qt, r)) for qt in types)])
     if not ordered_reps:
         return set()
 
@@ -659,7 +661,7 @@ def plot_per_question(results_path: Path, diagnostics: bool = False) -> None:
         for r in ds_rows:
             rep = r["representation"]
             qt = r["question_type"] or "unknown"
-            if not _in_scope(rep, qt, ds):
+            if rep in NOT_EVALUATED or not _in_scope(rep, qt, ds):
                 continue
             qid = r["question_id"]
             if r["answer_correctness"] != "":
