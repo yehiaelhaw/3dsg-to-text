@@ -7,9 +7,12 @@ from typing import NamedTuple
 
 # Reference anchors used on every axis; synthesis is reported separately.
 NON_SPATIAL_ANCHOR = "inventory"
-# Minified json_mini is the cost denominator; formatting whitespace would inflate apparent savings.
-FULL_RECORD_ANCHOR = "json_mini"
+FULL_RECORD_ANCHOR = "json_mini"  # Minified; formatting whitespace inflates apparent savings
 CANDIDATE = "synthesis"
+
+# Excluded from thesis-facing paired/anchor/ladder/plot rendering.
+# Not part of the final evaluated taxonomy; raw rows are untouched.
+NOT_EVALUATED = {"prose", "synthesis"}
 
 
 def rep_role(rep: str) -> str:
@@ -87,9 +90,7 @@ AXES: list[Axis] = [
     Axis("spatial_encoding", "Spatial encoding", "procthor",
          ["inventory", "topology_inventory", "metric_relations", "json_mini"],
          ["connectivity", "proximity", "direction"],
-         note="Read the ladder per question type: only in-scope rungs are compared. "
-              "`inventory` is the non-spatial anchor and `json_mini` the full-record "
-              "anchor, not a performance bound."),
+         note="Per-question-type ladder; anchors are reference only, not performance bounds."),
     Axis("metric_rung", "Spatial encoding (metric rung)", "gibson",
          ["metric_relations"],
          ["proximity"],
@@ -101,35 +102,25 @@ AXES: list[Axis] = [
          ["connectivity"],
          headline_pair=("topology_inventory", "narrative"),
          note="`topology_inventory` and `narrative` are fact-for-fact equivalent and "
-              "differ only in rendering; `prose` is excluded because it contains "
-              "additional information."),
+              "differ only in rendering."),
     Axis("json_formatting", "Formatting (JSON)", "procthor",
          ["json_pretty"],
          ["connectivity", "direction", "route", "aggregation", "proximity",
           "set_logic", "containment"],
          family="Formatting",
-         note="Same whitespace-only manipulation as the rendering axis above, run "
-              "separately on the full-record anchor rather than pooled with it: "
-              "`json_pretty` and `json_mini` contain identical keys, ordering, and "
-              "values, so pairing either against `topology_inventory`/`narrative` "
-              "would mix in a genuine content difference. `json_mini` remains the "
-              "full-record anchor rather than an accuracy bound."),
+         note="Whitespace-only, run separately on full-record anchor to avoid content-difference confusion."),
     Axis("json_formatting_gibson", "Formatting (JSON, Gibson)", "gibson",
          ["json_pretty"],
          ["aggregation", "proximity", "set_logic", "direction", "containment"],
          family="Formatting",
          note="Gibson reading of the same formatting ablation. 3RScan has no reading "
               "here because `json_pretty` fails the coverage gate there."),
-    Axis("structure_presentation", "Graph-structure representation", "procthor",
+    Axis("structure", "Graph-structure representation", "procthor",
          ["topology", "room_tree", "graph_digest"],
          ["connectivity"],
          headline_pair=("topology", "graph_digest"),
-         note="The same connectivity graph is exposed as neighbour lists, a tree, or "
-              "derived structural facts. `topology` is used instead of "
-              "`topology_inventory` to avoid inventory distractors and token load.",
-         confound="question vocabulary mirrors graph_digest's own computed output "
-                  "(hub / bottleneck); read the natural/constructed re-cut and the "
-                  "matched within-fact-set comparison",
+         note="Same connectivity graph as lists, tree, or derived facts; `topology` used to avoid inventory distractors.",
+         confound="vocabulary mirrors graph_digest's computed output; see re-cut analyses",
          confound_reps=("graph_digest",),
          confound_kind="vocabulary"),
     Axis("relation_linearization", "Relation organization and abstraction", "3rscan",
@@ -137,40 +128,21 @@ AXES: list[Axis] = [
           "relations_tree", "relations_digest"],
          ["object_relation", "relation_structure", "relation_aggregate"],
          headline_pair=("relations_subject", "relations_predicate"),
-         note="The same object-relation graph is exposed through listed/grouped, "
-              "selectively drawn, and derived views. `relations_tree` and "
-              "`relations_digest` are lossy; `relations_subject` caps some grouped lists.",
-         confound="question vocabulary mirrors relations_digest's own computed "
-                  "output (chain depth / clusters); read the natural/constructed "
-                  "re-cut and the matched within-fact-set comparison",
+         note="Same object-relation graph as listed, grouped, or derived views; some are lossy.",
+         confound="vocabulary mirrors relations_digest's output; see re-cut analyses",
          confound_reps=("relations_digest",),
          confound_kind="vocabulary"),
     Axis("framing", "Relational vs. navigational framing", "procthor",
          ["topology_metric", "navigation"],
          ["route", "direction", "connectivity"],
          headline_pair=("topology_metric", "navigation"),
-         note="Fact- and layout-matched over the same doorway edges and geometry. "
-              "Framing jointly changes figure-ground assignment and "
-              "locative/navigational register, so it is not an egocentric/allocentric "
-              "manipulation. Route tests framing, direction makes the converse relation "
-              "task-relevant, and connectivity is diagnostic only."),
+         note="Fact/layout-matched over same geometry. Each question type uses independent channel; read separately."),
     Axis("framing_gibson", "Relational vs. navigational framing (Gibson)", "gibson",
          ["metric_framing", "navigation"],
          ["direction"],
          headline_pair=("metric_framing", "navigation"),
          family="Relational vs. navigational framing",
-         note="Gibson reading using the same K-nearest-neighbour room pairs and "
-              "metrics in locative and navigational form. Equivalence is checked against "
-              "independently recomputed K-NN geometry; `direction` is the only in-scope "
-              "type because Gibson has no door graph."),
-    Axis("content_verbosity", "Verbosity on content questions", "gibson",
-         ["prose"],
-         ["containment", "aggregation", "set_logic"],
-         secondary=True,
-         note="For `containment`, `aggregation`, and `set_logic`, `prose` and "
-              "`json_mini` contain the information the questions require; `json_mini` "
-              "adds unused channels, so this reading tests verbosity/content load rather "
-              "than formatting."),
+         note="K-NN room pairs; `direction` only (no door graph on Gibson)."),
 ]
 
 AXIS_BY_ID = {a.id: a for a in AXES}
