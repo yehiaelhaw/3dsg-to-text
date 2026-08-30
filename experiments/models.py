@@ -25,9 +25,6 @@ MODEL_PROFILES: list[ModelProfile] = [
     # 32B partially offloads on HOST; keep num_ctx matched across profiles.
     ModelProfile("qwen2.5-32b", "ollama", "qwen2.5:32b",
                  {"host": HOST, "num_ctx": 32768, "temperature": 0}),
-    ModelProfile("llama3.1-8b", "ollama", "llama3.1:8b",
-                 {"host": HOST, "num_ctx": 32768, "temperature": 0}),
-    # Independent responder for headline robustness checks.
     ModelProfile("mistral-nemo-12b", "ollama", "mistral-nemo:12b",
                  {"host": HOST, "num_ctx": 32768, "temperature": 0}),
     # Reasoning family; DeepSeek-R1 requires nonzero temperature.
