@@ -20,7 +20,7 @@ def _qa(scene_id: str) -> str:
 _PROCTHOR_REPS = [
     "inventory", "topology_inventory", "topology", "room_tree", "graph_digest",
     # Full-record representations used for the formatting comparison.
-    "prose", "metric_relations", "navigation", "json_mini", "json_pretty", "synthesis",
+    "prose", "navigation", "json_mini", "json_pretty", "synthesis",
     # Content-matched navigation counterpart; see test_topology_metric_equivalence.py.
     "topology_metric",
     # Content-matched topology_inventory counterpart; see test_format_axis_equivalence.py.

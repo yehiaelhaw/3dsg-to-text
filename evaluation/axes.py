@@ -12,7 +12,7 @@ CANDIDATE = "synthesis"
 
 # Excluded from thesis-facing paired/anchor/ladder/plot rendering.
 # Not part of the final evaluated taxonomy; raw rows are untouched.
-NOT_EVALUATED = {"prose", "synthesis"}
+NOT_EVALUATED = {"prose", "synthesis", "metric_relations"}
 
 
 def rep_role(rep: str) -> str:
@@ -87,16 +87,6 @@ class Axis:
 # Five thesis axes; remaining entries are further readings grouped under one of them
 # (see `family`).
 AXES: list[Axis] = [
-    Axis("spatial_encoding", "Spatial encoding", "procthor",
-         ["inventory", "topology_inventory", "metric_relations", "json_mini"],
-         ["connectivity", "proximity", "direction"],
-         note="Per-question-type ladder; anchors are reference only, not performance bounds."),
-    Axis("metric_rung", "Spatial encoding (metric rung)", "gibson",
-         ["metric_relations"],
-         ["proximity"],
-         note="Gibson reading of the spatial-encoding metric rung on `proximity`, "
-              "using room-level metric geometry.",
-         family="Spatial encoding"),
     Axis("format", "Formatting", "procthor",
          ["topology_inventory", "narrative"],
          ["connectivity"],
@@ -105,13 +95,13 @@ AXES: list[Axis] = [
               "differ only in rendering."),
     Axis("json_formatting", "Formatting (JSON)", "procthor",
          ["json_pretty"],
-         ["connectivity", "direction", "route", "aggregation", "proximity",
+         ["connectivity", "direction", "route", "aggregation",
           "set_logic", "containment"],
          family="Formatting",
          note="Whitespace-only, run separately on full-record anchor to avoid content-difference confusion."),
     Axis("json_formatting_gibson", "Formatting (JSON, Gibson)", "gibson",
          ["json_pretty"],
-         ["aggregation", "proximity", "set_logic", "direction", "containment"],
+         ["aggregation", "set_logic", "direction", "containment"],
          family="Formatting",
          note="Gibson reading of the same formatting ablation. 3RScan has no reading "
               "here because `json_pretty` fails the coverage gate there."),
