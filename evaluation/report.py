@@ -613,9 +613,22 @@ _VERDICT_SORT_ORDER = {VERDICT_CONSISTENT: 0, CAPPED_VERDICT: 1, VERDICT_MIXED: 
                       VERDICT_NO_SEPARATION: 3, VERDICT_NOT_LICENSED: 4}
 
 
+def _pooled_reading_forbidden(p: "Paired") -> bool:
+    """True for a vocabulary-confound comparison, where a pooled Natural+Constructed
+    row would treat one fact-set's two wordings as independent observations.
+
+    These comparisons are licensed only as the separate natural/constructed cuts
+    (`_recut_section`) plus the matched within-fact-set check (`_matched_section`);
+    no pooled/full-question-set verdict is reported for them anywhere.
+    """
+    return AXIS_BY_ID[p.axis_id].confound_kind == "vocabulary" and bool(p.confound)
+
+
 def _paired_section(rows: list[dict], pairs=None) -> list[str]:
     """Formal paired-separation table."""
-    prs = _paired_rows(rows, pairs=pairs)
+    all_prs = _paired_rows(rows, pairs=pairs)
+    excluded = [p for p in all_prs if _pooled_reading_forbidden(p)]
+    prs = [p for p in all_prs if not _pooled_reading_forbidden(p)]
     if not prs:
         return []
     prs.sort(key=lambda p: (_VERDICT_SORT_ORDER.get(p.verdict, 9), -abs(p.mean)))
@@ -635,9 +648,19 @@ def _paired_section(rows: list[dict], pairs=None) -> list[str]:
                       f"{p.mean:+.3f}", f"{lo:+.3f}..{hi:+.3f}", str(len(p.scene_deltas)),
                       str(p.n_questions), str(p.n_factsets) if p.n_factsets else "",
                       _tok_str(p), p.verdict, note])
-    return (["## Paired separation",
-             f"_Scene-first matched AC deltas; verdicts use the declared margin rules. "
-             f"Tokens are qid-matched (tok_n=X/Y); fact-sets count distinct requests._", ""]
+    header = ["## Paired separation",
+              "_Scene-first matched AC deltas; verdicts use the declared margin rules. "
+              "Tokens are qid-matched (tok_n=X/Y); fact-sets count distinct requests._"]
+    if excluded:
+        excl_desc = sorted({f"`{p.rep_b}` - `{p.rep_a}` ({p.axis_id}/{p.qt})" for p in excluded})
+        header.append(
+            "_Excluded here -- vocabulary-confound comparisons where Natural and "
+            "Constructed wording are alternative readings of the same fact-sets; no "
+            "pooled/full-question-set verdict is licensed for them. See 'Vocabulary "
+            "re-cut: natural vs constructed' for their separate cuts and 'Matched "
+            f"fact-sets' for the direct wording-effect check: {', '.join(excl_desc)}._")
+    header.append("")
+    return (header
             + _table(["axis", "type", "comparison", "scene deltas", "mean", "range",
                       "scenes", "n_q", "fact-sets", "tokens (b vs a)", "verdict", "note"],
                      trows) + [""])
@@ -691,7 +714,10 @@ def _recut_section(rows: list[dict],
                           f"{p.mean:+.3f}", str(p.n_questions),
                           p.verdict + (f" ({p.ineligible})" if p.ineligible else "")])
     return (["## Vocabulary re-cut: natural vs constructed",
-             "_Split vocabulary-confounded comparisons by natural/constructed wording; each subset keeps its own gates._", ""]
+             "_Vocabulary-confounded comparisons split by natural/constructed wording; each "
+             "subset keeps its own gates. This is the licensed reading for these comparisons -- "
+             "no pooled Full-question-set verdict combining both wordings is reported in "
+             "'Paired separation' or elsewhere for them._", ""]
             + _table(["axis", "type", "comparison", "style", "scene deltas", "mean",
                       "n_q", "verdict"], trows) + [""])
 
@@ -862,7 +888,10 @@ def _cross_section(rows: list[dict], results_path: Path,
     sibs = _sibling_groups(results_path)
     if not sibs:
         return []
-    here = {(p.axis_id, p.qt, p.rep_a, p.rep_b): p for p in _paired_rows(rows, pairs=pairs)}
+    all_here = _paired_rows(rows, pairs=pairs)
+    excluded_here = [p for p in all_here if _pooled_reading_forbidden(p)]
+    here = {(p.axis_id, p.qt, p.rep_a, p.rep_b): p for p in all_here
+            if not _pooled_reading_forbidden(p)}
     if not here:
         return []
     judges_here = sorted({r.get("judge", "?") for r in rows})
@@ -918,6 +947,12 @@ def _cross_section(rows: list[dict], results_path: Path,
     out = ["## Cross-responder ordering check", "",
            "_Same judge/scenes only; reversal requires opposite margin-clearing deltas. "
            "Ordering-stability diagnostic only._", ""]
+    if excluded_here:
+        excl_desc = sorted({f"`{p.rep_b}` - `{p.rep_a}` ({p.axis_id}/{p.qt})" for p in excluded_here})
+        out += [
+            "_Excluded from this check -- vocabulary-confound comparisons where a pooled "
+            "Natural+Constructed mean is not a licensed effect to order across responders: "
+            f"{', '.join(excl_desc)}._", ""]
 
     if read:
         srows = []

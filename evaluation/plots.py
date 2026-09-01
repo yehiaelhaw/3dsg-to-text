@@ -404,7 +404,7 @@ VERDICT_COLOR = {
     VERDICT_DIRECTIONAL:   "#c77c17",   # consistent direction without a licensed consistent advantage, or capped
     VERDICT_MIXED:         "#9d3b8c",   # scenes disagree at the declared margin
     VERDICT_NO_SEPARATION: "#6b7280",   # no practically meaningful separation
-    VERDICT_NOT_LICENSED:  "#b0b6bf",   # gates failed -- drawn, never ranked
+    VERDICT_NOT_LICENSED:  "#c0392b",   # gates failed -- drawn, never ranked
 }
 
 # Marker shape also encodes verdict for grayscale readability.
@@ -413,7 +413,8 @@ VERDICT_MARKER = {
     VERDICT_DIRECTIONAL:   "^",   # hollow triangle
     VERDICT_MIXED:         "D",   # hollow diamond
     VERDICT_NO_SEPARATION: "o",   # hollow circle
-    VERDICT_NOT_LICENSED:  "p",   # hollow pentagon
+    VERDICT_NOT_LICENSED:  "x",   # red x -- matches the red hatch used for
+                                   # not-licensed cells in the AC heatmap
 }
 BAND = "#e8eaed"        # the +-PRACTICAL_MARGIN region
 SCENE_MARK = "#4a5058"  # the individual scene deltas

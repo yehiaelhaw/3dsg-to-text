@@ -71,11 +71,11 @@ class Axis:
     def confound_for(self, rep_a: str, rep_b: str) -> str:
         """Return the declared confound for this pair, if any.
 
-        Reference-anchor comparisons are exempt.
+        The confound is a property of the confound_reps representation and the
+        question's wording, not of what it is paired against -- so a comparison
+        against a reference anchor (json_mini/inventory) is not exempt.
         """
         if not self.confound:
-            return ""
-        if NON_SPATIAL_ANCHOR in (rep_a, rep_b) or FULL_RECORD_ANCHOR in (rep_a, rep_b):
             return ""
         if not self.confound_reps:
             return self.confound
