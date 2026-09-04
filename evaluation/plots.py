@@ -16,7 +16,7 @@ from evaluation.axes import (
 )
 # Formal comparison logic comes from report.py.
 from evaluation.report import (
-    _cells, _load_pairs, _paired_rows,
+    _cells, _load_pairs, _paired_rows, _pooled_reading_forbidden,
     non_spatial_anchor_lifts,
 )
 
@@ -597,8 +597,8 @@ def plot_aggregate(aggregate_path: Path) -> None:
     # -- Chart 4: paired verdicts from report.py --
     responder = rows[0].get("responder") or "?"
     judge = rows[0].get("judge") or "?"
-    verdict_figs = _plot_paired_separation(_paired_rows(rows, pairs=_load_pairs()),
-                                           out_dir, responder, judge)
+    prs = [p for p in _paired_rows(rows, pairs=_load_pairs()) if not _pooled_reading_forbidden(p)]
+    verdict_figs = _plot_paired_separation(prs, out_dir, responder, judge)
 
     # Remove obsolete or stale aggregate charts.
     stale = ["ac_comparison.png", "faithfulness_comparison.png", "ac_delta.png",
