@@ -27,6 +27,12 @@ MODEL_PROFILES: list[ModelProfile] = [
                  {"host": HOST, "num_ctx": 32768, "temperature": 0}),
     ModelProfile("mistral-nemo-12b", "ollama", "mistral-nemo:12b",
                  {"host": HOST, "num_ctx": 32768, "temperature": 0}),
+    # Cross-judge validation copies of mistral-nemo-12b's cached responses --
+    # score-only targets, never generate responders of their own.
+    ModelProfile("mistral-nemo-12b_gemma3judge", "ollama", "mistral-nemo:12b",
+                 {"host": HOST, "num_ctx": 32768, "temperature": 0}),
+    ModelProfile("mistral-nemo-12b_terrajudge", "ollama", "mistral-nemo:12b",
+                 {"host": HOST, "num_ctx": 32768, "temperature": 0}),
     # Reasoning family; DeepSeek-R1 requires nonzero temperature.
     ModelProfile("deepseek-r1-14b", "ollama", "deepseek-r1:14b",
                  {"host": HOST, "num_ctx": 32768, "temperature": 0.6}),
