@@ -554,7 +554,7 @@ def _plot_paired_separation(prs: list, out_dir: Path,
     fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.45, 1 - 0.42 / H),
                fontsize=7.4, frameon=False, ncol=4)
     fig.text(0.05, 0.14 / H,
-             "Scene ticks are the replication; no CIs. CAPPED = confound-downgraded.\n"
+             "Scene ticks are the replication; no CIs. CAPPED = terminology-test-downgraded.\n"
              f"responder: {responder}  |  judge: {judge}",
              fontsize=7, color="#8a9099", va="bottom", ha="left")
     fig.tight_layout(rect=(0.0, 0.70 / H, _SEPARATION_RECT_RIGHT, 1 - 1.00 / H))

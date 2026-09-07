@@ -78,7 +78,7 @@ produces silently wrong results, so don't treat them as optional:
 3. [evaluation/axes.py](evaluation/axes.py) — **only if** your new representation is one pole of
    a comparison you want reported as a named axis/exhibit. This module encodes this thesis's
    specific comparisons (which reps form a ladder, which pair is the headline delta, declared
-   confounds); a rep can be fully functional in the pipeline without ever appearing here. Most
+   terminology tests); a rep can be fully functional in the pipeline without ever appearing here. Most
    forks adding a serialization for their own purposes can skip this file entirely and read
    results straight out of `results.csv` / `aggregate.csv`.
 

@@ -294,10 +294,10 @@ def _planning_licensed_rows(rows: list[dict]) -> list[Paired]:
             tokens_a, tokens_b, n_token_pairs = _paired_token_summary(
                 q_tok, paired_qids, rep_a, rep_b)
             ineligible = _gates(cells, "planning", (rep_a, rep_b))
-            confound = AXIS_BY_ID[axis_id].confound_for(rep_a, rep_b)
-            verdict = _verdict(scene_deltas, confound, ineligible)
+            terminology_note = AXIS_BY_ID[axis_id].terminology_note_for(rep_a, rep_b)
+            verdict = _verdict(scene_deltas, terminology_note, ineligible)
             out.append(Paired(axis_id, host, "planning", rep_a, rep_b, scene_deltas, n_q,
-                              verdict, confound, False, ineligible,
+                              verdict, terminology_note, False, ineligible,
                               tokens_a, tokens_b, n_token_pairs, 0, q_deltas))
     return out
 
@@ -357,7 +357,7 @@ class Paired:
     scene_deltas: dict[str, float]
     n_questions: int
     verdict: str
-    confound: str
+    terminology_note: str
     capped: bool
     ineligible: str
     tokens_a: float | None = None  # Prompt-token means
@@ -377,8 +377,8 @@ class Paired:
         return (min(v), max(v)) if v else (0.0, 0.0)
 
 
-def _verdict(scene_deltas: dict[str, float], confound: str, ineligible: str) -> str:
-    """Apply scene-level verdict and confound-cap rules."""
+def _verdict(scene_deltas: dict[str, float], terminology_note: str, ineligible: str) -> str:
+    """Apply scene-level verdict and terminology-cap rules."""
     if ineligible or not scene_deltas:
         return VERDICT_NOT_LICENSED
 
@@ -398,8 +398,8 @@ def _verdict(scene_deltas: dict[str, float], confound: str, ineligible: str) -> 
     if reversed_:
         return VERDICT_MIXED if margin_met else VERDICT_NO_SEPARATION
     if margin_met and showing >= MIN_SCENES_SHOWING:
-        # Confounds only downgrade consistent results.
-        return CAPPED_VERDICT if confound else VERDICT_CONSISTENT
+        # The terminology test only downgrades consistent results.
+        return CAPPED_VERDICT if terminology_note else VERDICT_CONSISTENT
     return VERDICT_DIRECTIONAL
 
 
@@ -502,7 +502,7 @@ def _gates(cells: dict[tuple[str, str], Cell], qt: str, reps: tuple[str, ...]) -
 
 
 def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
-                 lift_confound: bool = False,
+                 lift_terminology_cap: bool = False,
                  pairs: dict[tuple[str, str], str] | None = None) -> list[Paired]:
     """Build paired axis rows; style filtering precedes eligibility checks."""
     out: list[Paired] = []
@@ -538,12 +538,12 @@ def _paired_rows(rows: list[dict], style: str | None = None, axes=None,
                 tokens_a, tokens_b, n_token_pairs = _paired_token_summary(
                     q_tok, paired_qids, rep_a, rep_b)
                 ineligible = _gates(cells, qt, (rep_a, rep_b))
-                confound = "" if lift_confound else axis.confound_for(rep_a, rep_b)
-                verdict = _verdict(scene_deltas, confound, ineligible)
-                capped = bool(confound) and verdict == CAPPED_VERDICT and (
+                terminology_note = "" if lift_terminology_cap else axis.terminology_note_for(rep_a, rep_b)
+                verdict = _verdict(scene_deltas, terminology_note, ineligible)
+                capped = bool(terminology_note) and verdict == CAPPED_VERDICT and (
                     _verdict(scene_deltas, "", ineligible) == VERDICT_CONSISTENT)
                 out.append(Paired(axis.id, axis.host, qt, rep_a, rep_b, scene_deltas,
-                                  n_q, verdict, confound, capped, ineligible,
+                                  n_q, verdict, terminology_note, capped, ineligible,
                                   tokens_a, tokens_b, n_token_pairs,
                                   len(factsets), q_deltas))
     return out
@@ -614,14 +614,11 @@ _VERDICT_SORT_ORDER = {VERDICT_CONSISTENT: 0, CAPPED_VERDICT: 1, VERDICT_MIXED: 
 
 
 def _pooled_reading_forbidden(p: "Paired") -> bool:
-    """True for a vocabulary-confound comparison, where a pooled Natural+Constructed
-    row would treat one fact-set's two wordings as independent observations.
+    """True for a comparison subject to the terminology test, where a pooled Natural+Constructed row would double-count one fact-set's two wordings.
 
-    These comparisons are licensed only as the separate natural/constructed cuts
-    (`_recut_section`) plus the matched within-fact-set check (`_matched_section`);
-    no pooled/full-question-set verdict is reported for them anywhere.
+    Licensed only via the separate natural/constructed cuts and the matched within-fact-set check; no pooled verdict is reported for them elsewhere.
     """
-    return AXIS_BY_ID[p.axis_id].confound_kind == "vocabulary" and bool(p.confound)
+    return AXIS_BY_ID[p.axis_id].terminology_test_kind == "vocabulary" and bool(p.terminology_note)
 
 
 def _paired_section(rows: list[dict], pairs=None) -> list[str]:
@@ -638,9 +635,9 @@ def _paired_section(rows: list[dict], pairs=None) -> list[str]:
         if p.ineligible:
             note = p.ineligible
         elif p.capped:
-            note = f"CAPPED from '{VERDICT_CONSISTENT}' -- {p.confound}"
-        elif p.confound:
-            note = f"declared confound (did not change the grade): {p.confound}"
+            note = f"CAPPED from '{VERDICT_CONSISTENT}' -- {p.terminology_note}"
+        elif p.terminology_note:
+            note = f"subject to the terminology test (did not change the grade): {p.terminology_note}"
         else:
             note = ""
         trows.append([f"{p.axis_id}", p.qt, f"`{p.rep_b}` - `{p.rep_a}`",
@@ -654,9 +651,9 @@ def _paired_section(rows: list[dict], pairs=None) -> list[str]:
     if excluded:
         excl_desc = sorted({f"`{p.rep_b}` - `{p.rep_a}` ({p.axis_id}/{p.qt})" for p in excluded})
         header.append(
-            "_Excluded here -- vocabulary-confound comparisons where Natural and "
-            "Constructed wording are alternative readings of the same fact-sets; no "
-            "pooled/full-question-set verdict is licensed for them. See 'Vocabulary "
+            "_Excluded here -- comparisons subject to the terminology test, where Natural "
+            "and Constructed wording are alternative readings of the same fact-sets; no "
+            "pooled/full-question-set verdict is licensed for them. See 'Terminology "
             "re-cut: natural vs constructed' for their separate cuts and 'Matched "
             f"fact-sets' for the direct wording-effect check: {', '.join(excl_desc)}._")
     header.append("")
@@ -672,22 +669,22 @@ STYLES = ("natural", "constructed")
 def _recut_rows(rows: list[dict],
                 pairs: dict[tuple[str, str], str] | None = None
                 ) -> dict[tuple[str, str, str, str], dict[str, "Paired"]]:
-    """Vocabulary-confound comparisons split by question style."""
+    """Comparisons subject to the terminology test, split by question style."""
     if not any((r.get("question_style") or "") for r in rows):
         return {}   # No question-style metadata available.
-    coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
+    coupled = [a for a in AXES if a.terminology_test_kind == "vocabulary"]
     if not coupled:
         return {}
 
-    # Lift the vocabulary cap for natural wording only.
+    # Lift the terminology cap for natural wording only.
     by_style = {s: _paired_rows(rows, style=s, axes=coupled,
-                                lift_confound=(s == "natural"), pairs=pairs) for s in STYLES}
+                                lift_terminology_cap=(s == "natural"), pairs=pairs) for s in STYLES}
     keyed: dict[tuple[str, str, str, str], dict[str, Paired]] = collections.defaultdict(dict)
     for s in STYLES:
         for p in by_style[s]:
-            # Re-cut only comparisons with a vocabulary confound.
+            # Re-cut only comparisons subject to the terminology test.
             axis = AXIS_BY_ID[p.axis_id]
-            if not axis.confound_for(p.rep_a, p.rep_b):
+            if not axis.terminology_note_for(p.rep_a, p.rep_b):
                 continue
             keyed[(p.axis_id, p.qt, p.rep_a, p.rep_b)][s] = p
     return keyed
@@ -713,11 +710,11 @@ def _recut_section(rows: list[dict],
                           " / ".join(f"{v:+.3f}" for v in p.scene_deltas.values()),
                           f"{p.mean:+.3f}", str(p.n_questions),
                           p.verdict + (f" ({p.ineligible})" if p.ineligible else "")])
-    return (["## Vocabulary re-cut: natural vs constructed",
-             "_Vocabulary-confounded comparisons split by natural/constructed wording; each "
-             "subset keeps its own gates. This is the licensed reading for these comparisons -- "
-             "no pooled Full-question-set verdict combining both wordings is reported in "
-             "'Paired separation' or elsewhere for them._", ""]
+    return (["## Terminology re-cut: natural vs constructed",
+             "_Comparisons subject to the terminology test, split by natural/constructed "
+             "wording; each subset keeps its own gates. This is the licensed reading for "
+             "these comparisons -- no pooled Full-question-set verdict combining both "
+             "wordings is reported in 'Paired separation' or elsewhere for them._", ""]
             + _table(["axis", "type", "comparison", "style", "scene deltas", "mean",
                       "n_q", "verdict"], trows) + [""])
 
@@ -726,7 +723,7 @@ def _matched_rows(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[d
     """Matched within-fact-set wording effects."""
     if not pairs:
         return []
-    coupled = [a for a in AXES if a.confound_kind == "vocabulary"]
+    coupled = [a for a in AXES if a.terminology_test_kind == "vocabulary"]
     if not coupled:
         return []
 
@@ -748,7 +745,7 @@ def _matched_rows(rows: list[dict], pairs: dict[tuple[str, str], str]) -> list[d
 
         for qt in axis.probe_types:
             for rep_a, rep_b in _paired_pairs(axis, qt, cells):
-                if not axis.confound_for(rep_a, rep_b):
+                if not axis.terminology_note_for(rep_a, rep_b):
                     continue
                 by_scene: dict[str, list[float]] = collections.defaultdict(list)
                 nat_d: dict[str, list[float]] = collections.defaultdict(list)
@@ -950,9 +947,9 @@ def _cross_section(rows: list[dict], results_path: Path,
     if excluded_here:
         excl_desc = sorted({f"`{p.rep_b}` - `{p.rep_a}` ({p.axis_id}/{p.qt})" for p in excluded_here})
         out += [
-            "_Excluded from this check -- vocabulary-confound comparisons where a pooled "
-            "Natural+Constructed mean is not a licensed effect to order across responders: "
-            f"{', '.join(excl_desc)}._", ""]
+            "_Excluded from this check -- comparisons subject to the terminology test, "
+            "where a pooled Natural+Constructed mean is not a licensed effect to order "
+            f"across responders: {', '.join(excl_desc)}._", ""]
 
     if read:
         srows = []

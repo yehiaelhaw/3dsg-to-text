@@ -37,7 +37,7 @@ MIN_COVERAGE = 0.80
 PRACTICAL_MARGIN = 0.10
 MIN_SCENES_SHOWING = 2
 
-# Declared confounds cap otherwise-consistent results at directional.
+# A declared terminology test caps otherwise-consistent results at directional.
 VERDICT_CONSISTENT = "consistent advantage"
 VERDICT_DIRECTIONAL = "directional"
 VERDICT_MIXED = "mixed"
@@ -61,26 +61,24 @@ class Axis:
     # True for a non-axis reading with no `family`; nests under a shared
     # "Further readings" heading so it's never miscounted as a sixth axis.
     secondary: bool = False
-    # Declared confound; caps an otherwise-consistent verdict at CAPPED_VERDICT.
-    confound: str = ""
+    # Declared terminology test; caps an otherwise-consistent verdict at CAPPED_VERDICT.
+    terminology_note: str = ""
     # Empty = whole axis; otherwise only pairs touching these representations.
-    confound_reps: tuple[str, ...] = ()
+    terminology_test_reps: tuple[str, ...] = ()
     # "vocabulary" allows the natural-question exemption; "content" does not.
-    confound_kind: str = ""
+    terminology_test_kind: str = ""
 
-    def confound_for(self, rep_a: str, rep_b: str) -> str:
-        """Return the declared confound for this pair, if any.
+    def terminology_note_for(self, rep_a: str, rep_b: str) -> str:
+        """Return the declared terminology-test note for this pair, if any.
 
-        The confound is a property of the confound_reps representation and the
-        question's wording, not of what it is paired against -- so a comparison
-        against a reference anchor (json_mini/inventory) is not exempt.
+        Property of terminology_test_reps and question wording, not of what it's paired against -- so a reference-anchor comparison isn't exempt.
         """
-        if not self.confound:
+        if not self.terminology_note:
             return ""
-        if not self.confound_reps:
-            return self.confound
-        if rep_a in self.confound_reps or rep_b in self.confound_reps:
-            return self.confound
+        if not self.terminology_test_reps:
+            return self.terminology_note
+        if rep_a in self.terminology_test_reps or rep_b in self.terminology_test_reps:
+            return self.terminology_note
         return ""
 
 
@@ -110,18 +108,18 @@ AXES: list[Axis] = [
          ["connectivity"],
          headline_pair=("topology", "graph_digest"),
          note="Same connectivity graph as lists, tree, or derived facts; `topology` used to avoid inventory distractors.",
-         confound="vocabulary mirrors graph_digest's computed output; see re-cut analyses",
-         confound_reps=("graph_digest",),
-         confound_kind="vocabulary"),
+         terminology_note="vocabulary mirrors graph_digest's computed output; see re-cut analyses",
+         terminology_test_reps=("graph_digest",),
+         terminology_test_kind="vocabulary"),
     Axis("relation_linearization", "Relation organization and abstraction", "3rscan",
          ["relations_flat", "relations_subject", "relations_predicate",
           "relations_tree", "relations_digest"],
          ["object_relation", "relation_structure", "relation_aggregate"],
          headline_pair=("relations_subject", "relations_predicate"),
          note="Same object-relation graph as listed, grouped, or derived views; some are lossy.",
-         confound="vocabulary mirrors relations_digest's output; see re-cut analyses",
-         confound_reps=("relations_digest",),
-         confound_kind="vocabulary"),
+         terminology_note="vocabulary mirrors relations_digest's output; see re-cut analyses",
+         terminology_test_reps=("relations_digest",),
+         terminology_test_kind="vocabulary"),
     Axis("framing", "Relational vs. navigational framing", "procthor",
          ["topology_metric", "navigation"],
          ["route", "direction", "connectivity"],
