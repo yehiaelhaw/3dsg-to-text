@@ -6,7 +6,7 @@ import os
 import time
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 
 from evaluation.llm.base import GenerationResult, LLMProvider
 
@@ -19,15 +19,33 @@ class OpenAIProvider(LLMProvider):
         api_key = options.pop("api_key", os.environ.get("OPENAI_API_KEY"))
         if not api_key:
             raise ValueError("OpenAI API key required: set OPENAI_API_KEY or pass api_key in options")
+        # Ollama-specific context-window sizing; OpenAI's hosted API manages this
+        # server-side and has no equivalent request parameter.
+        options.pop("num_ctx", None)
         self._client = OpenAI(api_key=api_key)
 
     def generate(self, prompt: str) -> GenerationResult:
         t0 = time.perf_counter()
-        response = self._client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            **self.options,
-        )
+        try:
+            response = self._client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                **self.options,
+            )
+        except BadRequestError as e:
+            if e.param == "temperature" and "temperature" in self.options:
+                # Some models (e.g. reasoning-tier) only support the default
+                # temperature and reject any override -- drop it once and keep
+                # it dropped so later calls on this provider don't repeat the
+                # failed round-trip.
+                self.options.pop("temperature")
+                response = self._client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    **self.options,
+                )
+            else:
+                raise
         latency_ms = (time.perf_counter() - t0) * 1000
 
         usage = response.usage
