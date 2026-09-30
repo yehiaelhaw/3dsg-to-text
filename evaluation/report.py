@@ -676,9 +676,9 @@ def _recut_rows(rows: list[dict],
     if not coupled:
         return {}
 
-    # Lift the terminology cap for natural wording only.
+    # Terminology cap lifted for both wordings; ordinary verdict rules apply to each.
     by_style = {s: _paired_rows(rows, style=s, axes=coupled,
-                                lift_terminology_cap=(s == "natural"), pairs=pairs) for s in STYLES}
+                                lift_terminology_cap=True, pairs=pairs) for s in STYLES}
     keyed: dict[tuple[str, str, str, str], dict[str, Paired]] = collections.defaultdict(dict)
     for s in STYLES:
         for p in by_style[s]:
