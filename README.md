@@ -14,8 +14,6 @@ The pipeline has three stages:
 3. **Report** — the CSVs are pooled into tables and charts
    (`evaluation/report.py`, `plots.py`).
 
-This README covers the code only. The research design — why these serializations, why these
-questions, what the results mean — is the subject of the thesis in `thesis/`.
 
 Forking this to add your own serialization, dataset, or model? See
 [EXTENDING.md](EXTENDING.md).
@@ -53,8 +51,6 @@ experiments/         Run configuration and drivers.
   run_experiments.py runs the responder x scene matrix
   aggregate_results.py  pools per-scene results and redraws the charts
   qa/<scene>.jsonl   the authored questions and their key facts
-
-thesis/              LaTeX sources.
 ```
 
 ## Setup
